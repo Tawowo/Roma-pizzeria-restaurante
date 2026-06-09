@@ -74,7 +74,7 @@ export default function HomePage() {
   /* PWA banner */
   useEffect(() => {
     if (localStorage.getItem('pwa_dismissed')) return
-    const id = setTimeout(() => setPwaBanner(true), 8000)
+    const id = setTimeout(() => setPwaBanner(true), 10000)
     return () => clearTimeout(id)
   }, [])
 
@@ -244,73 +244,97 @@ export default function HomePage() {
 
       {/* NAV */}
       <nav className={navScrolled ? 'scrolled' : ''} style={{ top: bandeauVisible ? 40 : 0 }}>
-        <a href="#" style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, fontStyle: 'italic', color: navScrolled ? 'var(--rosso)' : 'var(--oro)', textDecoration: 'none', fontWeight: 700 }}>
-          Roma <span style={{ fontStyle: 'normal', fontWeight: 400, fontSize: 18, color: navScrolled ? 'var(--nero)' : 'rgba(255,255,255,0.8)' }}>Pizzeria</span>
+        {/* Logo — toujours visible */}
+        <a href="/" style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, fontStyle: 'italic', color: navScrolled ? 'var(--rosso)' : 'white', textDecoration: 'none', fontWeight: 700 }}>
+          Roma <span style={{ fontStyle: 'normal', fontWeight: 400, fontSize: 18, color: navScrolled ? 'var(--nero)' : 'rgba(255,255,255,0.7)' }}>Pizzeria</span>
         </a>
-        <div style={{ display: 'flex', gap: 36 }} className="hidden md:flex">
+        {/* Links desktop uniquement */}
+        <div className="nav-desktop-links">
           {[
             { label: 'Histoire', href: '#histoire' },
-            { label: 'Menu', href: '/menu' },
+            { label: 'Menu', href: '/menu', isLink: true },
+            { label: 'Commander', href: '#commander', isRed: true },
             { label: 'Horaires', href: '#horaires' },
             { label: 'Réserver', href: '#reserver' },
-          ].map((item) => (
-            item.href.startsWith('/') ? (
-              <Link key={item.label} href={item.href}
-                style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost, sans-serif', fontWeight: 500 }}>
-                {item.label}
-              </Link>
-            ) : (
-              <a key={item.label} href={item.href}
-                style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost, sans-serif', fontWeight: 500 }}>
-                {item.label}
-              </a>
-            )
+          ].map(item => item.isLink ? (
+            <Link key={item.label} href={item.href}
+              style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost', fontWeight: 500 }}>
+              {item.label}
+            </Link>
+          ) : (
+            <a key={item.label} href={item.href}
+              style={{ color: item.isRed ? 'var(--rosso)' : (navScrolled ? 'var(--nero-m)' : 'white'), fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost', fontWeight: item.isRed ? 600 : 500 }}>
+              {item.label}
+            </a>
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {(['fr', 'it', 'en'] as Lang[]).map(l => (
-            <button key={l} onClick={() => setLang(l)}
-              style={{ background: lang === l ? 'var(--rosso)' : 'transparent', color: lang === l ? 'white' : (navScrolled ? 'var(--nero)' : 'white'), border: '1px solid', borderColor: lang === l ? 'var(--rosso)' : (navScrolled ? 'var(--grigio-l)' : 'rgba(255,255,255,0.4)'), borderRadius: 2, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontFamily: 'Jost', letterSpacing: 1 }}>
-              {l.toUpperCase()}
-            </button>
-          ))}
-          <Link href="/compte" className="hidden md:block" style={{ color: navScrolled ? 'var(--verde)' : 'var(--verde-l)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none' }}>Mon compte</Link>
-          <a href="#reserver" className="btn-primary" style={{ padding: '8px 20px', fontSize: 12, textDecoration: 'none' }}>Réserver</a>
-          <button onClick={() => setMenuOpen(v => !v)} className="md:hidden" style={{ background: 'none', border: 'none', color: navScrolled ? 'var(--nero)' : 'white', cursor: 'pointer', fontSize: 24 }}>☰</button>
+        {/* Right */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Lang switcher — desktop uniquement */}
+          <div className="nav-desktop-links" style={{ gap: 4 }}>
+            {(['fr', 'it', 'en'] as Lang[]).map(l => (
+              <button key={l} onClick={() => setLang(l)}
+                style={{ background: lang === l ? 'var(--rosso)' : 'transparent', color: lang === l ? 'white' : (navScrolled ? 'var(--nero)' : 'white'), border: '1px solid', borderColor: lang === l ? 'var(--rosso)' : (navScrolled ? 'var(--grigio-l)' : 'rgba(255,255,255,0.4)'), borderRadius: 2, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontFamily: 'Jost', letterSpacing: 1 }}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
+          <Link href="/compte" className="nav-desktop-links" style={{ color: navScrolled ? 'var(--verde)' : 'var(--verde-l)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none' }}>Mon compte</Link>
+          <a href="#reserver" className="btn-primary nav-desktop-links" style={{ padding: '8px 20px', fontSize: 12, textDecoration: 'none' }}>Réserver</a>
+          {/* Hamburger — mobile uniquement */}
+          <button onClick={() => setMenuOpen(v => !v)} className="nav-mobile-only" aria-label="Menu" style={{ background: 'none', border: 'none', color: navScrolled ? 'var(--nero)' : 'white', cursor: 'pointer', fontSize: 26, lineHeight: 1, padding: 4 }}>☰</button>
         </div>
       </nav>
 
       {/* MOBILE DRAWER */}
       {menuOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'var(--hero-bg)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40 }}>
-          <button onClick={() => setMenuOpen(false)} style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', fontSize: 32, cursor: 'pointer' }}>✕</button>
-          {[{ label: 'Histoire', href: '#histoire' }, { label: 'Menu', href: '/menu' }, { label: 'Horaires', href: '#horaires' }, { label: 'Réserver', href: '#reserver' }, { label: 'Mon compte', href: '/compte' }].map(item => (
-            item.href.startsWith('/') ? (
-              <Link key={item.href} href={item.href} onClick={() => setMenuOpen(false)}
-                style={{ color: 'white', fontSize: 28, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--hero-bg)', zIndex: 400, display: 'flex', flexDirection: 'column', padding: '60px 32px 32px', overflow: 'auto' }}>
+          <button onClick={() => setMenuOpen(false)} aria-label="Fermer" style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 32, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+          <div style={{ fontFamily: 'Playfair Display, serif', fontStyle: 'italic', fontSize: 28, color: 'white', marginBottom: 40 }}>Roma <span style={{ fontStyle: 'normal', fontSize: 18, color: 'rgba(255,255,255,0.4)' }}>Pizzeria</span></div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, flex: 1 }}>
+            {[
+              { label: '🏠 Accueil', href: '/' },
+              { label: '📖 Notre histoire', href: '#histoire' },
+              { label: '🍕 Notre menu', href: '/menu' },
+              { label: '🍕 Commander à emporter', href: '#commander' },
+              { label: '📅 Réserver une table', href: '#reserver' },
+              { label: '⏰ Horaires & Localisation', href: '#horaires' },
+              { label: '🎁 Mon compte fidélité', href: '/compte' },
+            ].map(item => item.href.startsWith('/') && item.href !== '/' ? (
+              <Link key={item.label} href={item.href} onClick={() => setMenuOpen(false)}
+                style={{ color: 'rgba(255,255,255,0.85)', fontSize: 20, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none', padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                 {item.label}
               </Link>
             ) : (
-              <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)}
-                style={{ color: 'white', fontSize: 28, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none' }}>
+              <a key={item.label} href={item.href} onClick={() => setMenuOpen(false)}
+                style={{ color: 'rgba(255,255,255,0.85)', fontSize: 20, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none', padding: '12px 0', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                 {item.label}
               </a>
-            )
-          ))}
+            ))}
+          </div>
+          {/* Lang switcher dans le drawer */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 32 }}>
+            {(['fr', 'it', 'en'] as Lang[]).map(l => (
+              <button key={l} onClick={() => { setLang(l); setMenuOpen(false) }}
+                style={{ background: lang === l ? 'var(--rosso)' : 'rgba(255,255,255,0.1)', color: 'white', border: 'none', borderRadius: 2, padding: '6px 14px', fontSize: 12, cursor: 'pointer', fontFamily: 'Jost', letterSpacing: 1 }}>
+                {l.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {/* HERO */}
       <section style={{ height: '100vh', background: 'var(--hero-bg)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <img src="https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=1920" alt="" loading="lazy"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15 }} />
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15, animation: 'kenburns 20s ease infinite' }} />
         <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
         <div id="hero-content" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '0 20px' }}>
           <div style={{ fontSize: 12, letterSpacing: 3, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: 24, fontFamily: 'Jost' }}>
             🇮🇹 Authentique cuisine italienne · Savigné-sur-Lathan
           </div>
           <div id="hero-title" style={{ opacity: 0 }}>
-            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(56px, 8vw, 96px)', fontStyle: 'italic', color: 'var(--oro)', lineHeight: 1, marginBottom: 8 }}>Roma</div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(56px, 8vw, 96px)', fontStyle: 'italic', color: 'white', lineHeight: 1, marginBottom: 8 }}>Roma</div>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(36px, 5vw, 72px)', color: 'white', lineHeight: 1, marginBottom: 24, fontWeight: 400 }}>Pizzeria</div>
           </div>
           <div id="hero-sub" style={{ opacity: 0, fontFamily: 'Cormorant Garamond, serif', fontSize: 'clamp(16px, 2.5vw, 22px)', fontStyle: 'italic', color: 'rgba(255,255,255,0.7)', marginBottom: 40, maxWidth: 600 }}>
@@ -330,7 +354,7 @@ export default function HomePage() {
             ].map(c => (
               <div key={c.label} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 24 }}>{c.icon}</div>
-                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--oro)', fontWeight: 700 }}>{c.val}</div>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--rosso)', fontWeight: 700 }}>{c.val}</div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'Jost', letterSpacing: 0.5 }}>{c.label}</div>
               </div>
             ))}
@@ -371,7 +395,7 @@ export default function HomePage() {
               Une trattoria au cœur <em style={{ color: 'var(--rosso)' }}>du village</em>
             </h2>
             <div className="section-divider"></div>
-            <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 40, borderLeft: '3px solid var(--oro)', paddingLeft: 20, maxWidth: 600, margin: '0 auto 40px', textAlign: 'left' }}>
+            <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 40, borderLeft: '3px solid var(--verde)', paddingLeft: 20, maxWidth: 600, margin: '0 auto 40px', textAlign: 'left' }}>
               &quot;La pizza, c&apos;est l&apos;amour qu&apos;on met dans la pâte&quot; — Roberto
             </p>
           </div>
@@ -642,7 +666,7 @@ export default function HomePage() {
               </a>
               <div style={{ padding: '16px 20px', background: 'var(--nero)', color: 'white', borderRadius: 3, fontSize: 13, fontFamily: 'Jost', lineHeight: 2 }}>
                 <div>📍 20 place Jacques du Bellay, 37420 Savigné-sur-Lathan</div>
-                <a href="tel:0668366298" style={{ color: 'var(--oro)', textDecoration: 'none' }}>📞 06 68 36 62 98</a>
+                <a href="tel:0668366298" style={{ color: 'var(--verde-l)', textDecoration: 'none' }}>📞 06 68 36 62 98</a>
               </div>
             </div>
           </div>
@@ -655,7 +679,7 @@ export default function HomePage() {
           <div style={{ textAlign: 'center', marginBottom: 50 }}>
             <span className="badge" style={{ background: 'rgba(255,255,255,0.2)', color: 'white', marginBottom: 16, display: 'inline-block' }}>Pizza à emporter</span>
             <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(28px, 4vw, 42px)', color: 'white', marginBottom: 12 }}>
-              🍕 Commander à <em style={{ color: 'var(--oro-l)', fontStyle: 'italic' }}>emporter</em>
+              🍕 Commander à <em style={{ color: 'white', fontStyle: 'italic' }}>emporter</em>
             </h2>
             <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'rgba(255,255,255,0.7)' }}>
               Commandez en avance, récupérez quand vous voulez
@@ -1054,8 +1078,8 @@ export default function HomePage() {
               { text: "On vient tous les samedis depuis 3 ans. La Burrata est à tomber !", author: "Thomas & Julie", ville: "Bourgueil" },
               { text: "Service impeccable d'André, cuisine généreuse de Roberto. Une vraie trattoria !", author: "Famille Moreau", ville: "Chinon" },
             ].map(r => (
-              <div key={r.author} style={{ background: 'white', padding: 32, borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', borderLeft: '3px solid var(--oro)' }}>
-                <div style={{ color: 'var(--oro)', fontSize: 18, marginBottom: 16 }}>⭐⭐⭐⭐⭐</div>
+              <div key={r.author} style={{ background: 'white', padding: 32, borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', borderLeft: '3px solid var(--verde)' }}>
+                <div style={{ color: 'var(--rosso)', fontSize: 18, marginBottom: 16 }}>⭐⭐⭐⭐⭐</div>
                 <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 19, fontStyle: 'italic', color: 'var(--nero-m)', lineHeight: 1.6, marginBottom: 20 }}>&quot;{r.text}&quot;</p>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--rosso)', fontFamily: 'Jost' }}>{r.author}</div>
                 <div style={{ fontSize: 12, color: 'var(--grigio)' }}>{r.ville}</div>
@@ -1068,9 +1092,9 @@ export default function HomePage() {
       {/* CTA FINALE */}
       <section style={{ padding: '100px 20px', background: 'var(--hero-bg)', textAlign: 'center' }}>
         <div style={{ maxWidth: 700, margin: '0 auto' }}>
-          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--oro)', marginBottom: 8 }}>Una tavola vi aspetta</div>
+          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontStyle: 'italic', color: 'rgba(255,255,255,0.6)', marginBottom: 8 }}>Una tavola vi aspetta</div>
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(28px, 4vw, 42px)', color: 'white', marginBottom: 16 }}>
-            Une table vous attend à <em style={{ color: 'var(--oro)' }}>Savigné-sur-Lathan</em>
+            Une table vous attend à <em style={{ color: 'var(--verde-l)' }}>Savigné-sur-Lathan</em>
           </h2>
           <div className="section-divider"></div>
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginTop: 40 }}>
@@ -1085,7 +1109,7 @@ export default function HomePage() {
       <footer style={{ background: 'var(--nero)', color: 'rgba(255,255,255,0.8)', padding: '80px 20px 0' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 48, paddingBottom: 48 }}>
           <div>
-            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontStyle: 'italic', color: 'var(--oro)', marginBottom: 12 }}>Roma 🇮🇹</div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontStyle: 'italic', color: 'white', marginBottom: 12 }}>Roma 🇮🇹</div>
             <p style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>Pizzeria italienne authentique à Savigné-sur-Lathan. Four à bois, produits frais, recettes de famille.</p>
             <div style={{ display: 'flex', gap: 12 }}>
               {['Instagram', 'Facebook'].map(s => (
@@ -1094,13 +1118,13 @@ export default function HomePage() {
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--oro)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Navigation</div>
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--verde-l)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Navigation</div>
             {[{ l: 'Accueil', h: '#' }, { l: 'Menu', h: '#menu' }, { l: 'Réserver', h: '#reserver' }, { l: 'Mon compte', h: '/compte' }].map(i => (
               <a key={i.l} href={i.h} style={{ display: 'block', color: 'rgba(255,255,255,0.5)', textDecoration: 'none', fontSize: 14, marginBottom: 10, fontFamily: 'Jost' }}>{i.l}</a>
             ))}
           </div>
           <div>
-            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--oro)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Horaires</div>
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--verde-l)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Horaires</div>
             {[
               { j: 'Lun', h: 'Fermé' },
               { j: 'Mar', h: 'Soir 19h – 21h30' },
