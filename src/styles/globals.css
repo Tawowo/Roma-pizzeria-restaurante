@@ -213,8 +213,6 @@ nav.scrolled {
   .nav-mobile-only { display: block !important; }
 }
 
-.mobile-cta-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 150; background: white; padding: 8px 12px; gap: 8px; box-shadow: 0 -2px 16px rgba(0,0,0,0.12); height: 64px; align-items: center; }
-@media (max-width: 767px) { .mobile-cta-bar { display: flex; } }
 
 @media (max-width: 768px) {
   nav {

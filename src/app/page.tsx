@@ -41,6 +41,12 @@ export default function HomePage() {
   const [cmdPizzaTaille, setCmdPizzaTaille] = useState<'33cm' | 'pala'>('33cm')
   const [cmdPizzaCalzone, setCmdPizzaCalzone] = useState(false)
   const [pwaBanner, setPwaBanner] = useState(false)
+  const [heroStats, setHeroStats] = useState({ annees: '15', nb_pizzas: '16', familles: '13', frais: '100' })
+  const [avisData, setAvisData] = useState<{id:string;texte:string;auteur?:string;ville?:string;note:number;source:string}[]>([])
+  const [avisMoyenne, setAvisMoyenne] = useState(5)
+  const [cmdClientDetecte, setCmdClientDetecte] = useState<{nom:string;pts:number} | null>(null)
+  const [cmdTelSearch, setCmdTelSearch] = useState(false)
+  const [resaClientDetecte, setResaClientDetecte] = useState<{nom:string} | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const loaderBarRef = useRef<HTMLDivElement>(null)
@@ -96,6 +102,27 @@ export default function HomePage() {
           const obj: Record<string, string> = {}
           data.forEach((r: { cle: string; valeur: string }) => { obj[r.cle] = r.valeur })
           setParametre(obj)
+        }
+      })
+    supabase.from('parametres').select('cle,valeur').in('cle', ['hero_annees','hero_nb_pizzas','hero_familles','hero_frais'])
+      .then(({ data }) => {
+        if (data) {
+          const map: Record<string,string> = {}
+          data.forEach((r: {cle:string;valeur:string}) => { map[r.cle] = r.valeur })
+          setHeroStats({
+            annees: map['hero_annees'] ?? '15',
+            nb_pizzas: map['hero_nb_pizzas'] ?? '16',
+            familles: map['hero_familles'] ?? '13',
+            frais: map['hero_frais'] ?? '100',
+          })
+        }
+      })
+    supabase.from('avis').select('id,texte,auteur,ville,note,source').eq('statut','valide').order('created_at',{ascending:false}).limit(6)
+      .then(({ data }) => {
+        if (data && data.length > 0) {
+          setAvisData(data)
+          const moy = data.reduce((s: number, a: {note:number}) => s + a.note, 0) / data.length
+          setAvisMoyenne(Math.round(moy * 10) / 10)
         }
       })
   }, [])
@@ -347,10 +374,10 @@ export default function HomePage() {
           </div>
           <div id="hero-counters" style={{ opacity: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginTop: 60, maxWidth: 600, margin: '60px auto 0' }}>
             {[
-              { icon: '🔥', val: '+15', label: "ans d'expérience" },
-              { icon: '🍕', val: '+30', label: 'pizzas au menu' },
-              { icon: '⭐', val: '+500', label: 'familles fidèles' },
-              { icon: '🫒', val: '100%', label: 'produits frais' },
+              { icon: '🔥', val: `+${heroStats.annees}`, label: "ans d'expérience" },
+              { icon: '🍕', val: `+${heroStats.nb_pizzas}`, label: 'pizzas au menu' },
+              { icon: '⭐', val: `+${heroStats.familles}`, label: 'familles fidèles' },
+              { icon: '🫒', val: `${heroStats.frais}%`, label: 'produits frais' },
             ].map(c => (
               <div key={c.label} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 24 }}>{c.icon}</div>
@@ -1162,22 +1189,6 @@ export default function HomePage() {
           </div>
         </div>
       </footer>
-
-      {/* MOBILE STICKY BAR */}
-      <div className="mobile-cta-bar">
-        <a href="tel:0668366298" aria-label="Appeler" style={{ flex: 1, background: 'var(--verde)', color: 'white', textAlign: 'center', padding: '8px 4px', borderRadius: 3, textDecoration: 'none', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <span style={{ fontSize: 20 }}>📞</span><span style={{ fontSize: 10 }}>Appeler</span>
-        </a>
-        <a href="#commander" aria-label="Commander" style={{ flex: 1, background: 'var(--rosso)', color: 'white', textAlign: 'center', padding: '8px 4px', borderRadius: 3, textDecoration: 'none', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <span style={{ fontSize: 20 }}>🍕</span><span style={{ fontSize: 10 }}>Commander</span>
-        </a>
-        <a href="#reserver" aria-label="Réserver" style={{ flex: 1, background: 'transparent', color: 'var(--nero)', border: '1px solid var(--grigio-l)', textAlign: 'center', padding: '8px 4px', borderRadius: 3, textDecoration: 'none', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <span style={{ fontSize: 20 }}>📅</span><span style={{ fontSize: 10 }}>Réserver</span>
-        </a>
-        <button onClick={() => setMenuOpen(v => !v)} aria-label="Menu" style={{ flex: 1, background: 'var(--nero-m)', color: 'white', border: 'none', textAlign: 'center', padding: '8px 4px', borderRadius: 3, cursor: 'pointer', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-          <span style={{ fontSize: 20 }}>☰</span><span style={{ fontSize: 10 }}>Menu</span>
-        </button>
-      </div>
 
       {/* PWA BANNER */}
       {pwaBanner && (

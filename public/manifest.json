@@ -1,14 +1,14 @@
 {
   "name": "Roma Pizzeria Restaurante",
-  "short_name": "Roma Pizzeria",
-  "description": "Commander et réserver en ligne — Savigné-sur-Lathan",
+  "short_name": "Roma 🍕",
+  "description": "Pizzeria italienne authentique à Savigné-sur-Lathan",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#2A1200",
-  "theme_color": "#C4622D",
-  "orientation": "portrait",
+  "background_color": "#B71C1C",
+  "theme_color": "#1B5E20",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
   ]
 }
