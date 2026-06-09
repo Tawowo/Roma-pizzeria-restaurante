@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { T, Lang } from '@/lib/i18n'
+import { useLang } from '@/lib/LanguageContext'
 import type { Categorie, Article, PlatDuJour, Formule } from '@/lib/supabase'
 
 interface Particle {
@@ -16,7 +17,7 @@ const SPECIALITES = ['Burrata', 'Valtellina', 'Asiatica', 'Bolognese']
 
 export default function HomePage() {
   const [loaded, setLoaded] = useState(false)
-  const [lang, setLang] = useState<Lang>('fr')
+  const { lang, setLang } = useLang()
   const [navScrolled, setNavScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
@@ -79,7 +80,7 @@ export default function HomePage() {
 
   /* PWA banner */
   useEffect(() => {
-    if (localStorage.getItem('pwa_dismissed')) return
+    if (localStorage.getItem('roma_pwa_dismissed') === 'true') { setPwaBanner(false); return }
     const id = setTimeout(() => setPwaBanner(true), 10000)
     return () => clearTimeout(id)
   }, [])
@@ -696,10 +697,6 @@ export default function HomePage() {
                 className="btn-primary" style={{ display: 'inline-block', textDecoration: 'none', marginBottom: 12 }}>
                 📍 Itinéraire Google Maps
               </a>
-              <div style={{ padding: '16px 20px', background: 'var(--nero)', color: 'white', borderRadius: 3, fontSize: 13, fontFamily: 'Jost', lineHeight: 2 }}>
-                <div>📍 20 place Jacques du Bellay, 37420 Savigné-sur-Lathan</div>
-                <a href="tel:0668366298" style={{ color: 'var(--verde-l)', textDecoration: 'none' }}>📞 06 68 36 62 98</a>
-              </div>
             </div>
           </div>
         </div>
@@ -1256,14 +1253,14 @@ export default function HomePage() {
         <div style={{ position: 'fixed', bottom: 72, left: 12, right: 12, background: 'var(--hero-bg)', color: 'white', padding: '20px 20px 16px', borderRadius: 6, zIndex: 200, boxShadow: '0 4px 24px rgba(0,0,0,0.4)', border: '1px solid rgba(27,94,32,0.4)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontStyle: 'italic', color: 'white' }}>Accès rapide à Roma 🍕</div>
-            <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed', '1') }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 0, marginLeft: 12 }}>✕</button>
+            <button onClick={() => { setPwaBanner(false); localStorage.setItem('roma_pwa_dismissed', 'true') }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 0, marginLeft: 12 }}>✕</button>
           </div>
           <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontFamily: 'Jost', marginBottom: 8 }}>
             {typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
               ? "Appuyez sur le bouton Partager ↑ → puis \"Sur l'écran d'accueil\""
               : "Appuyez sur ⋮ → \"Ajouter à l'écran d'accueil\""}
           </p>
-          <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed', '1') }}
+          <button onClick={() => { setPwaBanner(false); localStorage.setItem('roma_pwa_dismissed', 'true') }}
             className="btn-verde" style={{ padding: '8px 20px', fontSize: 12, width: '100%' }}>
             J&apos;ai compris
           </button>

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import '../styles/globals.css'
+import { LanguageProvider } from '@/lib/LanguageContext'
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -44,7 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           "openingHours": ["Tu 19:00-21:30", "We-Fr 12:00-14:30", "We-Fr 19:00-21:30", "Sa 12:00-14:30", "Sa 19:00-22:00", "Su 19:00-21:30"]
         }) }} />
       </head>
-      <body>{children}</body>
+      <body><LanguageProvider>{children}</LanguageProvider></body>
     </html>
   )
 }
