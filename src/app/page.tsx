@@ -1,525 +1,563 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
-import Link from 'next/link'
-import { supabase, PlatDuJour, Article, Categorie, Formule } from '@/lib/supabase'
-import { T, Lang } from '@/lib/i18n'
 
-const HORAIRES = [
-  { key: 'day_lun', day: 1, midi: false, soir: false },
-  { key: 'day_mar', day: 2, midi: false, soir: true },
-  { key: 'day_mer', day: 3, midi: true, soir: true },
-  { key: 'day_jeu', day: 4, midi: true, soir: true },
-  { key: 'day_ven', day: 5, midi: true, soir: true },
-  { key: 'day_sam', day: 6, midi: true, soir: true, soir_fin: '22h00', midi_deb: '12h00', midi_fin: '14h30' },
-  { key: 'day_dim', day: 0, midi: false, soir: true },
+import { useEffect, useRef, useState, useCallback } from 'react'
+import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { T, Lang } from '@/lib/i18n'
+import type { Categorie, Article, PlatDuJour, Formule } from '@/lib/supabase'
+
+interface Particle {
+  x: number; y: number; vx: number; vy: number
+  r: number; color: string; alpha: number; spin: number; angle: number
+}
+
+const HORAIRES_DATA = [
+  { dayKey: 'day_1' as const, heuresKey: 'h_lundi'   as const, jsDay: 1, closed: true  },
+  { dayKey: 'day_2' as const, heuresKey: 'h_mardi'   as const, jsDay: 2, closed: false },
+  { dayKey: 'day_3' as const, heuresKey: 'h_mercredi'as const, jsDay: 3, closed: false },
+  { dayKey: 'day_4' as const, heuresKey: 'h_jeudi'   as const, jsDay: 4, closed: false },
+  { dayKey: 'day_5' as const, heuresKey: 'h_vendredi'as const, jsDay: 5, closed: false },
+  { dayKey: 'day_6' as const, heuresKey: 'h_samedi'  as const, jsDay: 6, closed: false },
+  { dayKey: 'day_0' as const, heuresKey: 'h_dimanche'as const, jsDay: 0, closed: false },
 ]
 
-export default function Home() {
-  const [lang, setLang] = useState<Lang>('fr')
-  const [plats, setPlats] = useState<PlatDuJour[]>([])
+export default function HomePage() {
+  const [loaded, setLoaded]       = useState(false)
+  const [lang, setLang]           = useState<Lang>('fr')
+  const [navDark, setNavDark]     = useState(false)
+  const [menuOpen, setMenuOpen]   = useState(false)
+  const [activeTab, setActiveTab] = useState(0)
+
+  const [plats, setPlats]           = useState<PlatDuJour[]>([])
   const [categories, setCategories] = useState<Categorie[]>([])
-  const [articles, setArticles] = useState<Article[]>([])
-  const [formules, setFormules] = useState<Formule[]>([])
-  const [catActive, setCatActive] = useState<string>('')
-  const [navDark, setNavDark] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-  const [showPWA, setShowPWA] = useState(false)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const [articles, setArticles]     = useState<Article[]>([])
+  const [formules, setFormules]     = useState<Formule[]>([])
+
+  const [resaForm, setResaForm] = useState({
+    nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: ''
+  })
+  const [resaLoading, setResaLoading] = useState(false)
+  const [resaSuccess, setResaSuccess] = useState(false)
+  const [resaError,   setResaError]   = useState('')
+
+  const [pwaBanner, setPwaBanner]       = useState(false)
+  const [deferredPrompt, setDeferred]   = useState<Event | null>(null)
+
+  const canvasRef    = useRef<HTMLCanvasElement>(null)
+  const loaderBarRef = useRef<HTMLDivElement>(null)
+  const rafRef       = useRef<number>(0)
   const t = T[lang]
-  const today = new Date().getDay()
+  const todayDay = new Date().getDay()
 
+  /* loader */
   useEffect(() => {
-    Promise.all([
-      supabase.from('plats_du_jour').select('*').eq('actif', true).order('created_at', { ascending: false }),
-      supabase.from('categories').select('*').eq('actif', true).order('ordre'),
-      supabase.from('articles').select('*').eq('disponible', true).order('ordre'),
-      supabase.from('formules').select('*').eq('actif', true).order('ordre'),
-    ]).then(([p, c, a, f]) => {
-      if (p.data) setPlats(p.data)
-      if (c.data) { setCategories(c.data); setCatActive(c.data[0]?.id || '') }
-      if (a.data) setArticles(a.data)
-      if (f.data) setFormules(f.data)
-    })
-
-    const handleScroll = () => setNavDark(window.scrollY > 60)
-    window.addEventListener('scroll', handleScroll)
-
-    // PWA prompt
-    setTimeout(() => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches
-      if (!isStandalone && !localStorage.getItem('pwa_dismissed')) setShowPWA(true)
-    }, 8000)
-
-    return () => window.removeEventListener('scroll', handleScroll)
+    if (loaderBarRef.current) {
+      const bar = loaderBarRef.current
+      requestAnimationFrame(() => { bar.style.width = '100%' })
+    }
+    const id = setTimeout(() => setLoaded(true), 1800)
+    return () => clearTimeout(id)
   }, [])
 
+  /* nav scroll */
   useEffect(() => {
-    // Loader + hero animation
-    const timer = setTimeout(() => setLoaded(true), 1200)
-    return () => clearTimeout(timer)
+    const fn = () => setNavDark(window.scrollY > 60)
+    window.addEventListener('scroll', fn, { passive: true })
+    return () => window.removeEventListener('scroll', fn)
   }, [])
 
-  // Canvas particles
+  /* PWA */
+  useEffect(() => {
+    const dismissed = localStorage.getItem('pwa_dismissed')
+    if (dismissed) return
+    const handler = (e: Event) => { e.preventDefault(); setDeferred(e) }
+    window.addEventListener('beforeinstallprompt', handler)
+    const id = setTimeout(() => setPwaBanner(true), 8000)
+    return () => { window.removeEventListener('beforeinstallprompt', handler); clearTimeout(id) }
+  }, [])
+
+  /* supabase */
+  useEffect(() => {
+    const today = new Date().toISOString().split('T')[0]
+    supabase.from('platdujour').select('*').eq('actif', true).lte('date_debut', today)
+      .order('date_debut', { ascending: false }).limit(1)
+      .then(({ data }) => setPlats(data ?? []))
+    supabase.from('categorie').select('*').eq('actif', true).order('ordre')
+      .then(({ data }) => setCategories(data ?? []))
+    supabase.from('article').select('*').order('ordre')
+      .then(({ data }) => setArticles(data ?? []))
+    supabase.from('formule').select('*').eq('actif', true).order('ordre')
+      .then(({ data }) => setFormules(data ?? []))
+  }, [])
+
+  /* canvas */
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight }
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+    const COLORS = ['#C41E3A', '#4A6741', '#C9943A', '#C4622D', '#ffffff']
+    let particles: Particle[] = []
+    let w = 0, h = 0
+    const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight }
     resize()
     window.addEventListener('resize', resize)
-
-    const COLS = ['#C41E3A','#2D7A3A','#D4A843','#FF3B5C','#4CAF60','#F0C060','#9B1530']
-    const particles = Array.from({ length: 100 }, () => ({
-      x: Math.random() * window.innerWidth,
-      y: Math.random() * window.innerHeight + window.innerHeight,
-      s: Math.random() * 4 + 1,
-      sp: Math.random() * 1.2 + 0.3,
-      vx: (Math.random() - 0.5) * 0.8,
-      op: 0, mop: Math.random() * 0.6 + 0.2,
-      col: COLS[Math.floor(Math.random() * COLS.length)],
-      life: Math.random() * 180, ml: Math.random() * 180 + 140,
-    }))
-    const dust = Array.from({ length: 150 }, () => ({
-      x: Math.random() * 1800, y: Math.random() * 900,
-      s: Math.random() * 1.5 + 0.3, op: Math.random() * 0.3 + 0.05,
-      vx: (Math.random() - 0.5) * 0.25, vy: (Math.random() - 0.5) * 0.18,
-      ph: Math.random() * Math.PI * 2,
-    }))
-
-    let raf: number
-    const anim = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      dust.forEach(d => {
-        d.x += d.vx; d.y += d.vy; d.ph += 0.018
-        if (d.x < 0) d.x = canvas.width; if (d.x > canvas.width) d.x = 0
-        if (d.y < 0) d.y = canvas.height; if (d.y > canvas.height) d.y = 0
-        ctx.save(); ctx.globalAlpha = d.op * (0.7 + 0.3 * Math.sin(d.ph))
-        ctx.fillStyle = '#D4A843'; ctx.beginPath(); ctx.arc(d.x, d.y, d.s, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+    const spawn = (): Particle => ({
+      x: Math.random() * w, y: h + 10,
+      vx: (Math.random() - 0.5) * 0.8, vy: -(0.4 + Math.random() * 0.9),
+      r: 2 + Math.random() * 4,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      alpha: 0.5 + Math.random() * 0.4,
+      spin: (Math.random() - 0.5) * 0.05,
+      angle: Math.random() * Math.PI * 2,
+    })
+    for (let i = 0; i < 60; i++) { const p = spawn(); p.y = Math.random() * h; particles.push(p) }
+    const draw = () => {
+      ctx.clearRect(0, 0, w, h)
+      if (Math.random() < 0.15) particles.push(spawn())
+      if (particles.length > 120) particles.splice(0, 1)
+      particles = particles.filter(p => {
+        p.x += p.vx; p.y += p.vy; p.angle += p.spin
+        ctx.save()
+        ctx.globalAlpha = p.alpha * Math.max(0, p.y / h)
+        ctx.translate(p.x, p.y); ctx.rotate(p.angle)
+        ctx.fillStyle = p.color
+        ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 0.5)
+        ctx.restore()
+        return p.y > -20
       })
-      particles.forEach(p => {
-        p.y -= p.sp; p.x += p.vx; p.life++
-        if (p.life < 25) p.op = p.life / 25 * p.mop
-        else if (p.life > p.ml - 25) p.op = (p.ml - p.life) / 25 * p.mop
-        else p.op = p.mop
-        if (p.life >= p.ml) {
-          p.x = Math.random() * canvas.width; p.y = canvas.height + 10; p.life = 0
-        }
-        ctx.save(); ctx.globalAlpha = p.op; ctx.fillStyle = p.col
-        ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill(); ctx.restore()
-      })
-      raf = requestAnimationFrame(anim)
+      rafRef.current = requestAnimationFrame(draw)
     }
-    anim()
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize) }
+    draw()
+    return () => { cancelAnimationFrame(rafRef.current); window.removeEventListener('resize', resize) }
   }, [])
 
-  const artsByCat = articles.filter(a => a.categorie_id === catActive)
-  const catName = (cat: Categorie) => lang === 'it' && cat.nom_it ? cat.nom_it : lang === 'en' && cat.nom_en ? cat.nom_en : cat.nom
-  const artName = (a: Article) => lang === 'it' && a.nom_it ? a.nom_it : lang === 'en' && a.nom_en ? a.nom_en : a.nom
-  const artDesc = (a: Article) => lang === 'it' && a.description_it ? a.description_it : lang === 'en' && a.description_en ? a.description_en : a.description
+  /* GSAP hero entrance */
+  useEffect(() => {
+    if (!loaded) return
+    const run = async () => {
+      const gsap = (await import('gsap')).default
+      gsap.fromTo('#hero-badge', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.2 })
+      gsap.fromTo('#hero-title', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.9, delay: 0.4 })
+      gsap.fromTo('#hero-sub',   { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.7 })
+      gsap.fromTo('#hero-btns',  { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.9 })
+      gsap.fromTo('#hero-scroll',{ opacity: 0 },         { opacity: 1,        duration: 0.6, delay: 1.4 })
+    }
+    run()
+  }, [loaded])
 
-  const goTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+  const scrollTo = useCallback((id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
+    setMenuOpen(false)
+  }, [])
+
+  const getArticleName = (a: Article) =>
+    lang === 'it' && a.nom_it ? a.nom_it : lang === 'en' && a.nom_en ? a.nom_en : a.nom
+  const getCatName = (c: Categorie) =>
+    lang === 'it' && c.nom_it ? c.nom_it : lang === 'en' && c.nom_en ? c.nom_en : c.nom
+
+  const catArticles = categories[activeTab]
+    ? articles.filter(a => a.categorie_id === categories[activeTab].id)
+    : []
+
+  const minDate = () => {
+    const d = new Date(); d.setDate(d.getDate() + 1)
+    return d.toISOString().split('T')[0]
+  }
+
+  const handleResa = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resaForm.nom || !resaForm.telephone || !resaForm.date || !resaForm.heure) return
+    const day = new Date(resaForm.date + 'T12:00:00').getDay()
+    if (day === 1) { setResaError(t.resa_lundi_info); return }
+    setResaLoading(true); setResaError('')
+    try {
+      let clientId: string | undefined
+      const { data: existing } = await supabase
+        .from('client').select('id').eq('telephone', resaForm.telephone).single()
+      if (existing) {
+        clientId = existing.id
+      } else {
+        const { data: nc } = await supabase
+          .from('client')
+          .insert({ nom: resaForm.nom, telephone: resaForm.telephone, points_fidelite: 0 })
+          .select('id').single()
+        clientId = nc?.id
+      }
+      await supabase.from('reservation').insert({
+        client_id: clientId, nom: resaForm.nom, telephone: resaForm.telephone,
+        date_reservation: resaForm.date, heure_reservation: resaForm.heure,
+        nombre_couverts: parseInt(resaForm.couverts),
+        zone: resaForm.zone || null, notes: resaForm.notes || null, statut: 'en_attente',
+      })
+      setResaSuccess(true)
+    } catch {
+      setResaError('Une erreur est survenue. Veuillez réessayer.')
+    } finally {
+      setResaLoading(false)
+    }
+  }
+
+  /* nav link style helper */
+  const nlColor = (dark: boolean) => dark ? 'var(--text-m)' : 'rgba(255,255,255,0.8)'
 
   return (
     <>
-      {/* LOADER */}
-      {!loaded && (
-        <div id="loader">
-          <div className="ld-logo" style={{ opacity: 1 }}>Roma</div>
-          <div className="ld-sub" style={{ opacity: 1 }}>Pizzeria Restaurante</div>
-          <div className="ld-bar-w"><div className="ld-bar" style={{ width: '100%', transition: 'width 1s' }} /></div>
-        </div>
-      )}
+      {/* ── LOADER ───────────────────────────────────────────── */}
+      <div id="loader" className={loaded ? 'hide' : ''}>
+        <div className="ld-logo">Roma</div>
+        <div className="ld-sub">Savigné-sur-Lathan</div>
+        <div className="ld-bar-w"><div className="ld-bar" ref={loaderBarRef} /></div>
+      </div>
 
-      {/* NAV */}
-      <nav className={navDark ? 'dark' : ''}>
-        <div className="nav-logo" onClick={() => goTo('hero')}>Roma <em>Pizzeria</em></div>
-        <div className="nav-links">
-          <div className="lang-sw">
+      {/* ── NAV ──────────────────────────────────────────────── */}
+      <nav className={`site-nav${navDark ? ' dark' : ''}`}>
+        <button onClick={() => scrollTo('hero')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: '22px', color: navDark ? 'var(--brown-d)' : 'var(--gold-l)', fontWeight: 600, letterSpacing: '1px' }}>Roma</span>
+          <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', fontWeight: 300, color: navDark ? 'var(--text-l)' : 'rgba(255,255,255,0.6)', letterSpacing: '3px', textTransform: 'uppercase' }}>Pizzeria</span>
+        </button>
+
+        <div className="hidden md:flex items-center gap-8">
+          {([['histoire', t.nav_histoire], ['menu', t.nav_menu], ['horaires', t.nav_horaires]] as [string,string][]).map(([id, label]) => (
+            <button key={id} onClick={() => scrollTo(id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Jost',sans-serif", fontSize: '11px', fontWeight: 500, letterSpacing: '2.5px', textTransform: 'uppercase', color: nlColor(navDark), transition: 'color 0.3s ease' }}
+              onMouseEnter={e => (e.currentTarget.style.color = 'var(--terra)')}
+              onMouseLeave={e => (e.currentTarget.style.color = nlColor(navDark))}
+            >{label}</button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div className="hidden md:flex" style={{ gap: '4px' }}>
             {(['fr','it','en'] as Lang[]).map(l => (
-              <button key={l} className={`lb ${lang === l ? 'on' : ''}`} onClick={() => setLang(l)}>{l.toUpperCase()}</button>
+              <button key={l} onClick={() => setLang(l)} style={{
+                background: lang === l ? 'var(--terra)' : 'transparent',
+                border: `1px solid ${lang === l ? 'var(--terra)' : 'rgba(255,255,255,0.3)'}`,
+                color: lang === l ? '#fff' : (navDark ? 'var(--text-l)' : 'rgba(255,255,255,0.55)'),
+                padding: '3px 8px', borderRadius: '2px', fontSize: '10px', letterSpacing: '1px',
+                textTransform: 'uppercase', cursor: 'pointer', fontFamily: "'Jost',sans-serif", transition: 'all 0.3s',
+              }}>{l}</button>
             ))}
           </div>
-          <button className="nav-link" onClick={() => goTo('about')}>{t.nav_histoire}</button>
-          <button className="nav-link" onClick={() => goTo('menu')}>{t.nav_menu}</button>
-          <button className="nav-link" onClick={() => goTo('horaires')}>{t.nav_horaires}</button>
-          <button className="nav-cta" onClick={() => goTo('resa')}>{t.nav_reserver}</button>
+          <button onClick={() => scrollTo('reservation')} className="hidden md:block btn-primary" style={{ padding: '8px 18px', fontSize: '11px', letterSpacing: '2px' }}>{t.nav_reserver}</button>
+          <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+              {[0,1,2].map(i => (
+                <span key={i} style={{ display: 'block', width: '22px', height: '1.5px', background: navDark ? 'var(--text)' : '#fff', transition: 'all 0.3s', transformOrigin: 'center',
+                  transform: menuOpen ? (i===0?'rotate(45deg) translate(4px,4px)':i===1?'scaleX(0)':'rotate(-45deg) translate(4px,-4px)') : 'none' }} />
+              ))}
+            </div>
+          </button>
         </div>
       </nav>
 
-      {/* HERO */}
-      <section id="hero">
-        <canvas ref={canvasRef} id="hc" />
-        <div className="ho" />
-        <div className="hcontent">
-          <div className="hey" style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.8s 0.3s' }}>
-            <div className="hey-l" />
-            <span>{t.hero_loc}</span>
-            <div className="hey-l" />
-          </div>
-          <h1 className="hh1" style={{ fontSize: 'clamp(44px,8vw,120px)' }}>
-            <span className="hline">
-              <span className="hli" style={{ transform: loaded ? 'translateY(0)' : 'translateY(110%)', transition: 'transform 1.1s 0.4s cubic-bezier(0.16,1,0.3,1)' }}>
-                Roma Pizzeria
-              </span>
-            </span>
-            <span className="hline">
-              <span className="hli" style={{ transform: loaded ? 'translateY(0)' : 'translateY(110%)', transition: 'transform 1.1s 0.6s cubic-bezier(0.16,1,0.3,1)' }}>
-                <em>Restaurante</em>
-              </span>
-            </span>
-          </h1>
-          <p className="htag" style={{ fontSize: 'clamp(15px,2.2vw,22px)', opacity: loaded ? 1 : 0, transition: 'opacity 0.8s 0.9s' }}>
-            {t.hero_tag}
-          </p>
-          <div className="hdiv" style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.6s 1.1s' }}>
-            <div className="hdl" /><span style={{ color: 'var(--gold2)' }}>✦</span><div className="hdr" />
-          </div>
-          <div className="hbtns" style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.7s 1.2s' }}>
-            <button className="bp" onClick={() => goTo('menu')}>{t.hero_btn1}</button>
-            <Link href="/commander" className="bg" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              🛍 {t.hero_btn3}
-            </Link>
-            <button className="bo" onClick={() => goTo('resa')}>{t.hero_btn2}</button>
-          </div>
-        </div>
-        <div className="sind" style={{ opacity: loaded ? 1 : 0, transition: 'opacity 0.6s 1.6s' }}>
-          <span>{t.scroll}</span><div className="sline" />
-        </div>
-      </section>
-
-      {/* STRIP TRICOLORE */}
-      <div className="strip">
-        {[
-          { cls: 'gr', items: ['Roma Pizzeria','✦','Four à Bois','✦','Roma Pizzeria','✦','Four à Bois','✦'] },
-          { cls: 'wh', items: ['Savigné-sur-Lathan','✦','Pizza Artisanale','✦','Savigné-sur-Lathan','✦','Pizza Artisanale','✦'] },
-          { cls: 'rd', items: ['Produits Frais','✦','Plat du Jour','✦','Produits Frais','✦','Plat du Jour','✦'] },
-        ].map(seg => (
-          <div key={seg.cls} className={`strip-seg ${seg.cls}`}>
-            <div className="strip-scroll">
-              {seg.items.map((item, i) => <span key={i} className="strip-item">{item}</span>)}
-              {seg.items.map((item, i) => <span key={`r${i}`} className="strip-item">{item}</span>)}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* PLATS DU JOUR */}
-      {plats.length > 0 && (
-        <div className="plat">
-          <div className="plat-in">
-            <span className="plat-lbl">{t.plat_lbl}</span>
-            {plats.map((p, i) => (
-              <span key={p.id}>
-                {i > 0 && <span className="plat-sep"> · </span>}
-                <strong>{p.nom}</strong>
-                {p.description && <span style={{ opacity: 0.8, fontSize: 15 }}> — {p.description}</span>}
-                {p.prix && <span style={{ fontFamily: 'Jost', fontStyle: 'normal', fontWeight: 700, marginLeft: 8 }}>{p.prix.toFixed(2)} €</span>}
-              </span>
+      {/* Mobile drawer */}
+      {menuOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'var(--brown-d)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '28px' }}>
+          {([['histoire',t.nav_histoire],['menu',t.nav_menu],['horaires',t.nav_horaires],['reservation',t.nav_reserver]] as [string,string][]).map(([id, label]) => (
+            <button key={id} onClick={() => scrollTo(id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Playfair Display',serif", fontSize: '28px', color: '#fff' }}>{label}</button>
+          ))}
+          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+            {(['fr','it','en'] as Lang[]).map(l => (
+              <button key={l} onClick={() => setLang(l)} style={{ background: lang===l?'var(--terra)':'transparent', border:`1px solid ${lang===l?'var(--terra)':'rgba(255,255,255,0.3)'}`, color:'#fff', padding:'6px 14px', borderRadius:'2px', fontSize:'12px', textTransform:'uppercase', cursor:'pointer', fontFamily:"'Jost',sans-serif" }}>{l}</button>
             ))}
           </div>
         </div>
       )}
 
-      {/* ABOUT */}
-      <section id="about" className="s" style={{ background: 'white', padding: '100px 52px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'center' }}>
-          <div className="rl" style={{ position: 'relative', height: 520 }}>
-            <div style={{ position: 'absolute', inset: 0, borderRadius: 4, overflow: 'hidden', background: 'linear-gradient(155deg, #E8304A, #C41E3A, #8B1020, #3A0510)' }}>
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="280" height="360" viewBox="0 0 280 360">
-                  <path d="M30,360 L30,140 Q30,20 140,20 Q250,20 250,140 L250,360 Z" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"/>
-                  <path d="M55,360 L55,145 Q55,45 140,45 Q225,45 225,145 L225,360 Z" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1"/>
-                  <text x="140" y="205" textAnchor="middle" fontFamily="'Playfair Display',serif" fontSize="48" fill="rgba(255,255,255,0.92)" fontWeight="700">ROMA</text>
-                  <text x="140" y="235" textAnchor="middle" fontFamily="Jost,sans-serif" fontSize="10" fill="rgba(255,255,255,0.45)" letterSpacing="10">PIZZERIA</text>
-                  <text x="140" y="272" textAnchor="middle" fontFamily="'Cormorant Garamond',serif" fontSize="17" fill="rgba(255,255,255,0.55)" fontStyle="italic">Restaurante</text>
-                  <rect x="100" y="295" width="14" height="20" fill="#2D7A3A" rx="1"/>
-                  <rect x="114" y="295" width="14" height="20" fill="white" rx="1"/>
-                  <rect x="128" y="295" width="14" height="20" fill="#C41E3A" rx="1"/>
-                </svg>
-              </div>
-            </div>
-            <div className="rs" style={{ position: 'absolute', bottom: -16, right: -24, background: 'white', borderRadius: 4, padding: '22px 28px', boxShadow: '0 24px 60px rgba(26,10,10,0.14)', border: '1px solid rgba(196,30,58,0.08)' }}>
-              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 48, color: 'var(--r)', lineHeight: 1 }}>50</div>
-              <div style={{ fontSize: 10, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--textl)', marginTop: 4 }}>{t.ab_t3}</div>
-            </div>
-            <div className="rs" style={{ position: 'absolute', top: 24, left: -20, background: 'var(--g)', borderRadius: 4, padding: '18px 22px', color: 'white' }}>
-              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, fontStyle: 'italic' }}>Fatto a mano</div>
-              <div style={{ fontSize: 9, letterSpacing: 2, textTransform: 'uppercase', opacity: 0.65, marginTop: 3 }}>{t.ab_t3}</div>
+      {/* ── HERO ─────────────────────────────────────────────── */}
+      <section id="hero" style={{ minHeight: '100vh', background: 'var(--brown-d)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg,rgba(42,18,0,0.88) 0%,rgba(42,18,0,0.6) 50%,rgba(196,98,45,0.12) 100%)', zIndex: 1 }} />
+        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: 'clamp(100px,12vh,140px) 24px 80px', maxWidth: '900px', margin: '0 auto' }}>
+          <div id="hero-badge" style={{ opacity: 0, marginBottom: '24px' }}>
+            <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(201,148,58,0.3)', padding: '6px 18px', borderRadius: '2px' }}>{t.hero_badge}</span>
+          </div>
+          <div id="hero-title" style={{ opacity: 0 }}>
+            <h1 style={{ lineHeight: 1, marginBottom: '12px' }}>
+              <span style={{ display: 'block', fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: 'clamp(56px,10vw,96px)', fontWeight: 700, color: 'var(--gold-l)', letterSpacing: '-1px' }}>{t.hero_title1}</span>
+              <span style={{ display: 'block', fontFamily: "'Playfair Display',serif", fontSize: 'clamp(32px,6vw,64px)', fontWeight: 400, color: '#fff', letterSpacing: '6px', textTransform: 'uppercase' }}>{t.hero_title2}</span>
+            </h1>
+          </div>
+          <p id="hero-sub" style={{ opacity: 0, fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(16px,2.5vw,22px)', fontStyle: 'italic', color: 'rgba(255,255,255,0.65)', margin: '24px auto', maxWidth: '480px', letterSpacing: '0.5px' }}>{t.hero_subtitle}</p>
+          <div id="hero-btns" style={{ opacity: 0, display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '36px' }}>
+            <button onClick={() => scrollTo('menu')} className="btn-primary" style={{ padding: '14px 32px', fontSize: '12px', letterSpacing: '2px' }}>{t.hero_cta1}</button>
+            <button onClick={() => scrollTo('reservation')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.35)', color: '#fff', fontFamily: "'Jost',sans-serif", fontSize: '12px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', padding: '14px 32px', borderRadius: '2px', cursor: 'pointer', transition: 'background 0.3s' }}
+              onMouseEnter={e => (e.currentTarget.style.background='rgba(255,255,255,0.08)')}
+              onMouseLeave={e => (e.currentTarget.style.background='transparent')}
+            >{t.hero_cta2}</button>
+          </div>
+          <div id="hero-scroll" style={{ opacity: 0, marginTop: '56px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'rgba(255,255,255,0.3)', fontFamily: "'Jost',sans-serif", fontSize: '9px', letterSpacing: '4px', textTransform: 'uppercase' }}>
+            <span>{t.hero_scroll}</span>
+            <span className="scroll-pulse" style={{ fontSize: '16px' }}>↓</span>
+          </div>
+        </div>
+      </section>
+
+      {/* ── PLAT DU JOUR ─────────────────────────────────────── */}
+      {plats.length > 0 && (
+        <section style={{ background: 'var(--terra-pale)', padding: '48px 24px', textAlign: 'center' }}>
+          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+            <span className="section-badge">{t.plat_badge}</span>
+            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(26px,4vw,36px)', color: 'var(--brown-d)', margin: '8px 0' }}>{plats[0].nom}</h2>
+            {plats[0].description && (
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '20px', fontStyle: 'italic', color: 'var(--text-m)', margin: '10px 0' }}>{plats[0].description}</p>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginTop: '14px' }}>
+              {plats[0].prix && <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '28px', fontWeight: 600, color: 'var(--gold)' }}>{plats[0].prix.toFixed(2)} €</span>}
+              {plats[0].prepare_par && <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'var(--text-l)', letterSpacing: '1px' }}>{t.plat_prepared_by} {plats[0].prepare_par}</span>}
             </div>
           </div>
-          <div className="rr">
-            <div className="sl sl-g">{t.ab_label}</div>
-            <h2 className="st" style={{ fontSize: 'clamp(28px,4vw,52px)' }}>
-              {t.ab_t1} <em>{t.ab_t2}</em><br/>{t.ab_t3}
-            </h2>
-            <p style={{ fontSize: 15, lineHeight: 2, color: 'var(--textm)', marginBottom: 20 }}>{t.ab_p1}</p>
-            <p style={{ fontSize: 15, lineHeight: 2, color: 'var(--textm)', marginBottom: 28 }}>{t.ab_p2}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {[
-                { ico: '🔥', t: t.feat1t, d: t.feat1d, border: 'var(--r)' },
-                { ico: '🌿', t: t.feat2t, d: t.feat2d, border: 'var(--g)' },
-                { ico: '🤝', t: t.feat3t, d: t.feat3d, border: 'var(--g)' },
-              ].map((f, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '16px 20px', background: 'var(--warm)', borderRadius: 4, borderLeft: `3px solid ${f.border}` }}>
-                  <div style={{ fontSize: 20, flexShrink: 0, marginTop: 2 }}>{f.ico}</div>
-                  <div><strong style={{ display: 'block', fontWeight: 600, color: 'var(--dark)', fontSize: 14, marginBottom: 2 }}>{f.t}</strong>
-                  <span style={{ fontSize: 13, color: 'var(--textm)', lineHeight: 1.55 }}>{f.d}</span></div>
+        </section>
+      )}
+
+      {/* ── NOTRE HISTOIRE ───────────────────────────────────── */}
+      <section id="histoire" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--cream)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '60px', alignItems: 'center' }}>
+          <div>
+            <span className="section-badge">{t.histoire_title}</span>
+            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,46px)', color: 'var(--text)', lineHeight: 1.2, marginBottom: '16px' }}>{t.histoire_subtitle}</h2>
+            <div style={{ width: '48px', height: '1px', background: 'var(--gold)', marginBottom: '24px' }} />
+            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '20px', color: 'var(--text-m)', lineHeight: 1.7, marginBottom: '32px' }}>{t.histoire_text}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {([['🔥', t.histoire_icon1], ['🍋', t.histoire_icon2], ['❤️', t.histoire_icon3]] as [string,string][]).map(([icon, label]) => (
+                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <span style={{ fontSize: '22px' }}>{icon}</span>
+                  <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '14px', fontWeight: 400, color: 'var(--text-m)', letterSpacing: '0.5px' }}>{label}</span>
                 </div>
               ))}
             </div>
           </div>
+          <div style={{ background: 'linear-gradient(135deg,var(--terra-pale),var(--warm))', borderRadius: '2px', padding: '48px 40px', border: '1px solid rgba(196,98,45,0.2)', textAlign: 'center' }}>
+            <div style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: '64px', color: 'var(--terra)', lineHeight: 1, marginBottom: '16px', opacity: 0.55 }}>🍕</div>
+            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--brown)', lineHeight: 1.5 }}>&quot;L&apos;Italie dans chaque bouchée, la France dans chaque accueil&quot;</p>
+            <div style={{ width: '40px', height: '1px', background: 'var(--gold)', margin: '20px auto 16px' }} />
+            <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--text-l)' }}>Savigné-sur-Lathan · Depuis 2015</p>
+          </div>
         </div>
       </section>
 
-      {/* MENU */}
-      <section id="menu" className="s" style={{ background: 'var(--warm)' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div className="ru" style={{ textAlign: 'center', marginBottom: 56 }}>
-            <div className="sl">{t.mn_label}</div>
-            <h2 className="st" style={{ fontSize: 'clamp(28px,4vw,52px)' }}>{t.mn_title} <em>{t.mn_title2}</em></h2>
-            <p style={{ fontSize: 13, color: 'var(--textl)', marginTop: 8, fontStyle: 'italic' }}>{t.mn_sub}</p>
+      {/* ── MENU ─────────────────────────────────────────────── */}
+      <section id="menu" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--warm)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <span className="section-badge">{t.menu_title}</span>
+            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,48px)', color: 'var(--text)', marginBottom: '12px' }}>Nos saveurs</h2>
+            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '17px', fontStyle: 'italic', color: 'var(--text-l)', maxWidth: '560px', margin: '0 auto' }}>{t.menu_note}</p>
           </div>
 
-          {/* Formules */}
+          {categories.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '40px' }}>
+              {categories.map((cat, i) => (
+                <button key={cat.id} onClick={() => setActiveTab(i)} style={{
+                  padding: '9px 20px', borderRadius: '2px',
+                  border: `1px solid ${activeTab===i ? 'var(--terra)' : 'rgba(196,98,45,0.2)'}`,
+                  background: activeTab===i ? 'var(--terra)' : 'transparent',
+                  color: activeTab===i ? '#fff' : 'var(--text-m)',
+                  fontFamily: "'Jost',sans-serif", fontSize: '12px', fontWeight: 500,
+                  letterSpacing: '1.5px', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.3s',
+                }}>{getCatName(cat)}</button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '16px' }}>
+            {catArticles.map(art => (
+              <div key={art.id} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.12)', borderRadius: '2px', padding: '20px 22px', opacity: art.disponible ? 1 : 0.6, position: 'relative', transition: 'box-shadow 0.3s' }}
+                onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.boxShadow='0 8px 32px rgba(42,18,0,0.08)')}
+                onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.boxShadow='none')}
+              >
+                {!art.disponible && <span style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(42,18,0,0.07)', color: 'var(--text-l)', fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '3px 8px', borderRadius: '2px' }}>{t.menu_indisponible}</span>}
+                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: '18px', color: 'var(--text)', marginBottom: '6px', paddingRight: !art.disponible ? '90px' : '0' }}>{getArticleName(art)}</h3>
+                {art.description && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', fontWeight: 300, color: 'var(--text-l)', lineHeight: 1.5, marginBottom: '12px' }}>{art.description}</p>}
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
+                  <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '20px', fontWeight: 600, color: art.prix_reduction ? 'var(--text-l)' : 'var(--gold)', textDecoration: art.prix_reduction ? 'line-through' : 'none' }}>{art.prix.toFixed(2)} €</span>
+                  {art.prix_reduction && <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '20px', fontWeight: 600, color: 'var(--terra)' }}>{art.prix_reduction.toFixed(2)} €</span>}
+                  {art.prix_pala && <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'var(--text-l)' }}>Pala: {art.prix_pala.toFixed(2)} €</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+
           {formules.length > 0 && (
-            <div style={{ marginBottom: 40 }}>
-              <div className="sl sl-g" style={{ marginBottom: 20 }}>Formules</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            <div style={{ marginTop: '60px' }}>
+              <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: '32px', color: 'var(--text)', textAlign: 'center', marginBottom: '32px' }}>{t.menu_formules_title}</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '16px' }}>
                 {formules.map(f => (
-                  <div key={f.id} style={{ background: 'white', borderRadius: 6, padding: 24, border: '2px solid var(--g)', position: 'relative', overflow: 'hidden' }}>
-                    <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'var(--g)' }} />
-                    <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, marginBottom: 6 }}>{f.nom}</div>
-                    {f.description && <div style={{ fontSize: 13, color: 'var(--textm)', marginBottom: 8, fontStyle: 'italic' }}>{f.description}</div>}
-                    {f.contenu && <div style={{ fontSize: 12, color: 'var(--textl)', marginBottom: 16, lineHeight: 1.7 }}>{f.contenu}</div>}
-                    <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 24, color: 'var(--g)', fontWeight: 700 }}>{f.prix.toFixed(2)} €</div>
+                  <div key={f.id} style={{ background: 'var(--terra-pale)', border: '1px solid rgba(196,98,45,0.2)', borderRadius: '2px', padding: '24px' }}>
+                    <h4 style={{ fontFamily: "'Playfair Display',serif", fontSize: '20px', color: 'var(--brown-d)', marginBottom: '8px' }}>{f.nom}</h4>
+                    {f.description && <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '17px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '8px' }}>{f.description}</p>}
+                    {f.contenu && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--text-l)', lineHeight: 1.5, marginBottom: '16px' }}>{f.contenu}</p>}
+                    <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '24px', fontWeight: 600, color: 'var(--gold)' }}>{f.prix.toFixed(2)} €</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Catégories tabs */}
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap', marginBottom: 40 }}>
-            {categories.map(cat => (
-              <button key={cat.id} onClick={() => setCatActive(cat.id)} style={{
-                padding: '9px 20px', borderRadius: 100, fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase',
-                cursor: 'pointer', border: '1.5px solid', fontFamily: 'Jost,sans-serif', transition: 'all 0.25s',
-                borderColor: catActive === cat.id ? 'var(--r)' : 'rgba(196,30,58,0.2)',
-                background: catActive === cat.id ? 'var(--r)' : 'transparent',
-                color: catActive === cat.id ? 'white' : 'var(--textl)',
-              }}>
-                {catName(cat)}
-              </button>
-            ))}
-          </div>
-
-          {/* Articles */}
-          <div>
-            {catActive && (() => {
-              const cat = categories.find(c => c.id === catActive)
-              const isPizza = cat?.nom === 'Pizzas'
-              const isSuppl = cat?.nom === 'Suppléments'
-              const isVin = cat?.nom === 'Vins' || cat?.nom === 'Pétillants' || cat?.nom === 'Apéritifs & Digestifs'
-
-              if (isSuppl) return (
-                <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-                    {artsByCat.map(a => (
-                      <div key={a.id} className="sc">
-                        <span style={{ fontWeight: 500, fontSize: 14 }}>{artName(a)}</span>
-                        <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 16, fontWeight: 700, color: 'var(--r)' }}>{a.prix.toFixed(2)} €</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ background: 'rgba(196,30,58,0.05)', border: '1px solid rgba(196,30,58,0.15)', padding: '14px 18px', borderRadius: 4, marginTop: 20, fontSize: 12, color: 'var(--textm)', fontStyle: 'italic' }}>
-                    {t.supp_note}
-                  </div>
-                </div>
-              )
-
-              if (isPizza) return (
-                <div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                    {artsByCat.map(a => (
-                      <div key={a.id} className="pc" style={{ display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, marginBottom: 6, fontWeight: 600 }}>{artName(a)}</div>
-                        <div style={{ fontSize: 12, color: 'var(--textl)', lineHeight: 1.75, marginBottom: 16, flex: 1 }}>{artDesc(a)}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: a.prix_reduction ? 'var(--textl)' : 'var(--r)', textDecoration: a.prix_reduction ? 'line-through' : 'none' }}>
-                              {a.prix.toFixed(2)} €
-                            </span>
-                            {a.prix_reduction && (
-                              <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: 'var(--g)' }}>
-                                {a.prix_reduction.toFixed(2)} €
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                            {a.prix_pala && <span className="bdg bdg-r">Pala {a.prix_pala.toFixed(2)} €</span>}
-                            {a.prix_reduction && <span className="bdg bdg-promo">Promo</span>}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ background: 'white', borderLeft: '3px solid var(--gold)', padding: '16px 22px', marginTop: 28, fontSize: 13, fontStyle: 'italic', color: 'var(--textl)', borderRadius: '0 4px 4px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 18 }}>🫓</span>{t.calz_note}
-                  </div>
-                </div>
-              )
-
-              return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 12 }}>
-                  {artsByCat.map(a => (
-                    <div key={a.id} className="lc" style={{ flexDirection: 'column', gap: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 17, marginBottom: 4, fontWeight: 600 }}>{artName(a)}</div>
-                          {artDesc(a) && <div style={{ fontSize: 12, color: 'var(--textl)', lineHeight: 1.6, fontStyle: 'italic' }}>{artDesc(a)}</div>}
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          {a.prix_reduction ? (
-                            <div>
-                              <div style={{ fontSize: 13, color: 'var(--textl)', textDecoration: 'line-through' }}>{a.prix.toFixed(2)} €</div>
-                              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: 'var(--g)' }}>{a.prix_reduction.toFixed(2)} €</div>
-                            </div>
-                          ) : (
-                            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, fontWeight: 700, color: 'var(--r)' }}>{a.prix.toFixed(2)} €</div>
-                          )}
-                          {a.prix_pala && <div style={{ fontSize: 11, color: 'var(--textl)' }}>Pala {a.prix_pala.toFixed(2)} €</div>}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            })()}
-          </div>
         </div>
       </section>
 
-      {/* AMBIANCE */}
-      <section style={{ background: 'var(--dark2)', padding: '100px 52px' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <h2 className="ru" style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,52px)', color: 'white', textAlign: 'center', marginBottom: 56 }}>
-            L'<em style={{ fontStyle: 'italic', color: 'var(--gold2)' }}>{t.amb_t2}</em> {t.amb_t3}
-          </h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20 }}>
-            {[
-              { cls: 'ac1', ico: '🔥', t: t.ac1t, d: t.ac1d },
-              { cls: 'ac2', ico: '🍷', t: t.ac2t, d: t.ac2d },
-              { cls: 'ac3', ico: '🌿', t: t.ac3t, d: t.ac3d },
-            ].map((card, i) => (
-              <div key={i} className={`ac ${card.cls} ru`} style={{ transitionDelay: `${i * 0.12}s` }}>
-                <div className="ac-bg" />
-                <div className="ac-ov" />
-                <div className="ac-cnt">
-                  <span style={{ fontSize: 28, marginBottom: 10, display: 'block' }}>{card.ico}</span>
-                  <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: 'white', marginBottom: 8 }}>{card.t}</div>
-                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', lineHeight: 1.65 }}>{card.d}</div>
-                </div>
+      {/* ── HORAIRES ─────────────────────────────────────────── */}
+      <section id="horaires" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--cream)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
+            <span className="section-badge">{t.horaires_title}</span>
+            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,48px)', color: 'var(--text)' }}>Nos horaires</h2>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '48px', alignItems: 'start' }}>
+            <div style={{ background: 'var(--brown-d)', borderRadius: '2px', padding: '32px', border: '1px solid rgba(201,148,58,0.2)' }}>
+              {HORAIRES_DATA.map(({ dayKey, heuresKey, jsDay, closed }) => {
+                const isToday = jsDay === todayDay
+                return (
+                  <div key={dayKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isToday ? '14px 12px' : '11px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', background: isToday ? 'rgba(201,148,58,0.1)' : 'transparent', borderRadius: isToday ? '2px' : '0', margin: isToday ? '3px -12px' : '0' }}>
+                    <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', fontWeight: isToday ? 500 : 300, color: isToday ? 'var(--gold-l)' : 'rgba(255,255,255,0.65)' }}>{t[dayKey]}</span>
+                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '15px', fontStyle: closed ? 'normal' : 'italic', color: closed ? 'var(--terra-l)' : 'rgba(255,255,255,0.8)' }}>{closed ? t.horaires_closed : t[heuresKey]}</span>
+                  </div>
+                )
+              })}
+              <div style={{ marginTop: '24px', padding: '16px', background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}>
+                <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginBottom: '8px' }}>📍 1 Place de l&apos;Église, 37420 Savigné-sur-Lathan</p>
+                <a href="tel:0668366298" style={{ fontFamily: "'Jost',sans-serif", fontSize: '16px', fontWeight: 500, color: 'var(--gold-l)', textDecoration: 'none', letterSpacing: '1px' }}>📞 06 68 36 62 98</a>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* HORAIRES */}
-      <section id="horaires" style={{ background: 'var(--r)', padding: '100px 52px' }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 80, alignItems: 'start' }}>
-          <div className="rl">
-            <div className="sl" style={{ color: 'rgba(255,255,255,0.55)' }}>{t.ho_label}</div>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,52px)', color: 'white', lineHeight: 1.1, marginBottom: 22 }}>
-              {t.ho_t1} <em style={{ fontStyle: 'italic', color: 'var(--gold2)' }}>{t.ho_t2}</em>
-            </h2>
-            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, color: 'var(--gold2)', marginBottom: 8, fontStyle: 'italic' }}>06 68 36 62 98</div>
-            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', lineHeight: 1.9 }}>20 Place Jacques du Bellay<br/>37340 Savigné-sur-Lathan<br/>Indre-et-Loire · France</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-              {[t.hz1, t.hz2, t.hz3].map(z => (
-                <span key={z} style={{ background: 'rgba(255,255,255,0.12)', color: 'white', padding: '5px 13px', borderRadius: 100, fontSize: 9, letterSpacing: 2.5, textTransform: 'uppercase', fontWeight: 600 }}>{z}</span>
-              ))}
+            </div>
+            <div style={{ borderRadius: '2px', overflow: 'hidden', border: '1px solid rgba(196,98,45,0.2)', height: '420px' }}>
+              <iframe
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d5317.7!2d0.1!3d47.45!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sSavign%C3%A9-sur-Lathan%2C+France!5e0!3m2!1sfr!2sfr!4v1700000000000!5m2!1sfr!2sfr"
+                width="100%" height="100%" style={{ border: 0 }}
+                allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade"
+                title="Localisation Roma Pizzeria Savigné-sur-Lathan"
+              />
             </div>
           </div>
-          <div className="rr">
-            {HORAIRES.map(h => {
-              const isToday = h.day === today
-              const tKey = h.key as keyof typeof t
-              const label = String(t[tKey] || h.key)
-              return (
-                <div key={h.key} className={`ho-row ${isToday ? 'today' : ''}`}>
-                  <span style={{ fontWeight: 600, fontSize: 14, color: isToday ? 'var(--gold2)' : 'white' }}>{label}</span>
-                  <span style={{ textAlign: 'right', fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 1.8 }}>
-                    {!h.midi && !h.soir ? <span style={{ color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>{t.day_fer}</span> : (
-                      <>
-                        {h.midi && <span>{h.key === 'day_sam' ? '12h00–14h30' : '12h00–14h00'}<br/></span>}
-                        {h.soir && <span>19h00–22h00</span>}
-                      </>
-                    )}
-                  </span>
+        </div>
+      </section>
+
+      {/* ── RÉSERVATION ──────────────────────────────────────── */}
+      <section id="reservation" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--terra-pale)' }}>
+        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
+            <span className="section-badge">{t.nav_reserver}</span>
+            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,44px)', color: 'var(--text)' }}>{t.resa_title}</h2>
+          </div>
+
+          {resaSuccess ? (
+            <div style={{ background: '#fff', border: '1px solid rgba(74,103,65,0.3)', borderRadius: '2px', padding: 'clamp(32px,5vw,48px)', textAlign: 'center' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '20px' }}>{t.resa_success}</p>
+              <button onClick={() => { setResaSuccess(false); setResaForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }) }} className="btn-secondary">Nouvelle réservation</button>
+            </div>
+          ) : (
+            <form onSubmit={handleResa} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.15)', borderRadius: '2px', padding: 'clamp(24px,5vw,40px)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div><label className="rf-label">{t.resa_nom}</label><input type="text" className="rf-input" placeholder={t.resa_ph_nom} value={resaForm.nom} onChange={e => setResaForm(p=>({...p,nom:e.target.value}))} required /></div>
+                <div><label className="rf-label">{t.resa_tel}</label><input type="tel" className="rf-input" placeholder={t.resa_ph_tel} value={resaForm.telephone} onChange={e => setResaForm(p=>({...p,telephone:e.target.value}))} required /></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                <div>
+                  <label className="rf-label">{t.resa_date}</label>
+                  <input type="date" className="rf-input" min={minDate()} value={resaForm.date}
+                    onChange={e => {
+                      const d = new Date(e.target.value + 'T12:00:00')
+                      setResaError(d.getDay() === 1 ? t.resa_lundi_info : '')
+                      setResaForm(p => ({ ...p, date: e.target.value }))
+                    }} required />
                 </div>
-              )
-            })}
-          </div>
+                <div>
+                  <label className="rf-label">{t.resa_heure}</label>
+                  <select className="rf-select" value={resaForm.heure} onChange={e => setResaForm(p=>({...p,heure:e.target.value}))} required>
+                    <option value="">--:--</option>
+                    {['12:00','12:30','13:00','13:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00'].map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                <div>
+                  <label className="rf-label">{t.resa_couverts}</label>
+                  <select className="rf-select" value={resaForm.couverts} onChange={e => setResaForm(p=>({...p,couverts:e.target.value}))}>
+                    {[1,2,3,4,5,6,7,8,10,12].map(n => <option key={n} value={n}>{n} {n===1?'personne':'personnes'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="rf-label">{t.resa_zone}</label>
+                  <select className="rf-select" value={resaForm.zone} onChange={e => setResaForm(p=>({...p,zone:e.target.value}))}>
+                    <option value="">Indifférent</option>
+                    <option value="rdc">Rez-de-chaussée</option>
+                    <option value="etage">Étage</option>
+                    <option value="terrasse">Terrasse</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginTop: '16px' }}>
+                <label className="rf-label">{t.resa_notes}</label>
+                <textarea className="rf-textarea" placeholder={t.resa_ph_notes} value={resaForm.notes} onChange={e => setResaForm(p=>({...p,notes:e.target.value}))} />
+              </div>
+              {resaError && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)', marginTop: '12px', padding: '10px 14px', background: 'rgba(196,98,45,0.08)', borderRadius: '2px' }}>{resaError}</p>}
+              <button type="submit" className="btn-primary" disabled={resaLoading} style={{ width: '100%', marginTop: '24px', padding: '16px', justifyContent: 'center', opacity: resaLoading ? 0.7 : 1 }}>
+                {resaLoading ? '...' : t.resa_submit}
+              </button>
+              <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', textAlign: 'center', marginTop: '14px', letterSpacing: '0.5px' }}>{t.resa_note}</p>
+            </form>
+          )}
         </div>
       </section>
 
-      {/* RÉSERVATION */}
-      <section id="resa" className="s">
-        <div style={{ maxWidth: 800, margin: '0 auto' }}>
-          <div className="ru" style={{ textAlign: 'center', marginBottom: 48 }}>
-            <div className="sl">{t.resa_label}</div>
-            <h2 className="st" style={{ fontSize: 'clamp(28px,4vw,52px)' }}>{t.resa_t1} <em>{t.resa_t2}</em></h2>
-            <p style={{ fontSize: 15, color: 'var(--textm)', lineHeight: 1.8, marginTop: 12 }}>{t.resa_sub}</p>
-          </div>
-          <div className="ru" style={{ background: 'white', borderRadius: 8, padding: 40, border: '1px solid rgba(196,30,58,0.08)', boxShadow: '0 24px 80px rgba(26,10,10,0.06)' }}>
-            <Link href="/reserver" className="btn-submit" style={{ textDecoration: 'none', display: 'block', textAlign: 'center' }}>
-              {t.nav_reserver} →
-            </Link>
-            <p style={{ textAlign: 'center', fontSize: 13, color: 'var(--textl)', marginTop: 16 }}>{t.rf_note}</p>
-          </div>
+      {/* ── CTA FINALE ───────────────────────────────────────── */}
+      <section style={{ background: 'var(--brown-d)', padding: 'clamp(60px,8vw,100px) 24px', textAlign: 'center' }}>
+        <h2 style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: 'clamp(28px,4vw,52px)', color: '#fff', marginBottom: '14px' }}>{t.cta_title}</h2>
+        <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'rgba(255,255,255,0.55)', marginBottom: '36px' }}>{t.cta_subtitle}</p>
+        <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => scrollTo('reservation')} className="btn-primary" style={{ padding: '14px 32px', fontSize: '12px', letterSpacing: '2px' }}>{t.cta_btn1}</button>
+          <a href="tel:0668366298" style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '14px 32px', borderRadius: '2px', fontFamily: "'Jost',sans-serif", fontSize: '12px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', textDecoration: 'none', transition: 'background 0.3s' }}
+            onMouseEnter={e => (e.currentTarget.style.background='rgba(255,255,255,0.08)')}
+            onMouseLeave={e => (e.currentTarget.style.background='transparent')}
+          >{t.cta_btn2}</a>
         </div>
       </section>
 
-      {/* CTA */}
-      <section style={{ background: 'var(--dark)', padding: '120px 52px', textAlign: 'center' }}>
-        <div className="ru" style={{ maxWidth: 600, margin: '0 auto' }}>
-          <h2 className="st" style={{ color: 'white', fontSize: 'clamp(28px,4vw,52px)' }}>{t.cta_t1} <em>{t.cta_t2}</em></h2>
-          <p style={{ fontSize: 15, color: 'rgba(255,255,255,0.6)', lineHeight: 1.9, marginBottom: 40 }}>{t.cta_p}</p>
-          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="/reserver" className="bp" style={{ textDecoration: 'none' }}>{t.cta_btn1}</Link>
-            <a href="tel:0668366298" className="bo" style={{ textDecoration: 'none' }}>{t.cta_btn2}</a>
+      {/* ── FOOTER ───────────────────────────────────────────── */}
+      <footer style={{ background: 'var(--brown-d)', borderTop: '1px solid rgba(201,148,58,0.18)', padding: '48px clamp(20px,5vw,80px)' }}>
+        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '32px' }}>
+          <div>
+            <span style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: '24px', color: 'var(--gold-l)', fontWeight: 600 }}>Roma</span>
+            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '16px', fontStyle: 'italic', color: 'rgba(255,255,255,0.35)', marginTop: '6px' }}>Pizzeria Restaurante</p>
           </div>
-          <a href="tel:0668366298" style={{ display: 'inline-flex', alignItems: 'center', gap: 10, fontFamily: "'Playfair Display',serif", fontSize: 28, color: 'var(--gold2)', fontStyle: 'italic', textDecoration: 'none', marginTop: 28 }}>
-            06 68 36 62 98
-          </a>
+          <div>
+            <h4 style={{ fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t.footer_links}</h4>
+            {([['menu','menu'], ['reservation','reserver'], ] as [string,string][]).map(([id, label]) => (
+              <button key={id} onClick={() => scrollTo(id)} style={{ display: 'block', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Jost',sans-serif", fontSize: '14px', color: 'rgba(255,255,255,0.45)', padding: '3px 0', transition: 'color 0.3s', textAlign: 'left' }}
+                onMouseEnter={e => (e.currentTarget.style.color='var(--gold-l)')}
+                onMouseLeave={e => (e.currentTarget.style.color='rgba(255,255,255,0.45)')}
+              >{label === 'menu' ? t.footer_menu : t.footer_reserver}</button>
+            ))}
+            <Link href="/compte" style={{ display: 'block', fontFamily: "'Jost',sans-serif", fontSize: '14px', color: 'rgba(255,255,255,0.45)', padding: '3px 0', textDecoration: 'none' }}>{t.footer_compte}</Link>
+          </div>
+          <div>
+            <h4 style={{ fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Contact</h4>
+            <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.8 }}>{t.footer_address}</p>
+            <a href="tel:0668366298" style={{ display: 'block', fontFamily: "'Jost',sans-serif", fontSize: '14px', color: 'var(--gold-l)', textDecoration: 'none', marginTop: '6px' }}>{t.footer_phone}</a>
+          </div>
         </div>
-      </section>
-
-      {/* FOOTER */}
-      <footer style={{ background: 'var(--dark2)', color: 'rgba(255,255,255,0.35)', padding: '40px 52px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 20 }}>
-        <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: 'rgba(255,255,255,0.75)', fontStyle: 'italic' }}>Roma Pizzeria Restaurante</div>
-        <div style={{ fontSize: 12, textAlign: 'center', lineHeight: 1.8 }}>
-          20 Place Jacques du Bellay · 37340 Savigné-sur-Lathan<br/>
-          06 68 36 62 98
-        </div>
-        <div style={{ display: 'flex', gap: 20 }}>
-          <Link href="/admin" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textDecoration: 'none', letterSpacing: 1 }}>{t.f_admin}</Link>
-          <Link href="/commander" style={{ fontSize: 11, color: 'rgba(255,255,255,0.2)', textDecoration: 'none', letterSpacing: 1 }}>{t.f_cmd}</Link>
+        <div style={{ maxWidth: '1200px', margin: '24px auto 0', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>{t.footer_copyright}</p>
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <Link href="/admin"    style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'rgba(255,255,255,0.15)', textDecoration: 'none' }}>Admin</Link>
+            <Link href="/commander" style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'rgba(255,255,255,0.15)', textDecoration: 'none' }}>Commander</Link>
+          </div>
         </div>
       </footer>
 
-      {/* PWA BANNER */}
-      {showPWA && (
-        <div style={{ position: 'fixed', bottom: 20, left: 16, right: 16, background: 'white', borderRadius: 12, padding: 20, boxShadow: '0 12px 40px rgba(0,0,0,0.15)', border: '1px solid rgba(196,30,58,0.15)', zIndex: 300, maxWidth: 420, margin: '0 auto' }}>
-          <button onClick={() => { setShowPWA(false); localStorage.setItem('pwa_dismissed','1') }} style={{ position: 'absolute', top: 10, right: 12, background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--textl)' }}>✕</button>
-          <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, marginBottom: 8 }}>📱 {t.pwa_title}</div>
-          <p style={{ fontSize: 13, color: 'var(--textm)', lineHeight: 1.6, marginBottom: 12 }}>{t.pwa_desc}</p>
-          <div style={{ fontSize: 12, color: 'var(--textl)', lineHeight: 1.7 }}>
-            <div>🍎 {t.pwa_ios}</div>
-            <div>🤖 {t.pwa_android}</div>
-          </div>
+      {/* ── PWA BANNER ───────────────────────────────────────── */}
+      {pwaBanner && (
+        <div className="pwa-banner">
+          <span>📱 {t.pwa_install}</span>
+          {deferredPrompt && (
+            <button className="btn-primary" style={{ padding: '7px 14px', fontSize: '11px', letterSpacing: '1px', whiteSpace: 'nowrap' }}
+              onClick={async () => {
+                (deferredPrompt as unknown as { prompt: () => void }).prompt()
+                setPwaBanner(false); localStorage.setItem('pwa_dismissed','1')
+              }}
+            >Installer</button>
+          )}
+          <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed','1') }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 4px' }}>×</button>
         </div>
       )}
     </>
