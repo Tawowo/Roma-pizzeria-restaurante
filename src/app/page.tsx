@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { T, Lang } from '@/lib/i18n'
@@ -11,76 +11,68 @@ interface Particle {
   r: number; color: string; alpha: number; spin: number; angle: number
 }
 
-const HORAIRES_DATA = [
-  { dayKey: 'day_1' as const, heuresKey: 'h_lundi'   as const, jsDay: 1, closed: true  },
-  { dayKey: 'day_2' as const, heuresKey: 'h_mardi'   as const, jsDay: 2, closed: false },
-  { dayKey: 'day_3' as const, heuresKey: 'h_mercredi'as const, jsDay: 3, closed: false },
-  { dayKey: 'day_4' as const, heuresKey: 'h_jeudi'   as const, jsDay: 4, closed: false },
-  { dayKey: 'day_5' as const, heuresKey: 'h_vendredi'as const, jsDay: 5, closed: false },
-  { dayKey: 'day_6' as const, heuresKey: 'h_samedi'  as const, jsDay: 6, closed: false },
-  { dayKey: 'day_0' as const, heuresKey: 'h_dimanche'as const, jsDay: 0, closed: false },
-]
+const TAB_ICONS = ['🍕', '🥗', '➕', '🍮', '🍷', '🥂', '🍸', '🥤']
+const SPECIALITES = ['Burrata', 'Valtellina', 'Asiatica', 'Bolognese']
 
 export default function HomePage() {
-  const [loaded, setLoaded]       = useState(false)
-  const [lang, setLang]           = useState<Lang>('fr')
-  const [navDark, setNavDark]     = useState(false)
-  const [menuOpen, setMenuOpen]   = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [lang, setLang] = useState<Lang>('fr')
+  const [navScrolled, setNavScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [activeTab, setActiveTab] = useState(0)
-
-  const [plats, setPlats]           = useState<PlatDuJour[]>([])
+  const [menuSearch, setMenuSearch] = useState('')
+  const [plats, setPlats] = useState<PlatDuJour[]>([])
   const [categories, setCategories] = useState<Categorie[]>([])
-  const [articles, setArticles]     = useState<Article[]>([])
-  const [formules, setFormules]     = useState<Formule[]>([])
-
-  const [resaForm, setResaForm] = useState({
-    nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: ''
-  })
+  const [articles, setArticles] = useState<Article[]>([])
+  const [formules, setFormules] = useState<Formule[]>([])
+  const [parametre, setParametre] = useState<{ msg_fermeture?: string; site_ouvert?: string }>({})
+  const [resaForm, setResaForm] = useState({ nom: '', telephone: '', email: '', date: '', heure: '', couverts: '2', zone: '', occasion: '', notes: '' })
   const [resaLoading, setResaLoading] = useState(false)
   const [resaSuccess, setResaSuccess] = useState(false)
-  const [resaError,   setResaError]   = useState('')
+  const [resaError, setResaError] = useState('')
+  const [pwaBanner, setPwaBanner] = useState(false)
 
-  const [pwaBanner, setPwaBanner]       = useState(false)
-  const [deferredPrompt, setDeferred]   = useState<Event | null>(null)
-
-  const canvasRef    = useRef<HTMLCanvasElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const loaderBarRef = useRef<HTMLDivElement>(null)
-  const rafRef       = useRef<number>(0)
+  const rafRef = useRef<number>(0)
   const t = T[lang]
-  const todayDay = new Date().getDay()
 
-  /* loader */
+  const bandeauVisible = !!(parametre.msg_fermeture || parametre.site_ouvert === 'false')
+
+  /* Loader */
   useEffect(() => {
-    if (loaderBarRef.current) {
-      const bar = loaderBarRef.current
-      requestAnimationFrame(() => { bar.style.width = '100%' })
+    const bar = loaderBarRef.current
+    if (bar) {
+      let w = 0
+      const interval = setInterval(() => {
+        w = Math.min(100, w + (100 / (1500 / 50)))
+        bar.style.width = w + '%'
+        if (w >= 100) clearInterval(interval)
+      }, 50)
     }
     const id = setTimeout(() => setLoaded(true), 1800)
     return () => clearTimeout(id)
   }, [])
 
-  /* nav scroll */
+  /* Nav scroll */
   useEffect(() => {
-    const fn = () => setNavDark(window.scrollY > 60)
+    const fn = () => setNavScrolled(window.scrollY > 60)
     window.addEventListener('scroll', fn, { passive: true })
     return () => window.removeEventListener('scroll', fn)
   }, [])
 
-  /* PWA */
+  /* PWA banner */
   useEffect(() => {
-    const dismissed = localStorage.getItem('pwa_dismissed')
-    if (dismissed) return
-    const handler = (e: Event) => { e.preventDefault(); setDeferred(e) }
-    window.addEventListener('beforeinstallprompt', handler)
+    if (localStorage.getItem('pwa_dismissed')) return
     const id = setTimeout(() => setPwaBanner(true), 8000)
-    return () => { window.removeEventListener('beforeinstallprompt', handler); clearTimeout(id) }
+    return () => clearTimeout(id)
   }, [])
 
-  /* supabase */
+  /* Supabase */
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0]
     supabase.from('platdujour').select('*').eq('actif', true).lte('date_debut', today)
-      .order('date_debut', { ascending: false }).limit(1)
+      .order('date_debut', { ascending: false })
       .then(({ data }) => setPlats(data ?? []))
     supabase.from('categorie').select('*').eq('actif', true).order('ordre')
       .then(({ data }) => setCategories(data ?? []))
@@ -88,15 +80,23 @@ export default function HomePage() {
       .then(({ data }) => setArticles(data ?? []))
     supabase.from('formule').select('*').eq('actif', true).order('ordre')
       .then(({ data }) => setFormules(data ?? []))
+    supabase.from('parametres').select('*')
+      .then(({ data }) => {
+        if (data) {
+          const obj: Record<string, string> = {}
+          data.forEach((r: { cle: string; valeur: string }) => { obj[r.cle] = r.valeur })
+          setParametre(obj)
+        }
+      })
   }, [])
 
-  /* canvas */
+  /* Canvas particles */
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-    const COLORS = ['#C41E3A', '#4A6741', '#C9943A', '#C4622D', '#ffffff']
+    const COLORS = ['#1B5E20', '#B71C1C', '#FFFFFF', '#D4A843']
     let particles: Particle[] = []
     let w = 0, h = 0
     const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight }
@@ -137,28 +137,13 @@ export default function HomePage() {
     if (!loaded) return
     const run = async () => {
       const gsap = (await import('gsap')).default
-      gsap.fromTo('#hero-badge', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.2 })
       gsap.fromTo('#hero-title', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.9, delay: 0.4 })
-      gsap.fromTo('#hero-sub',   { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.7 })
-      gsap.fromTo('#hero-btns',  { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.9 })
-      gsap.fromTo('#hero-scroll',{ opacity: 0 },         { opacity: 1,        duration: 0.6, delay: 1.4 })
+      gsap.fromTo('#hero-sub', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.7 })
+      gsap.fromTo('#hero-btns', { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.7, delay: 0.9 })
+      gsap.fromTo('#hero-counters', { opacity: 0 }, { opacity: 1, duration: 0.6, delay: 1.2 })
     }
     run()
   }, [loaded])
-
-  const scrollTo = useCallback((id: string) => {
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' })
-    setMenuOpen(false)
-  }, [])
-
-  const getArticleName = (a: Article) =>
-    lang === 'it' && a.nom_it ? a.nom_it : lang === 'en' && a.nom_en ? a.nom_en : a.nom
-  const getCatName = (c: Categorie) =>
-    lang === 'it' && c.nom_it ? c.nom_it : lang === 'en' && c.nom_en ? c.nom_en : c.nom
-
-  const catArticles = categories[activeTab]
-    ? articles.filter(a => a.categorie_id === categories[activeTab].id)
-    : []
 
   const minDate = () => {
     const d = new Date(); d.setDate(d.getDate() + 1)
@@ -180,7 +165,7 @@ export default function HomePage() {
       } else {
         const { data: nc } = await supabase
           .from('client')
-          .insert({ nom: resaForm.nom, telephone: resaForm.telephone, points_fidelite: 0 })
+          .insert({ nom: resaForm.nom, telephone: resaForm.telephone, email: resaForm.email || null, points_fidelite: 0 })
           .select('id').single()
         clientId = nc?.id
       }
@@ -188,7 +173,7 @@ export default function HomePage() {
         client_id: clientId, nom: resaForm.nom, telephone: resaForm.telephone,
         date_reservation: resaForm.date, heure_reservation: resaForm.heure,
         nombre_couverts: parseInt(resaForm.couverts),
-        zone: resaForm.zone || null, notes: resaForm.notes || null, statut: 'en_attente',
+        zone: resaForm.zone || null, notes: (resaForm.notes + (resaForm.occasion ? ` · Occasion: ${resaForm.occasion}` : '')) || null, statut: 'en_attente',
       })
       setResaSuccess(true)
     } catch {
@@ -198,366 +183,670 @@ export default function HomePage() {
     }
   }
 
-  /* nav link style helper */
-  const nlColor = (dark: boolean) => dark ? 'var(--text-m)' : 'rgba(255,255,255,0.8)'
+  const getCatName = (c: Categorie) =>
+    lang === 'it' && c.nom_it ? c.nom_it : lang === 'en' && c.nom_en ? c.nom_en : c.nom
+  const getArticleName = (a: Article) =>
+    lang === 'it' && a.nom_it ? a.nom_it : lang === 'en' && a.nom_en ? a.nom_en : a.nom
+
+  const activeCat = categories[activeTab]
+  const catArticles = activeCat
+    ? articles.filter(a => {
+        if (a.categorie_id !== activeCat.id) return false
+        if (!menuSearch.trim()) return true
+        const q = menuSearch.toLowerCase()
+        return getArticleName(a).toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q)
+      })
+    : []
+
+  const isWineTab = activeCat && (activeCat.nom.includes('Vin') || activeCat.nom.includes('Pétillant'))
+
+  const nowOpen = (() => {
+    const now = new Date()
+    const day = now.getDay()
+    const h = now.getHours() + now.getMinutes() / 60
+    if (day === 1) return false
+    if (day === 2 || day === 0) return h >= 19 && h < 21.5
+    if (day >= 3 && day <= 5) return (h >= 12 && h < 14.5) || (h >= 19 && h < 21.5)
+    if (day === 6) return (h >= 12 && h < 14.5) || (h >= 19 && h < 22)
+    return false
+  })()
+
+  const todayDay = new Date().getDay()
 
   return (
     <>
-      {/* ── LOADER ───────────────────────────────────────────── */}
-      <div id="loader" className={loaded ? 'hide' : ''}>
-        <div className="ld-logo">Roma</div>
-        <div className="ld-sub">Savigné-sur-Lathan</div>
-        <div className="ld-bar-w"><div className="ld-bar" ref={loaderBarRef} /></div>
-      </div>
-
-      {/* ── NAV ──────────────────────────────────────────────── */}
-      <nav className={`site-nav${navDark ? ' dark' : ''}`}>
-        <button onClick={() => scrollTo('hero')} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: '22px', color: navDark ? 'var(--brown-d)' : 'var(--gold-l)', fontWeight: 600, letterSpacing: '1px' }}>Roma</span>
-          <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', fontWeight: 300, color: navDark ? 'var(--text-l)' : 'rgba(255,255,255,0.6)', letterSpacing: '3px', textTransform: 'uppercase' }}>Pizzeria</span>
-        </button>
-
-        <div className="hidden md:flex items-center gap-8">
-          {([['histoire', t.nav_histoire], ['menu', t.nav_menu], ['horaires', t.nav_horaires]] as [string,string][]).map(([id, label]) => (
-            <button key={id} onClick={() => scrollTo(id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Jost',sans-serif", fontSize: '11px', fontWeight: 500, letterSpacing: '2.5px', textTransform: 'uppercase', color: nlColor(navDark), transition: 'color 0.3s ease' }}
-              onMouseEnter={e => (e.currentTarget.style.color = 'var(--terra)')}
-              onMouseLeave={e => (e.currentTarget.style.color = nlColor(navDark))}
-            >{label}</button>
-          ))}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div className="hidden md:flex" style={{ gap: '4px' }}>
-            {(['fr','it','en'] as Lang[]).map(l => (
-              <button key={l} onClick={() => setLang(l)} style={{
-                background: lang === l ? 'var(--terra)' : 'transparent',
-                border: `1px solid ${lang === l ? 'var(--terra)' : 'rgba(255,255,255,0.3)'}`,
-                color: lang === l ? '#fff' : (navDark ? 'var(--text-l)' : 'rgba(255,255,255,0.55)'),
-                padding: '3px 8px', borderRadius: '2px', fontSize: '10px', letterSpacing: '1px',
-                textTransform: 'uppercase', cursor: 'pointer', fontFamily: "'Jost',sans-serif", transition: 'all 0.3s',
-              }}>{l}</button>
-            ))}
-          </div>
-          <button onClick={() => scrollTo('reservation')} className="hidden md:block btn-primary" style={{ padding: '8px 18px', fontSize: '11px', letterSpacing: '2px' }}>{t.nav_reserver}</button>
-          <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-              {[0,1,2].map(i => (
-                <span key={i} style={{ display: 'block', width: '22px', height: '1.5px', background: navDark ? 'var(--text)' : '#fff', transition: 'all 0.3s', transformOrigin: 'center',
-                  transform: menuOpen ? (i===0?'rotate(45deg) translate(4px,4px)':i===1?'scaleX(0)':'rotate(-45deg) translate(4px,-4px)') : 'none' }} />
-              ))}
-            </div>
-          </button>
-        </div>
-      </nav>
-
-      {/* Mobile drawer */}
-      {menuOpen && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 99, background: 'var(--brown-d)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '28px' }}>
-          {([['histoire',t.nav_histoire],['menu',t.nav_menu],['horaires',t.nav_horaires],['reservation',t.nav_reserver]] as [string,string][]).map(([id, label]) => (
-            <button key={id} onClick={() => scrollTo(id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Playfair Display',serif", fontSize: '28px', color: '#fff' }}>{label}</button>
-          ))}
-          <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-            {(['fr','it','en'] as Lang[]).map(l => (
-              <button key={l} onClick={() => setLang(l)} style={{ background: lang===l?'var(--terra)':'transparent', border:`1px solid ${lang===l?'var(--terra)':'rgba(255,255,255,0.3)'}`, color:'#fff', padding:'6px 14px', borderRadius:'2px', fontSize:'12px', textTransform:'uppercase', cursor:'pointer', fontFamily:"'Jost',sans-serif" }}>{l}</button>
-            ))}
-          </div>
+      {/* LOADER */}
+      {!loaded && (
+        <div id="loader">
+          <div className="ld-logo">Roma</div>
+          <div className="ld-flag">🇮🇹</div>
+          <div className="ld-sub">Savigné-sur-Lathan · Indre-et-Loire</div>
+          <div className="ld-bar-w"><div className="ld-bar" ref={loaderBarRef} /></div>
         </div>
       )}
 
-      {/* ── HERO ─────────────────────────────────────────────── */}
-      <section id="hero" style={{ minHeight: '100vh', background: 'var(--brown-d)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-        <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, zIndex: 0 }} />
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(160deg,rgba(42,18,0,0.88) 0%,rgba(42,18,0,0.6) 50%,rgba(196,98,45,0.12) 100%)', zIndex: 1 }} />
-        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', padding: 'clamp(100px,12vh,140px) 24px 80px', maxWidth: '900px', margin: '0 auto' }}>
-          <div id="hero-badge" style={{ opacity: 0, marginBottom: '24px' }}>
-            <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', border: '1px solid rgba(201,148,58,0.3)', padding: '6px 18px', borderRadius: '2px' }}>{t.hero_badge}</span>
+      {/* BANDEAU URGENCE */}
+      {bandeauVisible && (
+        <div style={{ background: 'var(--rosso)', color: 'white', textAlign: 'center', padding: '10px', fontSize: '14px', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 300 }}>
+          {parametre.site_ouvert === 'false' ? '⚠️ Fermé exceptionnellement — Réouverture prochaine' : `⚠️ ${parametre.msg_fermeture}`}
+        </div>
+      )}
+
+      {/* NAV */}
+      <nav className={navScrolled ? 'scrolled' : ''} style={{ top: bandeauVisible ? 40 : 0 }}>
+        <a href="#" style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, fontStyle: 'italic', color: navScrolled ? 'var(--rosso)' : 'var(--oro)', textDecoration: 'none', fontWeight: 700 }}>
+          Roma <span style={{ fontStyle: 'normal', fontWeight: 400, fontSize: 18, color: navScrolled ? 'var(--nero)' : 'rgba(255,255,255,0.8)' }}>Pizzeria</span>
+        </a>
+        <div style={{ display: 'flex', gap: 36 }} className="hidden md:flex">
+          {(['Histoire', 'Menu', 'Horaires', 'Réserver'] as const).map((l, i) => (
+            <a key={i} href={`#${(['histoire', 'menu', 'horaires', 'reserver'] as const)[i]}`}
+              style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost, sans-serif', fontWeight: 500 }}>
+              {l}
+            </a>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {(['fr', 'it', 'en'] as Lang[]).map(l => (
+            <button key={l} onClick={() => setLang(l)}
+              style={{ background: lang === l ? 'var(--rosso)' : 'transparent', color: lang === l ? 'white' : (navScrolled ? 'var(--nero)' : 'white'), border: '1px solid', borderColor: lang === l ? 'var(--rosso)' : (navScrolled ? 'var(--grigio-l)' : 'rgba(255,255,255,0.4)'), borderRadius: 2, padding: '3px 8px', fontSize: 10, cursor: 'pointer', fontFamily: 'Jost', letterSpacing: 1 }}>
+              {l.toUpperCase()}
+            </button>
+          ))}
+          <Link href="/compte" className="hidden md:block" style={{ color: navScrolled ? 'var(--verde)' : 'var(--verde-l)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none' }}>Mon compte</Link>
+          <a href="#reserver" className="btn-primary" style={{ padding: '8px 20px', fontSize: 12, textDecoration: 'none' }}>Réserver</a>
+          <button onClick={() => setMenuOpen(v => !v)} className="md:hidden" style={{ background: 'none', border: 'none', color: navScrolled ? 'var(--nero)' : 'white', cursor: 'pointer', fontSize: 24 }}>☰</button>
+        </div>
+      </nav>
+
+      {/* MOBILE DRAWER */}
+      {menuOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--hero-bg)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40 }}>
+          <button onClick={() => setMenuOpen(false)} style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', fontSize: 32, cursor: 'pointer' }}>✕</button>
+          {[{ label: 'Histoire', href: '#histoire' }, { label: 'Menu', href: '#menu' }, { label: 'Horaires', href: '#horaires' }, { label: 'Réserver', href: '#reserver' }, { label: 'Mon compte', href: '/compte' }].map(item => (
+            <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)}
+              style={{ color: 'white', fontSize: 28, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none' }}>
+              {item.label}
+            </a>
+          ))}
+        </div>
+      )}
+
+      {/* HERO */}
+      <section style={{ height: '100vh', background: 'var(--hero-bg)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+        <img src="https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=1920" alt="" loading="lazy"
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.15 }} />
+        <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }} />
+        <div id="hero-content" style={{ position: 'relative', zIndex: 10, textAlign: 'center', padding: '0 20px' }}>
+          <div style={{ fontSize: 12, letterSpacing: 3, textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', marginBottom: 24, fontFamily: 'Jost' }}>
+            🇮🇹 Authentique cuisine italienne · Savigné-sur-Lathan
           </div>
           <div id="hero-title" style={{ opacity: 0 }}>
-            <h1 style={{ lineHeight: 1, marginBottom: '12px' }}>
-              <span style={{ display: 'block', fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: 'clamp(56px,10vw,96px)', fontWeight: 700, color: 'var(--gold-l)', letterSpacing: '-1px' }}>{t.hero_title1}</span>
-              <span style={{ display: 'block', fontFamily: "'Playfair Display',serif", fontSize: 'clamp(32px,6vw,64px)', fontWeight: 400, color: '#fff', letterSpacing: '6px', textTransform: 'uppercase' }}>{t.hero_title2}</span>
-            </h1>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(56px, 8vw, 96px)', fontStyle: 'italic', color: 'var(--oro)', lineHeight: 1, marginBottom: 8 }}>Roma</div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(36px, 5vw, 72px)', color: 'white', lineHeight: 1, marginBottom: 24, fontWeight: 400 }}>Pizzeria</div>
           </div>
-          <p id="hero-sub" style={{ opacity: 0, fontFamily: "'Cormorant Garamond',serif", fontSize: 'clamp(16px,2.5vw,22px)', fontStyle: 'italic', color: 'rgba(255,255,255,0.65)', margin: '24px auto', maxWidth: '480px', letterSpacing: '0.5px' }}>{t.hero_subtitle}</p>
-          <div id="hero-btns" style={{ opacity: 0, display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap', marginTop: '36px' }}>
-            <button onClick={() => scrollTo('menu')} className="btn-primary" style={{ padding: '14px 32px', fontSize: '12px', letterSpacing: '2px' }}>{t.hero_cta1}</button>
-            <button onClick={() => scrollTo('reservation')} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.35)', color: '#fff', fontFamily: "'Jost',sans-serif", fontSize: '12px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', padding: '14px 32px', borderRadius: '2px', cursor: 'pointer', transition: 'background 0.3s' }}
-              onMouseEnter={e => (e.currentTarget.style.background='rgba(255,255,255,0.08)')}
-              onMouseLeave={e => (e.currentTarget.style.background='transparent')}
-            >{t.hero_cta2}</button>
+          <div id="hero-sub" style={{ opacity: 0, fontFamily: 'Cormorant Garamond, serif', fontSize: 'clamp(16px, 2.5vw, 22px)', fontStyle: 'italic', color: 'rgba(255,255,255,0.7)', marginBottom: 40, maxWidth: 600 }}>
+            Une famille italienne vous accueille · Four à bois · Produits frais · Recettes transmises de génération en génération
           </div>
-          <div id="hero-scroll" style={{ opacity: 0, marginTop: '56px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', color: 'rgba(255,255,255,0.3)', fontFamily: "'Jost',sans-serif", fontSize: '9px', letterSpacing: '4px', textTransform: 'uppercase' }}>
-            <span>{t.hero_scroll}</span>
-            <span className="scroll-pulse" style={{ fontSize: '16px' }}>↓</span>
+          <div id="hero-btns" style={{ opacity: 0, display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a href="#menu" className="btn-primary">Découvrir le menu</a>
+            <a href="#reserver" style={{ background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.6)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>Réserver une table</a>
+            <Link href="/compte" style={{ background: 'transparent', color: 'var(--verde-l)', border: '1px solid var(--verde-l)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>Mon compte fidélité</Link>
           </div>
+          <div id="hero-counters" style={{ opacity: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginTop: 60, maxWidth: 600, margin: '60px auto 0' }}>
+            {[
+              { icon: '🔥', val: '+15', label: "ans d'expérience" },
+              { icon: '🍕', val: '+30', label: 'pizzas au menu' },
+              { icon: '⭐', val: '+500', label: 'familles fidèles' },
+              { icon: '🫒', val: '100%', label: 'produits frais' },
+            ].map(c => (
+              <div key={c.label} style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24 }}>{c.icon}</div>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--oro)', fontWeight: 700 }}>{c.val}</div>
+                <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'Jost', letterSpacing: 0.5 }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: 11, letterSpacing: 2, fontFamily: 'Jost' }}>
+          DÉFILER ↓
         </div>
       </section>
 
-      {/* ── PLAT DU JOUR ─────────────────────────────────────── */}
+      {/* PLAT DU JOUR */}
       {plats.length > 0 && (
-        <section style={{ background: 'var(--terra-pale)', padding: '48px 24px', textAlign: 'center' }}>
-          <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-            <span className="section-badge">{t.plat_badge}</span>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(26px,4vw,36px)', color: 'var(--brown-d)', margin: '8px 0' }}>{plats[0].nom}</h2>
-            {plats[0].description && (
-              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '20px', fontStyle: 'italic', color: 'var(--text-m)', margin: '10px 0' }}>{plats[0].description}</p>
-            )}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginTop: '14px' }}>
-              {plats[0].prix && <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '28px', fontWeight: 600, color: 'var(--gold)' }}>{plats[0].prix.toFixed(2)} €</span>}
-              {plats[0].prepare_par && <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'var(--text-l)', letterSpacing: '1px' }}>{t.plat_prepared_by} {plats[0].prepare_par}</span>}
+        <section style={{ background: 'var(--verde-pale)', padding: '80px 20px', textAlign: 'center' }}>
+          <div style={{ maxWidth: 900, margin: '0 auto' }}>
+            <span className="badge badge-rosso" style={{ marginBottom: 20, display: 'inline-block' }}>🍽 Suggestion du jour</span>
+            <div style={{ display: 'grid', gridTemplateColumns: plats.length > 1 ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: 24, maxWidth: plats.length === 1 ? 500 : 900, margin: '0 auto' }}>
+              {plats.map(p => (
+                <div key={p.id} style={{ background: 'white', borderRadius: 4, padding: 32, boxShadow: '0 4px 20px rgba(27,94,32,0.1)', borderLeft: '3px solid var(--verde)' }}>
+                  <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--nero)', marginBottom: 8 }}>{p.nom}</div>
+                  {p.description && <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 16 }}>{p.description}</div>}
+                  {p.prix && <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--rosso)' }}>{p.prix.toFixed(2)} €</div>}
+                </div>
+              ))}
             </div>
+            <p style={{ marginTop: 20, fontFamily: 'Cormorant Garamond, serif', fontSize: 16, fontStyle: 'italic', color: 'var(--verde-m)' }}>
+              Préparé ce matin par Monica avec des produits locaux
+            </p>
           </div>
         </section>
       )}
 
-      {/* ── NOTRE HISTOIRE ───────────────────────────────────── */}
-      <section id="histoire" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--cream)' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '60px', alignItems: 'center' }}>
+      {/* NOTRE HISTOIRE */}
+      <section id="histoire" style={{ padding: '100px 20px', background: 'var(--bianco-c)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 80, alignItems: 'center' }}>
           <div>
-            <span className="section-badge">{t.histoire_title}</span>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,46px)', color: 'var(--text)', lineHeight: 1.2, marginBottom: '16px' }}>{t.histoire_subtitle}</h2>
-            <div style={{ width: '48px', height: '1px', background: 'var(--gold)', marginBottom: '24px' }} />
-            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '20px', color: 'var(--text-m)', lineHeight: 1.7, marginBottom: '32px' }}>{t.histoire_text}</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              {([['🔥', t.histoire_icon1], ['🍋', t.histoire_icon2], ['❤️', t.histoire_icon3]] as [string,string][]).map(([icon, label]) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ fontSize: '22px' }}>{icon}</span>
-                  <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '14px', fontWeight: 400, color: 'var(--text-m)', letterSpacing: '0.5px' }}>{label}</span>
+            <span className="badge badge-verde" style={{ marginBottom: 20, display: 'inline-block' }}>Notre histoire</span>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(32px, 3vw, 42px)', color: 'var(--nero)', marginBottom: 24, lineHeight: 1.2 }}>
+              Une trattoria au cœur <em style={{ color: 'var(--rosso)' }}>du village</em>
+            </h2>
+            <div className="section-divider" style={{ margin: '0 0 32px' }}></div>
+            <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 24, borderLeft: '3px solid var(--oro)', paddingLeft: 20 }}>
+              &quot;La pizza, c&apos;est l&apos;amour qu&apos;on met dans la pâte&quot; — Roberto
+            </p>
+            <p style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--nero-m)', marginBottom: 24 }}>
+              Roberto, originaire de Calabre, a grandi dans la tradition de la pizza napolitaine. Après des années à perfectionner son art dans les meilleures pizzerias d&apos;Italie, il s&apos;est installé en Touraine avec Monica et leur fils André pour ouvrir Roma — une trattoria qui porte l&apos;âme de l&apos;Italie au cœur de Savigné-sur-Lathan.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+              {[
+                { icon: '📍', title: 'Origines en Italie', desc: "Roberto apprend l'art de la pizza napolitaine" },
+                { icon: '🇫🇷', title: 'Installation en Touraine', desc: 'Ouverture de Roma à Savigné-sur-Lathan' },
+                { icon: '❤️', title: "Aujourd'hui", desc: 'La même passion, les mêmes recettes, toute la famille' },
+              ].map(step => (
+                <div key={step.title} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                  <span style={{ fontSize: 24, flexShrink: 0 }}>{step.icon}</span>
+                  <div>
+                    <div style={{ fontWeight: 600, color: 'var(--nero)', fontSize: 14, fontFamily: 'Jost' }}>{step.title}</div>
+                    <div style={{ fontSize: 13, color: 'var(--grigio)', marginTop: 2 }}>{step.desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginTop: 32 }}>
+              {[{ icon: '🔥', label: 'Four à bois' }, { icon: '🍋', label: 'Produits frais' }, { icon: '❤️', label: 'Accueil chaleureux' }].map(i => (
+                <div key={i.label} style={{ textAlign: 'center', padding: '20px 12px', background: 'white', borderRadius: 3, borderBottom: '2px solid var(--verde)' }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>{i.icon}</div>
+                  <div style={{ fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', letterSpacing: 0.5 }}>{i.label}</div>
                 </div>
               ))}
             </div>
           </div>
-          <div style={{ background: 'linear-gradient(135deg,var(--terra-pale),var(--warm))', borderRadius: '2px', padding: '48px 40px', border: '1px solid rgba(196,98,45,0.2)', textAlign: 'center' }}>
-            <div style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: '64px', color: 'var(--terra)', lineHeight: 1, marginBottom: '16px', opacity: 0.55 }}>🍕</div>
-            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--brown)', lineHeight: 1.5 }}>&quot;L&apos;Italie dans chaque bouchée, la France dans chaque accueil&quot;</p>
-            <div style={{ width: '40px', height: '1px', background: 'var(--gold)', margin: '20px auto 16px' }} />
-            <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--text-l)' }}>Savigné-sur-Lathan · Depuis 2015</p>
+          <div style={{ position: 'relative' }}>
+            <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800" alt="L'équipe Roma Pizzeria" loading="lazy"
+              style={{ width: '100%', height: 500, objectFit: 'cover', borderRadius: 4 }} />
+            <div style={{ position: 'absolute', bottom: -20, left: -20, background: 'var(--rosso)', color: 'white', padding: '16px 24px', borderRadius: 3 }}>
+              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, fontStyle: 'italic', fontWeight: 700 }}>15+</div>
+              <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', fontFamily: 'Jost' }}>ans d&apos;expérience</div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ── MENU ─────────────────────────────────────────────── */}
-      <section id="menu" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--warm)' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-            <span className="section-badge">{t.menu_title}</span>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,48px)', color: 'var(--text)', marginBottom: '12px' }}>Nos saveurs</h2>
-            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '17px', fontStyle: 'italic', color: 'var(--text-l)', maxWidth: '560px', margin: '0 auto' }}>{t.menu_note}</p>
+      {/* MENU */}
+      <section id="menu" style={{ padding: '100px 20px', background: 'var(--bianco-w)' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <span className="badge badge-verde" style={{ marginBottom: 16, display: 'inline-block' }}>Nos saveurs</span>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 16 }}>
+              Découvrez notre <em style={{ color: 'var(--rosso)' }}>menu</em>
+            </h2>
+            <div className="section-divider"></div>
           </div>
 
+          {/* Search */}
+          <div style={{ maxWidth: 400, margin: '0 auto 40px', position: 'relative' }}>
+            <input type="text" placeholder="Rechercher une pizza, un plat..." value={menuSearch} onChange={e => setMenuSearch(e.target.value)}
+              className="form-input" style={{ paddingLeft: 40 }} />
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--grigio)' }}>🔍</span>
+          </div>
+
+          {/* Tabs */}
           {categories.length > 0 && (
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'center', marginBottom: '40px' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginBottom: 40 }}>
               {categories.map((cat, i) => (
                 <button key={cat.id} onClick={() => setActiveTab(i)} style={{
-                  padding: '9px 20px', borderRadius: '2px',
-                  border: `1px solid ${activeTab===i ? 'var(--terra)' : 'rgba(196,98,45,0.2)'}`,
-                  background: activeTab===i ? 'var(--terra)' : 'transparent',
-                  color: activeTab===i ? '#fff' : 'var(--text-m)',
-                  fontFamily: "'Jost',sans-serif", fontSize: '12px', fontWeight: 500,
+                  padding: '9px 20px', borderRadius: 2,
+                  border: `1px solid ${activeTab === i ? 'var(--rosso)' : 'rgba(183,28,28,0.2)'}`,
+                  background: activeTab === i ? 'var(--rosso)' : 'transparent',
+                  color: activeTab === i ? '#fff' : 'var(--nero-m)',
+                  fontFamily: 'Jost, sans-serif', fontSize: 12, fontWeight: 500,
                   letterSpacing: '1.5px', textTransform: 'uppercase', cursor: 'pointer', transition: 'all 0.3s',
-                }}>{getCatName(cat)}</button>
+                }}>
+                  {TAB_ICONS[i] ?? ''} {getCatName(cat)}
+                </button>
               ))}
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '16px' }}>
-            {catArticles.map(art => (
-              <div key={art.id} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.12)', borderRadius: '2px', padding: '20px 22px', opacity: art.disponible ? 1 : 0.6, position: 'relative', transition: 'box-shadow 0.3s' }}
-                onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.boxShadow='0 8px 32px rgba(42,18,0,0.08)')}
-                onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.boxShadow='none')}
-              >
-                {!art.disponible && <span style={{ position: 'absolute', top: '12px', right: '12px', background: 'rgba(42,18,0,0.07)', color: 'var(--text-l)', fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '1.5px', textTransform: 'uppercase', padding: '3px 8px', borderRadius: '2px' }}>{t.menu_indisponible}</span>}
-                <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: '18px', color: 'var(--text)', marginBottom: '6px', paddingRight: !art.disponible ? '90px' : '0' }}>{getArticleName(art)}</h3>
-                {art.description && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', fontWeight: 300, color: 'var(--text-l)', lineHeight: 1.5, marginBottom: '12px' }}>{art.description}</p>}
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px' }}>
-                  <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '20px', fontWeight: 600, color: art.prix_reduction ? 'var(--text-l)' : 'var(--gold)', textDecoration: art.prix_reduction ? 'line-through' : 'none' }}>{art.prix.toFixed(2)} €</span>
-                  {art.prix_reduction && <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '20px', fontWeight: 600, color: 'var(--terra)' }}>{art.prix_reduction.toFixed(2)} €</span>}
-                  {art.prix_pala && <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'var(--text-l)' }}>Pala: {art.prix_pala.toFixed(2)} €</span>}
+          {/* Articles grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+            {catArticles.map(art => {
+              const name = getArticleName(art)
+              const isVeg = name === 'Végétarienne'
+              const isSpec = SPECIALITES.includes(name)
+              return (
+                <div key={art.id} style={{ background: '#fff', border: '1px solid rgba(183,28,28,0.12)', borderRadius: 3, padding: '20px 22px', opacity: art.disponible ? 1 : 0.6, position: 'relative' }}>
+                  {!art.disponible && (
+                    <span style={{ position: 'absolute', top: 12, right: 12, background: 'var(--grigio-l)', color: 'var(--grigio)', fontFamily: 'Jost', fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 2 }}>Indisponible</span>
+                  )}
+                  {isVeg && <span className="badge badge-verde" style={{ marginBottom: 8, display: 'inline-block' }}>🌱 Végétarienne</span>}
+                  {isSpec && <span className="badge badge-rosso" style={{ marginBottom: 8, display: 'inline-block', marginLeft: isVeg ? 4 : 0 }}>⭐ Spécialité</span>}
+                  <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: 'var(--nero)', marginBottom: 6, paddingRight: !art.disponible ? 90 : 0 }}>{name}</h3>
+                  {art.description && (
+                    <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 15, fontStyle: 'italic', color: 'var(--grigio)', lineHeight: 1.5, marginBottom: 12 }}>{art.description}</p>
+                  )}
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                    {isWineTab && art.prix_pala ? (
+                      <>
+                        <span style={{ fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)' }}>Verre —</span>
+                        <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: 'var(--rosso)' }}>{art.prix.toFixed(2)} €</span>
+                        <span style={{ fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)', marginLeft: 8 }}>Bouteille —</span>
+                        <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: 'var(--rosso)' }}>{art.prix_pala.toFixed(2)} €</span>
+                      </>
+                    ) : art.prix_pala ? (
+                      <>
+                        <span style={{ fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)' }}>33cm —</span>
+                        <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: 'var(--rosso)' }}>{art.prix.toFixed(2)} €</span>
+                        <span style={{ fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)', marginLeft: 8 }}>Pala —</span>
+                        <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: 'var(--rosso)' }}>{art.prix_pala.toFixed(2)} €</span>
+                      </>
+                    ) : (
+                      <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, fontWeight: 700, color: art.prix_reduction ? 'var(--grigio)' : 'var(--rosso)', textDecoration: art.prix_reduction ? 'line-through' : 'none' }}>
+                        {art.prix.toFixed(2)} €{art.prix_reduction && <span style={{ textDecoration: 'none', color: 'var(--rosso)', marginLeft: 8 }}>{art.prix_reduction.toFixed(2)} €</span>}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
+          {/* Formulas */}
           {formules.length > 0 && (
-            <div style={{ marginTop: '60px' }}>
-              <h3 style={{ fontFamily: "'Playfair Display',serif", fontSize: '32px', color: 'var(--text)', textAlign: 'center', marginBottom: '32px' }}>{t.menu_formules_title}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(280px,1fr))', gap: '16px' }}>
+            <div style={{ marginTop: 60, background: 'var(--verde-pale)', borderRadius: 4, padding: 40 }}>
+              <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: 'var(--nero)', textAlign: 'center', marginBottom: 32 }}>Nos formules</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
                 {formules.map(f => (
-                  <div key={f.id} style={{ background: 'var(--terra-pale)', border: '1px solid rgba(196,98,45,0.2)', borderRadius: '2px', padding: '24px' }}>
-                    <h4 style={{ fontFamily: "'Playfair Display',serif", fontSize: '20px', color: 'var(--brown-d)', marginBottom: '8px' }}>{f.nom}</h4>
-                    {f.description && <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '17px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '8px' }}>{f.description}</p>}
-                    {f.contenu && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--text-l)', lineHeight: 1.5, marginBottom: '16px' }}>{f.contenu}</p>}
-                    <span style={{ fontFamily: "'Playfair Display',serif", fontSize: '24px', fontWeight: 600, color: 'var(--gold)' }}>{f.prix.toFixed(2)} €</span>
+                  <div key={f.id} style={{ background: 'white', borderRadius: 3, padding: 24, borderTop: '3px solid var(--verde)' }}>
+                    <h4 style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: 'var(--nero)', marginBottom: 8 }}>{f.nom}</h4>
+                    {f.description && <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 17, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 8 }}>{f.description}</p>}
+                    {f.contenu && <p style={{ fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)', lineHeight: 1.5, marginBottom: 16 }}>{f.contenu}</p>}
+                    <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, fontWeight: 700, color: 'var(--rosso)' }}>{f.prix.toFixed(2)} €</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
+
+          {/* Calzone note */}
+          <div style={{ marginTop: 32, padding: '16px 24px', background: 'var(--rosso-pale)', borderLeft: '3px solid var(--rosso)', borderRadius: 3 }}>
+            <p style={{ fontSize: 14, color: 'var(--rosso-m)', fontFamily: 'Jost' }}>🍕 Toutes nos pizzas 33cm peuvent être préparées en Calzone sur demande</p>
+          </div>
         </div>
       </section>
 
-      {/* ── HORAIRES ─────────────────────────────────────────── */}
-      <section id="horaires" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--cream)' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '48px' }}>
-            <span className="section-badge">{t.horaires_title}</span>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,48px)', color: 'var(--text)' }}>Nos horaires</h2>
+      {/* AMBIANCE */}
+      <section style={{ padding: '100px 20px', background: 'var(--bianco-c)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <span className="badge badge-verde" style={{ marginBottom: 16, display: 'inline-block' }}>Nos espaces</span>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 8 }}>
+              L&apos;ambiance <em style={{ color: 'var(--rosso)' }}>Roma</em>
+            </h2>
+            <p style={{ color: 'var(--grigio)', fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic' }}>Trois espaces pour tous vos moments</p>
+            <div className="section-divider"></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '48px', alignItems: 'start' }}>
-            <div style={{ background: 'var(--brown-d)', borderRadius: '2px', padding: '32px', border: '1px solid rgba(201,148,58,0.2)' }}>
-              {HORAIRES_DATA.map(({ dayKey, heuresKey, jsDay, closed }) => {
-                const isToday = jsDay === todayDay
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
+            {[
+              { icon: '🏠', title: 'Rez-de-chaussée', desc: "L'espace convivial, pour les repas en famille", img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600' },
+              { icon: '🏛', title: 'Étage', desc: "L'espace romantique, pour les dîners en amoureux", img: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600' },
+              { icon: '🌿', title: 'Terrasse (été)', desc: "L'espace estival, sous les étoiles de Touraine", img: 'https://images.unsplash.com/photo-1559329007-40df8a9345d8?w=600' },
+            ].map(e => (
+              <div key={e.title} style={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.1)', background: 'white' }}>
+                <img src={e.img} alt={e.title} loading="lazy" style={{ width: '100%', height: 220, objectFit: 'cover' }} />
+                <div style={{ padding: 24 }}>
+                  <div style={{ fontSize: 28, marginBottom: 8 }}>{e.icon}</div>
+                  <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--nero)', marginBottom: 8 }}>{e.title}</h3>
+                  <p style={{ fontSize: 14, color: 'var(--grigio)', lineHeight: 1.6 }}>{e.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ textAlign: 'center', marginTop: 40, color: 'var(--grigio)', fontSize: 14, fontStyle: 'italic' }}>
+            50 couverts · Privatisation possible pour événements — <a href="tel:0668366298" style={{ color: 'var(--rosso)' }}>06 68 36 62 98</a>
+          </p>
+        </div>
+      </section>
+
+      {/* HORAIRES */}
+      <section id="horaires" style={{ padding: '100px 20px', background: 'var(--bianco-w)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <span className="badge badge-verde" style={{ marginBottom: 16, display: 'inline-block' }}>Horaires & Localisation</span>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 16 }}>Quand nous rendre visite ?</h2>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderRadius: 20, background: nowOpen ? 'var(--verde-pale)' : 'var(--rosso-pale)', marginBottom: 16 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: nowOpen ? 'var(--verde)' : 'var(--rosso)', display: 'inline-block' }}></span>
+              <span style={{ fontSize: 13, fontFamily: 'Jost', color: nowOpen ? 'var(--verde)' : 'var(--rosso)', fontWeight: 500 }}>
+                {nowOpen ? 'Ouvert maintenant' : 'Actuellement fermé'}
+              </span>
+            </div>
+            <div className="section-divider"></div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 48, alignItems: 'start' }}>
+            <div style={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
+              {[
+                { jsDay: 1, nom: 'Lundi', heures: 'Fermé', closed: true },
+                { jsDay: 2, nom: 'Mardi', heures: 'Soir 19h – 21h30', closed: false },
+                { jsDay: 3, nom: 'Mercredi', heures: 'Midi 12h–14h30 + Soir 19h–21h30', closed: false },
+                { jsDay: 4, nom: 'Jeudi', heures: 'Midi 12h–14h30 + Soir 19h–21h30', closed: false },
+                { jsDay: 5, nom: 'Vendredi', heures: 'Midi 12h–14h30 + Soir 19h–21h30', closed: false },
+                { jsDay: 6, nom: 'Samedi', heures: 'Midi 12h–14h30 + Soir 19h–22h', closed: false },
+                { jsDay: 0, nom: 'Dimanche', heures: 'Soir 19h – 21h30', closed: false },
+              ].map((row, idx) => {
+                const isToday = row.jsDay === todayDay
                 return (
-                  <div key={dayKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: isToday ? '14px 12px' : '11px 0', borderBottom: '1px solid rgba(255,255,255,0.06)', background: isToday ? 'rgba(201,148,58,0.1)' : 'transparent', borderRadius: isToday ? '2px' : '0', margin: isToday ? '3px -12px' : '0' }}>
-                    <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', fontWeight: isToday ? 500 : 300, color: isToday ? 'var(--gold-l)' : 'rgba(255,255,255,0.65)' }}>{t[dayKey]}</span>
-                    <span style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '15px', fontStyle: closed ? 'normal' : 'italic', color: closed ? 'var(--terra-l)' : 'rgba(255,255,255,0.8)' }}>{closed ? t.horaires_closed : t[heuresKey]}</span>
+                  <div key={row.nom} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '14px 20px',
+                    background: isToday ? 'var(--rosso-pale)' : idx % 2 === 0 ? 'white' : 'var(--verde-pale)',
+                    borderLeft: isToday ? '3px solid var(--rosso)' : '3px solid transparent',
+                  }}>
+                    <span style={{ fontFamily: 'Jost', fontSize: 14, fontWeight: isToday ? 600 : 400, color: isToday ? 'var(--rosso)' : 'var(--nero)' }}>{row.nom}</span>
+                    <span style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 15, fontStyle: row.closed ? 'normal' : 'italic', color: row.closed ? 'var(--rosso)' : 'var(--nero-m)' }}>{row.heures}</span>
                   </div>
                 )
               })}
-              <div style={{ marginTop: '24px', padding: '16px', background: 'rgba(255,255,255,0.04)', borderRadius: '2px' }}>
-                <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginBottom: '8px' }}>📍 1 Place de l&apos;Église, 37420 Savigné-sur-Lathan</p>
-                <a href="tel:0668366298" style={{ fontFamily: "'Jost',sans-serif", fontSize: '16px', fontWeight: 500, color: 'var(--gold-l)', textDecoration: 'none', letterSpacing: '1px' }}>📞 06 68 36 62 98</a>
-              </div>
             </div>
-            <div style={{ borderRadius: '2px', overflow: 'hidden', border: '1px solid rgba(196,98,45,0.2)', height: '420px' }}>
-              <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d5317.7!2d0.1!3d47.45!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sSavign%C3%A9-sur-Lathan%2C+France!5e0!3m2!1sfr!2sfr!4v1700000000000!5m2!1sfr!2sfr"
-                width="100%" height="100%" style={{ border: 0 }}
-                allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade"
-                title="Localisation Roma Pizzeria Savigné-sur-Lathan"
-              />
+            <div>
+              <div style={{ borderRadius: 4, overflow: 'hidden', border: '1px solid var(--grigio-l)', height: 400, marginBottom: 20 }}>
+                <iframe
+                  src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d5317.7!2d0.1!3d47.45!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sSavign%C3%A9-sur-Lathan%2C+France!5e0!3m2!1sfr!2sfr!4v1700000000000!5m2!1sfr!2sfr"
+                  width="100%" height="100%" style={{ border: 0 }}
+                  allowFullScreen loading="lazy" referrerPolicy="no-referrer-when-downgrade"
+                  title="Localisation Roma Pizzeria"
+                />
+              </div>
+              <a href="https://www.google.com/maps/dir/?api=1&destination=Savign%C3%A9-sur-Lathan" target="_blank" rel="noopener noreferrer"
+                className="btn-primary" style={{ display: 'inline-block', textDecoration: 'none', marginBottom: 12 }}>
+                📍 Itinéraire Google Maps
+              </a>
+              <div style={{ padding: '16px 20px', background: 'var(--nero)', color: 'white', borderRadius: 3, fontSize: 13, fontFamily: 'Jost', lineHeight: 2 }}>
+                <div>📍 1 Place de l&apos;Église, 37420 Savigné-sur-Lathan</div>
+                <a href="tel:0668366298" style={{ color: 'var(--oro)', textDecoration: 'none' }}>📞 06 68 36 62 98</a>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── RÉSERVATION ──────────────────────────────────────── */}
-      <section id="reservation" style={{ padding: 'clamp(60px,8vw,100px) clamp(20px,5vw,80px)', background: 'var(--terra-pale)' }}>
-        <div style={{ maxWidth: '640px', margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <span className="section-badge">{t.nav_reserver}</span>
-            <h2 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,44px)', color: 'var(--text)' }}>{t.resa_title}</h2>
-          </div>
-
-          {resaSuccess ? (
-            <div style={{ background: '#fff', border: '1px solid rgba(74,103,65,0.3)', borderRadius: '2px', padding: 'clamp(32px,5vw,48px)', textAlign: 'center' }}>
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '20px' }}>{t.resa_success}</p>
-              <button onClick={() => { setResaSuccess(false); setResaForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }) }} className="btn-secondary">Nouvelle réservation</button>
-            </div>
-          ) : (
-            <form onSubmit={handleResa} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.15)', borderRadius: '2px', padding: 'clamp(24px,5vw,40px)' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div><label className="rf-label">{t.resa_nom}</label><input type="text" className="rf-input" placeholder={t.resa_ph_nom} value={resaForm.nom} onChange={e => setResaForm(p=>({...p,nom:e.target.value}))} required /></div>
-                <div><label className="rf-label">{t.resa_tel}</label><input type="tel" className="rf-input" placeholder={t.resa_ph_tel} value={resaForm.telephone} onChange={e => setResaForm(p=>({...p,telephone:e.target.value}))} required /></div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                <div>
-                  <label className="rf-label">{t.resa_date}</label>
-                  <input type="date" className="rf-input" min={minDate()} value={resaForm.date}
-                    onChange={e => {
-                      const d = new Date(e.target.value + 'T12:00:00')
-                      setResaError(d.getDay() === 1 ? t.resa_lundi_info : '')
-                      setResaForm(p => ({ ...p, date: e.target.value }))
-                    }} required />
-                </div>
-                <div>
-                  <label className="rf-label">{t.resa_heure}</label>
-                  <select className="rf-select" value={resaForm.heure} onChange={e => setResaForm(p=>({...p,heure:e.target.value}))} required>
-                    <option value="">--:--</option>
-                    {['12:00','12:30','13:00','13:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00'].map(h => <option key={h} value={h}>{h}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
-                <div>
-                  <label className="rf-label">{t.resa_couverts}</label>
-                  <select className="rf-select" value={resaForm.couverts} onChange={e => setResaForm(p=>({...p,couverts:e.target.value}))}>
-                    {[1,2,3,4,5,6,7,8,10,12].map(n => <option key={n} value={n}>{n} {n===1?'personne':'personnes'}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="rf-label">{t.resa_zone}</label>
-                  <select className="rf-select" value={resaForm.zone} onChange={e => setResaForm(p=>({...p,zone:e.target.value}))}>
-                    <option value="">Indifférent</option>
-                    <option value="rdc">Rez-de-chaussée</option>
-                    <option value="etage">Étage</option>
-                    <option value="terrasse">Terrasse</option>
-                  </select>
-                </div>
-              </div>
-              <div style={{ marginTop: '16px' }}>
-                <label className="rf-label">{t.resa_notes}</label>
-                <textarea className="rf-textarea" placeholder={t.resa_ph_notes} value={resaForm.notes} onChange={e => setResaForm(p=>({...p,notes:e.target.value}))} />
-              </div>
-              {resaError && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)', marginTop: '12px', padding: '10px 14px', background: 'rgba(196,98,45,0.08)', borderRadius: '2px' }}>{resaError}</p>}
-              <button type="submit" className="btn-primary" disabled={resaLoading} style={{ width: '100%', marginTop: '24px', padding: '16px', justifyContent: 'center', opacity: resaLoading ? 0.7 : 1 }}>
-                {resaLoading ? '...' : t.resa_submit}
-              </button>
-              <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', textAlign: 'center', marginTop: '14px', letterSpacing: '0.5px' }}>{t.resa_note}</p>
-            </form>
-          )}
-        </div>
-      </section>
-
-      {/* ── CTA FINALE ───────────────────────────────────────── */}
-      <section style={{ background: 'var(--brown-d)', padding: 'clamp(60px,8vw,100px) 24px', textAlign: 'center' }}>
-        <h2 style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: 'clamp(28px,4vw,52px)', color: '#fff', marginBottom: '14px' }}>{t.cta_title}</h2>
-        <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'rgba(255,255,255,0.55)', marginBottom: '36px' }}>{t.cta_subtitle}</p>
-        <div style={{ display: 'flex', gap: '14px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => scrollTo('reservation')} className="btn-primary" style={{ padding: '14px 32px', fontSize: '12px', letterSpacing: '2px' }}>{t.cta_btn1}</button>
-          <a href="tel:0668366298" style={{ display: 'inline-flex', alignItems: 'center', background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', padding: '14px 32px', borderRadius: '2px', fontFamily: "'Jost',sans-serif", fontSize: '12px', fontWeight: 500, letterSpacing: '2px', textTransform: 'uppercase', textDecoration: 'none', transition: 'background 0.3s' }}
-            onMouseEnter={e => (e.currentTarget.style.background='rgba(255,255,255,0.08)')}
-            onMouseLeave={e => (e.currentTarget.style.background='transparent')}
-          >{t.cta_btn2}</a>
-        </div>
-      </section>
-
-      {/* ── FOOTER ───────────────────────────────────────────── */}
-      <footer style={{ background: 'var(--brown-d)', borderTop: '1px solid rgba(201,148,58,0.18)', padding: '48px clamp(20px,5vw,80px)' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '32px' }}>
+      {/* RÉSERVATION */}
+      <section id="reserver" style={{ padding: '100px 20px', background: 'var(--bianco-c)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 60, alignItems: 'start' }}>
+          {/* Form */}
           <div>
-            <span style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: '24px', color: 'var(--gold-l)', fontWeight: 600 }}>Roma</span>
-            <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '16px', fontStyle: 'italic', color: 'rgba(255,255,255,0.35)', marginTop: '6px' }}>Pizzeria Restaurante</p>
+            <span className="badge badge-verde" style={{ marginBottom: 16, display: 'inline-block' }}>Réservation en ligne</span>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 36, color: 'var(--nero)', marginBottom: 32 }}>
+              Réserver une <em style={{ color: 'var(--rosso)' }}>table</em>
+            </h2>
+            {resaSuccess ? (
+              <div style={{ background: 'var(--verde-pale)', border: '1px solid var(--verde)', borderRadius: 4, padding: 40, textAlign: 'center' }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
+                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, fontStyle: 'italic', color: 'var(--verde)', marginBottom: 20 }}>{t.resa_success}</p>
+                <button onClick={() => { setResaSuccess(false); setResaForm({ nom: '', telephone: '', email: '', date: '', heure: '', couverts: '2', zone: '', occasion: '', notes: '' }) }} className="btn-secondary">Nouvelle réservation</button>
+              </div>
+            ) : (
+              <form onSubmit={handleResa} style={{ background: 'white', borderRadius: 4, padding: 32, boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6, letterSpacing: 0.5 }}>Nom *</label>
+                    <input type="text" className="form-input" placeholder="Votre nom" value={resaForm.nom} onChange={e => setResaForm(p => ({ ...p, nom: e.target.value }))} required />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6, letterSpacing: 0.5 }}>Téléphone *</label>
+                    <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={resaForm.telephone} onChange={e => setResaForm(p => ({ ...p, telephone: e.target.value }))} required />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Email (optionnel)</label>
+                  <input type="email" className="form-input" placeholder="email@exemple.com" value={resaForm.email} onChange={e => setResaForm(p => ({ ...p, email: e.target.value }))} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Date *</label>
+                    <input type="date" className="form-input" min={minDate()} value={resaForm.date}
+                      onChange={e => {
+                        const d = new Date(e.target.value + 'T12:00:00')
+                        setResaError(d.getDay() === 1 ? t.resa_lundi_info : '')
+                        setResaForm(p => ({ ...p, date: e.target.value, heure: '' }))
+                      }} required />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Heure *</label>
+                    <select className="form-input" value={resaForm.heure} onChange={e => setResaForm(p => ({ ...p, heure: e.target.value }))} required style={{ cursor: 'pointer' }}>
+                      <option value="">--:--</option>
+                      {(() => {
+                        const d = resaForm.date ? new Date(resaForm.date + 'T12:00:00').getDay() : -1
+                        const midi = d >= 3 && d <= 6
+                        const soir = d !== 1
+                        const opts: string[] = []
+                        if (midi) opts.push('12:00', '12:30', '13:00', '13:30', '14:00')
+                        if (soir) {
+                          opts.push('19:00', '19:30', '20:00', '20:30', '21:00', '21:30')
+                          if (d === 6) opts.push('22:00')
+                        }
+                        return opts.map(h => <option key={h} value={h}>{h}</option>)
+                      })()}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Couverts</label>
+                    <select className="form-input" value={resaForm.couverts} onChange={e => setResaForm(p => ({ ...p, couverts: e.target.value }))} style={{ cursor: 'pointer' }}>
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12].map(n => <option key={n} value={n}>{n} {n === 1 ? 'personne' : 'personnes'}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Zone</label>
+                    <select className="form-input" value={resaForm.zone} onChange={e => setResaForm(p => ({ ...p, zone: e.target.value }))} style={{ cursor: 'pointer' }}>
+                      <option value="">Indifférent</option>
+                      <option value="rdc">Rez-de-chaussée</option>
+                      <option value="etage">Étage</option>
+                      <option value="terrasse">Terrasse</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Occasion</label>
+                  <select className="form-input" value={resaForm.occasion} onChange={e => setResaForm(p => ({ ...p, occasion: e.target.value }))} style={{ cursor: 'pointer' }}>
+                    <option value="">Aucune</option>
+                    <option value="anniversaire">Anniversaire</option>
+                    <option value="romantique">Dîner romantique</option>
+                    <option value="business">Repas d&apos;affaires</option>
+                    <option value="famille">Repas de famille</option>
+                  </select>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Notes</label>
+                  <textarea className="form-input" placeholder="Allergie, demande particulière..." value={resaForm.notes} onChange={e => setResaForm(p => ({ ...p, notes: e.target.value }))} rows={3} style={{ resize: 'vertical' }} />
+                </div>
+                {resaError && (
+                  <div style={{ padding: '12px 16px', background: 'var(--rosso-pale)', border: '1px solid var(--rosso-l)', borderRadius: 3, fontSize: 13, color: 'var(--rosso)', fontFamily: 'Jost', marginBottom: 16 }}>
+                    {resaError}
+                  </div>
+                )}
+                <button type="submit" className="btn-primary" disabled={resaLoading} style={{ width: '100%', padding: 16, opacity: resaLoading ? 0.7 : 1 }}>
+                  {resaLoading ? '...' : '📅 Confirmer la réservation'}
+                </button>
+                <p style={{ fontSize: 11, color: 'var(--grigio)', textAlign: 'center', marginTop: 12, fontFamily: 'Jost' }}>Confirmation par téléphone · 06 68 36 62 98</p>
+              </form>
+            )}
           </div>
+          {/* Right info */}
           <div>
-            <h4 style={{ fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>{t.footer_links}</h4>
-            {([['menu','menu'], ['reservation','reserver'], ] as [string,string][]).map(([id, label]) => (
-              <button key={id} onClick={() => scrollTo(id)} style={{ display: 'block', background: 'none', border: 'none', cursor: 'pointer', fontFamily: "'Jost',sans-serif", fontSize: '14px', color: 'rgba(255,255,255,0.45)', padding: '3px 0', transition: 'color 0.3s', textAlign: 'left' }}
-                onMouseEnter={e => (e.currentTarget.style.color='var(--gold-l)')}
-                onMouseLeave={e => (e.currentTarget.style.color='rgba(255,255,255,0.45)')}
-              >{label === 'menu' ? t.footer_menu : t.footer_reserver}</button>
+            <img src="https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800" alt="Salle Roma Pizzeria" loading="lazy"
+              style={{ width: '100%', height: 280, objectFit: 'cover', borderRadius: 4, marginBottom: 32 }} />
+            <div style={{ background: 'white', borderRadius: 4, padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+              <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--nero)', marginBottom: 20 }}>Pourquoi réserver ?</h3>
+              {[
+                { icon: '✅', text: 'Votre table garantie à l\'heure souhaitée' },
+                { icon: '🎁', text: 'Surprises pour les occasions spéciales' },
+                { icon: '⭐', text: 'Points fidélité doublés sur réservation' },
+              ].map(a => (
+                <div key={a.icon} style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+                  <span style={{ fontSize: 18 }}>{a.icon}</span>
+                  <p style={{ fontSize: 14, color: 'var(--nero-m)', fontFamily: 'Jost', lineHeight: 1.5 }}>{a.text}</p>
+                </div>
+              ))}
+              <div style={{ borderTop: '1px solid var(--grigio-l)', paddingTop: 20, marginTop: 8 }}>
+                <a href="tel:0668366298" style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--rosso)', textDecoration: 'none', fontFamily: 'Jost', fontWeight: 600, fontSize: 16 }}>
+                  📞 06 68 36 62 98
+                </a>
+                <div style={{ fontSize: 12, color: 'var(--grigio)', marginTop: 8, fontFamily: 'Jost' }}>
+                  Mar–Dim · Midi 12h–14h30 · Soir 19h–22h
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* PROGRAMME FIDÉLITÉ */}
+      <section style={{ padding: '100px 20px', background: 'var(--verde-pale)', borderTop: '1px solid rgba(27,94,32,0.1)' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto', textAlign: 'center' }}>
+          <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(28px, 4vw, 42px)', color: 'var(--nero)', marginBottom: 16 }}>
+            🎁 Le Club Roma — Votre <em style={{ color: 'var(--verde)' }}>fidélité</em> récompensée
+          </h2>
+          <div className="section-divider"></div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 32, marginTop: 40 }}>
+            {[
+              { step: '1', icon: '📱', title: 'Créez votre compte', desc: 'Avec votre numéro de téléphone — simple et rapide' },
+              { step: '2', icon: '🍕', title: 'Venez manger', desc: 'Gagnez des points à chaque visite chez Roma' },
+              { step: '3', icon: '🎁', title: 'Profitez de récompenses', desc: 'Pizzas offertes, priorité réservation, surprises' },
+            ].map(s => (
+              <div key={s.step} style={{ background: 'white', padding: 32, borderRadius: 4, boxShadow: '0 2px 12px rgba(27,94,32,0.08)', borderTop: '3px solid var(--verde)' }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>{s.icon}</div>
+                <div style={{ background: 'var(--verde)', color: 'white', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, margin: '0 auto 12px' }}>{s.step}</div>
+                <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, color: 'var(--nero)', marginBottom: 8 }}>{s.title}</h3>
+                <p style={{ fontSize: 13, color: 'var(--grigio)', lineHeight: 1.6 }}>{s.desc}</p>
+              </div>
             ))}
-            <Link href="/compte" style={{ display: 'block', fontFamily: "'Jost',sans-serif", fontSize: '14px', color: 'rgba(255,255,255,0.45)', padding: '3px 0', textDecoration: 'none' }}>{t.footer_compte}</Link>
           </div>
-          <div>
-            <h4 style={{ fontFamily: "'Jost',sans-serif", fontSize: '10px', letterSpacing: '3px', textTransform: 'uppercase', color: 'rgba(255,255,255,0.25)', marginBottom: '14px' }}>Contact</h4>
-            <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'rgba(255,255,255,0.4)', lineHeight: 1.8 }}>{t.footer_address}</p>
-            <a href="tel:0668366298" style={{ display: 'block', fontFamily: "'Jost',sans-serif", fontSize: '14px', color: 'var(--gold-l)', textDecoration: 'none', marginTop: '6px' }}>{t.footer_phone}</a>
+          <div style={{ marginTop: 40, padding: '20px 32px', background: 'var(--rosso)', color: 'white', borderRadius: 3, display: 'inline-block' }}>
+            <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, fontStyle: 'italic' }}>100 points = 1 pizza offerte 🍕</span>
+          </div>
+          <div style={{ marginTop: 24 }}>
+            <Link href="/compte" className="btn-verde" style={{ display: 'inline-block', textDecoration: 'none', padding: '14px 36px' }}>Créer mon compte</Link>
           </div>
         </div>
-        <div style={{ maxWidth: '1200px', margin: '24px auto 0', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>{t.footer_copyright}</p>
-          <div style={{ display: 'flex', gap: '16px' }}>
-            <Link href="/admin"    style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'rgba(255,255,255,0.15)', textDecoration: 'none' }}>Admin</Link>
-            <Link href="/commander" style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'rgba(255,255,255,0.15)', textDecoration: 'none' }}>Commander</Link>
+      </section>
+
+      {/* AVIS CLIENTS */}
+      <section style={{ padding: '100px 20px', background: 'var(--bianco-w)' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 16 }}>
+              Ce que disent <em style={{ color: 'var(--rosso)' }}>nos clients</em>
+            </h2>
+            <div className="section-divider"></div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
+            {[
+              { text: "La meilleure pizza de Touraine ! Roberto et sa famille nous accueillent comme des rois.", author: "Marie D.", ville: "Langeais" },
+              { text: "On vient tous les samedis depuis 3 ans. La Burrata est à tomber !", author: "Thomas & Julie", ville: "Bourgueil" },
+              { text: "Service impeccable d'André, cuisine généreuse de Roberto. Une vraie trattoria !", author: "Famille Moreau", ville: "Chinon" },
+            ].map(r => (
+              <div key={r.author} style={{ background: 'white', padding: 32, borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', borderLeft: '3px solid var(--oro)' }}>
+                <div style={{ color: 'var(--oro)', fontSize: 18, marginBottom: 16 }}>⭐⭐⭐⭐⭐</div>
+                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 19, fontStyle: 'italic', color: 'var(--nero-m)', lineHeight: 1.6, marginBottom: 20 }}>&quot;{r.text}&quot;</p>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--rosso)', fontFamily: 'Jost' }}>{r.author}</div>
+                <div style={{ fontSize: 12, color: 'var(--grigio)' }}>{r.ville}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA FINALE */}
+      <section style={{ padding: '100px 20px', background: 'var(--hero-bg)', textAlign: 'center' }}>
+        <div style={{ maxWidth: 700, margin: '0 auto' }}>
+          <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--oro)', marginBottom: 8 }}>Una tavola vi aspetta</div>
+          <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(28px, 4vw, 42px)', color: 'white', marginBottom: 16 }}>
+            Une table vous attend à <em style={{ color: 'var(--oro)' }}>Savigné-sur-Lathan</em>
+          </h2>
+          <div className="section-divider"></div>
+          <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', marginTop: 40 }}>
+            <a href="#reserver" className="btn-primary">📅 Réserver</a>
+            <a href="tel:0668366298" className="btn-secondary" style={{ color: 'white', borderColor: 'rgba(255,255,255,0.4)' }}>📞 Appeler</a>
+            <Link href="/compte" className="btn-verde">⭐ Mon compte</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer style={{ background: 'var(--nero)', color: 'rgba(255,255,255,0.8)', padding: '80px 20px 0' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 48, paddingBottom: 48 }}>
+          <div>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontStyle: 'italic', color: 'var(--oro)', marginBottom: 12 }}>Roma 🇮🇹</div>
+            <p style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>Pizzeria italienne authentique à Savigné-sur-Lathan. Four à bois, produits frais, recettes de famille.</p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {['Instagram', 'Facebook'].map(s => (
+                <a key={s} href="#" style={{ background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: 2, fontSize: 11, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontFamily: 'Jost' }}>{s}</a>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--oro)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Navigation</div>
+            {[{ l: 'Accueil', h: '#' }, { l: 'Menu', h: '#menu' }, { l: 'Réserver', h: '#reserver' }, { l: 'Mon compte', h: '/compte' }].map(i => (
+              <a key={i.l} href={i.h} style={{ display: 'block', color: 'rgba(255,255,255,0.5)', textDecoration: 'none', fontSize: 14, marginBottom: 10, fontFamily: 'Jost' }}>{i.l}</a>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--oro)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Horaires</div>
+            {[
+              { j: 'Lun', h: 'Fermé' },
+              { j: 'Mar', h: 'Soir 19h – 21h30' },
+              { j: 'Mer–Ven', h: 'Midi + Soir' },
+              { j: 'Sam', h: 'Midi + Soir 19h – 22h' },
+              { j: 'Dim', h: 'Soir 19h – 21h30' },
+            ].map(r => (
+              <div key={r.j} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 8, fontFamily: 'Jost' }}>
+                <span style={{ color: 'rgba(255,255,255,0.4)' }}>{r.j}</span>
+                <span style={{ color: r.h === 'Fermé' ? 'var(--rosso-l)' : 'rgba(255,255,255,0.7)' }}>{r.h}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--oro)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Contact</div>
+            <div style={{ fontSize: 13, lineHeight: 2, color: 'rgba(255,255,255,0.6)', fontFamily: 'Jost' }}>
+              <div>📍 Savigné-sur-Lathan, 37420</div>
+              <div>Indre-et-Loire, France</div>
+              <a href="tel:0668366298" style={{ color: 'var(--rosso-l)', textDecoration: 'none' }}>📞 06 68 36 62 98</a>
+            </div>
+          </div>
+        </div>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, maxWidth: 1200, margin: '0 auto' }}>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'Jost' }}>© 2024 Roma Pizzeria Restaurante · Tous droits réservés</span>
+          <div style={{ display: 'flex', gap: 24 }}>
+            {[{ l: 'Politique de confidentialité', h: '/confidentialite' }, { l: 'Mentions légales', h: '/mentions-legales' }].map(i => (
+              <Link key={i.l} href={i.h} style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textDecoration: 'none', fontFamily: 'Jost' }}>{i.l}</Link>
+            ))}
           </div>
         </div>
       </footer>
 
-      {/* ── PWA BANNER ───────────────────────────────────────── */}
+      {/* MOBILE STICKY BAR */}
+      <div className="mobile-cta-bar">
+        <a href="tel:0668366298" style={{ flex: 1, background: 'var(--verde)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 13, fontFamily: 'Jost' }}>📞 Appeler</a>
+        <a href="#reserver" style={{ flex: 1, background: 'var(--rosso)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 13, fontFamily: 'Jost' }}>📅 Réserver</a>
+      </div>
+
+      {/* PWA BANNER */}
       {pwaBanner && (
-        <div className="pwa-banner">
-          <span>📱 {t.pwa_install}</span>
-          {deferredPrompt && (
-            <button className="btn-primary" style={{ padding: '7px 14px', fontSize: '11px', letterSpacing: '1px', whiteSpace: 'nowrap' }}
-              onClick={async () => {
-                (deferredPrompt as unknown as { prompt: () => void }).prompt()
-                setPwaBanner(false); localStorage.setItem('pwa_dismissed','1')
-              }}
-            >Installer</button>
-          )}
-          <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed','1') }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: '18px', lineHeight: 1, padding: '0 4px' }}>×</button>
+        <div style={{ position: 'fixed', bottom: 70, left: 20, right: 20, background: 'var(--nero)', color: 'white', padding: '16px 20px', borderRadius: 4, zIndex: 150, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
+          <span style={{ fontSize: 13, fontFamily: 'Jost' }}>📱 Installer l&apos;application Roma Pizzeria sur votre téléphone</span>
+          <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed', '1') }} style={{ background: 'none', border: 'none', color: 'var(--grigio-l)', cursor: 'pointer', fontSize: 18, marginLeft: 12 }}>✕</button>
         </div>
       )}
     </>
