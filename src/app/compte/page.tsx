@@ -1,93 +1,135 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { T, Lang } from '@/lib/i18n'
 import type { Client, Reservation, MouvementFidelite } from '@/lib/supabase'
 
-type Screen = 'phone' | 'create' | 'dashboard'
+type Screen = 'home' | 'login' | 'create' | 'dashboard'
 
-function getBadgeNiveau(visites: number): { label: string; icon: string; color: string; bg: string } {
-  if (visites >= 16) return { label: 'Or', icon: '🥇', color: 'var(--oro)', bg: '#FFF8E1' }
-  if (visites >= 6) return { label: 'Argent', icon: '🥈', color: '#757575', bg: '#F5F5F5' }
-  return { label: 'Bronze', icon: '🥉', color: '#8D6E63', bg: '#EFEBE9' }
+const NIVEAUX = [
+  { min: 0, max: 5, label: 'Bronze', icon: '🥉', color: '#8D6E63', bg: '#EFEBE9' },
+  { min: 6, max: 15, label: 'Argent', icon: '🥈', color: '#757575', bg: '#F5F5F5' },
+  { min: 16, max: Infinity, label: 'Or', icon: '🏆', color: 'var(--verde)', bg: 'var(--verde-pale)' },
+]
+
+const RECOMPENSES = [
+  { icon: '🥤', label: 'Boisson offerte', points: 30 },
+  { icon: '🥗', label: 'Salade offerte', points: 50 },
+  { icon: '🍷', label: 'Verre de vin offert', points: 40 },
+  { icon: '🍮', label: 'Dessert offert', points: 50 },
+  { icon: '🍕', label: 'Pizza Margherita offerte', points: 80 },
+  { icon: '🍕', label: 'Pizza Reine offerte', points: 80 },
+  { icon: '🍕', label: 'Pizza San Daniele offerte', points: 100 },
+  { icon: '🎉', label: 'Menu complet offert', points: 150 },
+]
+
+function getNiveau(visites: number) {
+  return NIVEAUX.find(n => visites >= n.min && visites <= n.max) ?? NIVEAUX[0]
 }
 
-function getInitiales(nom: string): string {
+function getInitiales(nom: string) {
   return nom.split(' ').map(p => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
 export default function ComptePage() {
-  const [lang, setLang] = useState<Lang>('fr')
-  const [screen, setScreen] = useState<Screen>('phone')
+  const [screen, setScreen] = useState<Screen>('home')
   const [phone, setPhone] = useState('')
-  const [newNom, setNewNom] = useState('')
-  const [newEmail, setNewEmail] = useState('')
+  const [nom, setNom] = useState('')
+  const [prenom, setPrenom] = useState('')
+  const [email, setEmail] = useState('')
   const [client, setClient] = useState<Client | null>(null)
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [mouvements, setMouvements] = useState<MouvementFidelite[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [bonCode, setBonCode] = useState<string | null>(null)
 
-  const t = T[lang]
-
-  const handlePhoneSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!phone.trim()) return
-    setLoading(true); setError('')
-    try {
-      const { data } = await supabase.from('client').select('*').eq('telephone', phone.trim()).single()
-      if (data) {
-        setClient(data as Client)
-        await loadDashboard(data.id)
-        setScreen('dashboard')
-      } else {
-        setScreen('create')
-      }
-    } catch {
-      setScreen('create')
-    } finally {
-      setLoading(false)
+  // Auto-connexion depuis localStorage
+  useEffect(() => {
+    const storedId = localStorage.getItem('roma_client_id')
+    const storedTel = localStorage.getItem('roma_client_tel')
+    if (storedId && storedTel) {
+      supabase.from('clients').select('*').eq('id', storedId).single().then(({ data }) => {
+        if (data) {
+          setClient(data as Client)
+          loadDashboard(data.id)
+          setScreen('dashboard')
+        }
+      })
     }
-  }
+  }, [])
 
   const loadDashboard = async (id: string) => {
     const [{ data: res }, { data: mvts }] = await Promise.all([
-      supabase.from('reservation').select('*').eq('client_id', id).order('date_reservation', { ascending: false }).limit(5),
-      supabase.from('mouvementfidelite').select('*').eq('client_id', id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('reservations').select('*').eq('client_id', id).order('date_reservation', { ascending: false }).limit(5),
+      supabase.from('mouvements_fidelite').select('*').eq('client_id', id).order('created_at', { ascending: false }).limit(10),
     ])
     setReservations(res ?? [])
     setMouvements(mvts ?? [])
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newNom.trim()) return
     setLoading(true); setError('')
     try {
-      const { data, error: err } = await supabase
-        .from('client')
-        .insert({ nom: newNom.trim(), telephone: phone.trim(), email: newEmail.trim() || null, points_fidelite: 0 })
-        .select('*').single()
-      if (err) throw err
-      setClient(data as Client)
-      setReservations([]); setMouvements([])
-      setScreen('dashboard')
+      const { data } = await supabase.from('clients').select('*').eq('telephone', phone.trim()).single()
+      if (data) {
+        const c = data as Client
+        setClient(c)
+        localStorage.setItem('roma_client_id', c.id)
+        localStorage.setItem('roma_client_tel', c.telephone)
+        localStorage.setItem('roma_client_nom', c.nom)
+        await loadDashboard(c.id)
+        setScreen('dashboard')
+      } else {
+        setError('Numéro inconnu. Souhaitez-vous créer un compte ?')
+      }
     } catch {
-      setError('Une erreur est survenue. Veuillez réessayer.')
+      setError('Numéro inconnu. Souhaitez-vous créer un compte ?')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nom.trim() || !phone.trim()) return
+    setLoading(true); setError('')
+    try {
+      const nomComplet = (prenom.trim() + ' ' + nom.trim()).trim()
+      const { data, error: err } = await supabase.from('clients')
+        .insert({ nom: nomComplet, telephone: phone.trim(), email: email.trim() || null })
+        .select('*').single()
+      if (err) throw err
+      const c = data as Client
+      setClient(c)
+      localStorage.setItem('roma_client_id', c.id)
+      localStorage.setItem('roma_client_tel', c.telephone)
+      localStorage.setItem('roma_client_nom', c.nom)
+      setReservations([]); setMouvements([])
+      setScreen('dashboard')
+    } catch {
+      setError("Une erreur est survenue. Vérifiez que ce numéro n'est pas déjà enregistré.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDeconnexion = () => {
+    localStorage.removeItem('roma_client_id')
+    localStorage.removeItem('roma_client_tel')
+    localStorage.removeItem('roma_client_nom')
+    setClient(null); setScreen('home'); setPhone(''); setNom(''); setPrenom(''); setEmail('')
   }
 
   const handleDelete = async () => {
     if (!client) return
     setLoading(true)
     try {
-      await supabase.from('client').delete().eq('id', client.id)
-      setScreen('phone'); setClient(null); setPhone(''); setDeleteConfirm(false)
+      await supabase.from('clients').delete().eq('id', client.id)
+      handleDeconnexion()
     } catch {
       setError('Erreur lors de la suppression.')
     } finally {
@@ -95,83 +137,118 @@ export default function ComptePage() {
     }
   }
 
-  const visites = reservations.filter(r => r.statut === 'honoree').length
-  const niveau = getBadgeNiveau(visites)
-  const MAX_POINTS = 500
-  const progressPct = client ? Math.min(100, Math.round((client.points_fidelite / MAX_POINTS) * 100)) : 0
+  const handleUtiliserRecompense = (r: typeof RECOMPENSES[0]) => {
+    if (!client || client.points_fidelite < r.points) return
+    const code = 'ROMA-' + Math.random().toString(36).substring(2, 8).toUpperCase()
+    setBonCode(`${code} — ${r.label}`)
+  }
 
-  const statutLabel: Record<string, string> = {
-    en_attente: 'En attente', confirmee: 'Confirmée', annulee: 'Annulée', honoree: 'Honorée'
-  }
-  const statutColor: Record<string, string> = {
-    en_attente: 'var(--oro)', confirmee: 'var(--verde)', annulee: 'var(--rosso)', honoree: 'var(--verde-m)'
-  }
-  const statutBg: Record<string, string> = {
-    en_attente: '#FFF8E1', confirmee: 'var(--verde-pale)', annulee: 'var(--rosso-pale)', honoree: 'var(--verde-pale)'
-  }
+  const visites = reservations.filter(r => r.statut === 'honoree').length
+  const niveau = getNiveau(visites)
+  const maxPoints = 500
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bianco-w)', display: 'flex', flexDirection: 'column' }}>
       {/* Nav */}
-      <nav style={{ background: 'var(--nero)', padding: '0 clamp(20px,5vw,60px)', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(212,168,67,0.2)' }}>
+      <nav style={{ background: 'var(--nero)', padding: '0 clamp(20px,5vw,60px)', height: 64, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
         <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontFamily: 'Playfair Display, serif', fontStyle: 'italic', fontSize: 22, color: 'var(--oro)', fontWeight: 700 }}>Roma</span>
-          <span style={{ fontFamily: 'Jost, sans-serif', fontSize: 10, fontWeight: 300, color: 'rgba(255,255,255,0.5)', letterSpacing: '3px', textTransform: 'uppercase' }}>Pizzeria</span>
+          <span style={{ fontFamily: 'Playfair Display, serif', fontStyle: 'italic', fontSize: 22, color: 'white', fontWeight: 700 }}>Roma</span>
+          <span style={{ fontFamily: 'Jost, sans-serif', fontSize: 10, fontWeight: 300, color: 'rgba(255,255,255,0.4)', letterSpacing: '3px', textTransform: 'uppercase' }}>Pizzeria</span>
         </Link>
-        <div style={{ display: 'flex', gap: 4 }}>
-          {(['fr', 'it', 'en'] as Lang[]).map(l => (
-            <button key={l} onClick={() => setLang(l)} style={{ background: lang === l ? 'var(--rosso)' : 'transparent', border: `1px solid ${lang === l ? 'var(--rosso)' : 'rgba(255,255,255,0.2)'}`, color: '#fff', padding: '3px 8px', borderRadius: 2, fontSize: 10, textTransform: 'uppercase', cursor: 'pointer', fontFamily: 'Jost, sans-serif' }}>{l}</button>
-          ))}
-        </div>
+        <span style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.5)', letterSpacing: 1 }}>🎁 Club Roma</span>
       </nav>
 
-      <div style={{ flex: 1, display: 'flex', alignItems: screen === 'dashboard' ? 'flex-start' : 'center', justifyContent: 'center', padding: 'clamp(40px,6vw,80px) clamp(20px,5vw,40px)' }}>
-        <div style={{ width: '100%', maxWidth: screen === 'dashboard' ? '900px' : '480px' }}>
+      <div style={{ flex: 1, display: 'flex', alignItems: screen === 'dashboard' ? 'flex-start' : 'center', justifyContent: 'center', padding: 'clamp(32px,5vw,64px) clamp(16px,4vw,32px)' }}>
+        <div style={{ width: '100%', maxWidth: screen === 'dashboard' ? 920 : 480 }}>
 
-          {/* PHONE SCREEN */}
-          {screen === 'phone' && (
+          {/* HOME — 2 boutons */}
+          {screen === 'home' && (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 64, marginBottom: 16 }}>🍕</div>
+              <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(26px,4vw,38px)', color: 'var(--nero)', marginBottom: 8 }}>Mon Compte Roma</h1>
+              <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 19, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 40 }}>Fidélité, réservations & récompenses</p>
+              <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button onClick={() => setScreen('login')} className="btn-primary" style={{ padding: '14px 32px', fontSize: 15 }}>
+                  J&apos;ai déjà un compte
+                </button>
+                <button onClick={() => setScreen('create')} className="btn-verde" style={{ padding: '14px 32px', fontSize: 15 }}>
+                  Créer mon compte
+                </button>
+              </div>
+              <div style={{ marginTop: 48, background: 'var(--verde-pale)', borderRadius: 4, padding: 28, textAlign: 'left' }}>
+                <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: 'var(--nero)', marginBottom: 16 }}>Comment ça marche ?</h3>
+                {[
+                  { icon: '🍕', text: 'Commander à emporter avec votre compte → 1 point par euro dépensé' },
+                  { icon: '📅', text: 'Réserver et honorer votre table → +5 points bonus' },
+                  { icon: '⭐', text: 'Laisser un avis → +10 points (1 seul avis par compte)' },
+                  { icon: '🎂', text: 'Votre anniversaire → +20 points cadeau automatique' },
+                ].map(item => (
+                  <div key={item.icon} style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>{item.icon}</span>
+                    <p style={{ fontSize: 14, color: 'var(--nero-m)', fontFamily: 'Jost', lineHeight: 1.5 }}>{item.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* LOGIN */}
+          {screen === 'login' && (
             <>
               <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                <span className="badge badge-rosso" style={{ marginBottom: 16, display: 'inline-block' }}>Fidélité</span>
-                <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(26px,4vw,38px)', color: 'var(--nero)', marginBottom: 12 }}>{t.compte_title}</h1>
-                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)' }}>Retrouvez vos réservations et vos points fidélité</p>
+                <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: 'var(--nero)', marginBottom: 8 }}>Connexion</h1>
+                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)' }}>Entrez votre numéro de téléphone</p>
               </div>
-              <form onSubmit={handlePhoneSubmit} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: 'clamp(24px,5vw,40px)' }}>
-                <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>{t.compte_phone_label}</label>
-                <input type="tel" className="form-input" placeholder={t.compte_phone_ph} value={phone} onChange={e => setPhone(e.target.value)} required />
-                {error && <p style={{ fontSize: 13, color: 'var(--rosso)', marginTop: 10, padding: '10px 14px', background: 'var(--rosso-pale)', borderRadius: 3 }}>{error}</p>}
+              <form onSubmit={handleLogin} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: 'clamp(24px,5vw,40px)' }}>
+                <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Téléphone *</label>
+                <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={phone} onChange={e => setPhone(e.target.value)} required />
+                {error && (
+                  <div style={{ marginTop: 12, padding: '12px 16px', background: 'var(--rosso-pale)', border: '1px solid var(--rosso-l)', borderRadius: 3, fontSize: 13, color: 'var(--rosso)', fontFamily: 'Jost' }}>
+                    {error}
+                    <button type="button" onClick={() => { setError(''); setScreen('create') }} style={{ display: 'block', marginTop: 8, background: 'none', border: 'none', color: 'var(--verde)', cursor: 'pointer', fontFamily: 'Jost', fontSize: 13, textDecoration: 'underline', padding: 0 }}>
+                      → Créer un compte
+                    </button>
+                  </div>
+                )}
                 <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', marginTop: 20, padding: 14, opacity: loading ? 0.7 : 1 }}>
-                  {loading ? '...' : t.compte_phone_submit}
+                  {loading ? '...' : 'Accéder à mon compte'}
                 </button>
+                <button type="button" onClick={() => { setScreen('home'); setError('') }} style={{ display: 'block', width: '100%', marginTop: 12, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)', textDecoration: 'underline' }}>← Retour</button>
               </form>
             </>
           )}
 
-          {/* CREATE SCREEN */}
+          {/* CREATE */}
           {screen === 'create' && (
             <>
               <div style={{ textAlign: 'center', marginBottom: 32 }}>
-                <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(24px,4vw,36px)', color: 'var(--nero)', marginBottom: 10 }}>{t.compte_new_title}</h1>
-                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 17, fontStyle: 'italic', color: 'var(--grigio)' }}>{t.compte_not_found}</p>
+                <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: 'var(--nero)', marginBottom: 8 }}>Créer mon compte</h1>
+                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)' }}>Rejoignez le Club Roma et gagnez des points !</p>
               </div>
               <form onSubmit={handleCreate} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: 'clamp(24px,5vw,40px)' }}>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Téléphone</label>
-                  <input type="tel" className="form-input" value={phone} onChange={e => setPhone(e.target.value)} required />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Prénom *</label>
+                    <input type="text" className="form-input" placeholder="Votre prénom" value={prenom} onChange={e => setPrenom(e.target.value)} required />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Nom *</label>
+                    <input type="text" className="form-input" placeholder="Votre nom" value={nom} onChange={e => setNom(e.target.value)} required />
+                  </div>
                 </div>
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>{t.compte_new_nom}</label>
-                  <input type="text" className="form-input" placeholder="Votre nom" value={newNom} onChange={e => setNewNom(e.target.value)} required />
+                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Téléphone *</label>
+                  <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={phone} onChange={e => setPhone(e.target.value)} required />
                 </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>{t.compte_new_email}</label>
-                  <input type="email" className="form-input" placeholder="email@exemple.com" value={newEmail} onChange={e => setNewEmail(e.target.value)} />
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Email (facultatif)</label>
+                  <input type="email" className="form-input" placeholder="email@exemple.com" value={email} onChange={e => setEmail(e.target.value)} />
                 </div>
-                {error && <p style={{ fontSize: 13, color: 'var(--rosso)', marginBottom: 12, padding: '10px 14px', background: 'var(--rosso-pale)', borderRadius: 3 }}>{error}</p>}
+                {error && <div style={{ padding: '12px 16px', background: 'var(--rosso-pale)', borderRadius: 3, fontSize: 13, color: 'var(--rosso)', fontFamily: 'Jost', marginBottom: 16 }}>{error}</div>}
                 <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', padding: 14, opacity: loading ? 0.7 : 1 }}>
-                  {loading ? '...' : t.compte_new_submit}
+                  {loading ? '...' : '🎁 Créer mon compte et gagner des points'}
                 </button>
-                <button type="button" onClick={() => setScreen('phone')} style={{ display: 'block', width: '100%', marginTop: 12, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)', textDecoration: 'underline' }}>← Retour</button>
+                <button type="button" onClick={() => { setScreen('home'); setError('') }} style={{ display: 'block', width: '100%', marginTop: 12, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)', textDecoration: 'underline' }}>← Retour</button>
               </form>
             </>
           )}
@@ -179,14 +256,14 @@ export default function ComptePage() {
           {/* DASHBOARD */}
           {screen === 'dashboard' && client && (
             <>
-              {/* Header client */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 32 }}>
-                <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--rosso)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'white', fontWeight: 700, flexShrink: 0 }}>
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 32, flexWrap: 'wrap' }}>
+                <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'var(--rosso)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Playfair Display, serif', fontSize: 20, color: 'white', fontWeight: 700, flexShrink: 0 }}>
                   {getInitiales(client.nom)}
                 </div>
                 <div>
-                  <span style={{ fontFamily: 'Jost', fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: 'var(--rosso)', display: 'block', marginBottom: 4 }}>{t.compte_bienvenue}</span>
-                  <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(22px,3vw,32px)', color: 'var(--nero)' }}>{client.nom}</h1>
+                  <div style={{ fontFamily: 'Jost', fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--verde)', marginBottom: 4 }}>Bienvenue</div>
+                  <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(20px,3vw,30px)', color: 'var(--nero)' }}>{client.nom}</h1>
                 </div>
                 <div style={{ marginLeft: 'auto', background: niveau.bg, color: niveau.color, padding: '8px 16px', borderRadius: 20, fontSize: 13, fontFamily: 'Jost', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {niveau.icon} Membre {niveau.label}
@@ -194,42 +271,103 @@ export default function ComptePage() {
               </div>
 
               {/* Points card */}
-              <div style={{ background: 'var(--hero-bg)', borderRadius: 4, padding: 32, marginBottom: 32, border: '1px solid rgba(212,168,67,0.25)', position: 'relative', overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', top: -20, right: -20, width: 120, height: 120, borderRadius: '50%', background: 'rgba(212,168,67,0.08)' }} />
-                <div style={{ marginBottom: 8 }}>
-                  <span style={{ fontFamily: 'Jost', fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>{t.compte_points}</span>
-                </div>
-                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 56, fontWeight: 600, color: 'var(--oro)', lineHeight: 1, marginBottom: 16 }}>
+              <div style={{ background: 'var(--hero-bg)', borderRadius: 4, padding: '28px 32px', marginBottom: 32, position: 'relative', overflow: 'hidden', border: '1px solid rgba(27,94,32,0.3)' }}>
+                <div style={{ position: 'absolute', top: -24, right: -24, width: 120, height: 120, borderRadius: '50%', background: 'rgba(27,94,32,0.12)' }} />
+                <div style={{ fontFamily: 'Jost', fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>Mes points</div>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 52, fontWeight: 600, color: 'var(--rosso)', lineHeight: 1, marginBottom: 16 }}>
                   {client.points_fidelite}
-                  <span style={{ fontFamily: 'Jost', fontSize: 16, fontWeight: 300, color: 'rgba(255,255,255,0.35)', marginLeft: 8 }}>pts</span>
+                  <span style={{ fontFamily: 'Jost', fontSize: 15, fontWeight: 300, color: 'rgba(255,255,255,0.35)', marginLeft: 8 }}>pts</span>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 2, height: 6, overflow: 'hidden', marginBottom: 8 }}>
-                  <div style={{ height: '100%', width: `${progressPct}%`, background: 'linear-gradient(90deg, var(--verde), var(--rosso))', transition: 'width 0.8s ease', borderRadius: 2 }} />
+                  <div style={{ height: '100%', width: `${Math.min(100, Math.round((client.points_fidelite / maxPoints) * 100))}%`, background: 'linear-gradient(90deg, var(--verde), var(--rosso))', transition: 'width 0.8s ease', borderRadius: 2 }} />
                 </div>
                 <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-                  {client.points_fidelite} / {MAX_POINTS} pts — 100 pts = 1 pizza offerte 🍕
+                  {client.points_fidelite} / {maxPoints} pts — Prochaine récompense : {RECOMPENSES.find(r => r.points > client.points_fidelite)?.label ?? 'Toutes débloquées 🎉'}
                 </p>
               </div>
 
-              {/* Reservations */}
+              {/* Catalogue récompenses */}
               <div style={{ marginBottom: 32 }}>
-                <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>{t.compte_reservations}</h2>
+                <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 8 }}>🎁 Mes récompenses</h2>
+                <p style={{ fontSize: 13, color: 'var(--grigio)', fontFamily: 'Jost', marginBottom: 20 }}>Utilisez vos points pour obtenir des cadeaux à présenter au restaurant</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                  {RECOMPENSES.map(r => {
+                    const unlocked = client.points_fidelite >= r.points
+                    const pct = Math.min(100, Math.round((client.points_fidelite / r.points) * 100))
+                    return (
+                      <div key={r.label} style={{ background: 'white', border: `1px solid ${unlocked ? 'var(--verde)' : 'var(--grigio-l)'}`, borderRadius: 3, padding: 16, opacity: unlocked ? 1 : 0.75 }}>
+                        <div style={{ fontSize: 28, marginBottom: 8 }}>{r.icon}</div>
+                        <div style={{ fontFamily: 'Jost', fontSize: 13, fontWeight: 600, color: 'var(--nero)', marginBottom: 4 }}>{r.label}</div>
+                        <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: unlocked ? 'var(--verde)' : 'var(--grigio)', marginBottom: 8 }}>{r.points} pts</div>
+                        <div style={{ background: 'var(--grigio-l)', borderRadius: 2, height: 4, overflow: 'hidden', marginBottom: 10 }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: unlocked ? 'var(--verde)' : 'var(--grigio)', borderRadius: 2 }} />
+                        </div>
+                        {unlocked ? (
+                          <button onClick={() => handleUtiliserRecompense(r)} className="btn-verde" style={{ padding: '6px 14px', fontSize: 12, width: '100%' }}>
+                            Utiliser ✓
+                          </button>
+                        ) : (
+                          <div style={{ fontSize: 11, color: 'var(--grigio)', fontFamily: 'Jost' }}>
+                            Encore {r.points - client.points_fidelite} pts
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Bon de récompense */}
+              {bonCode && (
+                <div style={{ background: 'var(--verde-pale)', border: '2px solid var(--verde)', borderRadius: 4, padding: 24, marginBottom: 32, textAlign: 'center' }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
+                  <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--verde)', marginBottom: 8 }}>Votre bon de récompense</h3>
+                  <div style={{ fontFamily: 'Jost', fontSize: 22, fontWeight: 700, color: 'var(--nero)', letterSpacing: 2, padding: '12px 20px', background: 'white', borderRadius: 3, display: 'inline-block', marginBottom: 12 }}>{bonCode}</div>
+                  <p style={{ fontSize: 13, color: 'var(--verde-m)', fontFamily: 'Jost' }}>Présentez ce code à André lors de votre prochaine visite ✓</p>
+                  <button onClick={() => setBonCode(null)} style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--grigio)', cursor: 'pointer', fontFamily: 'Jost', fontSize: 12, textDecoration: 'underline' }}>Fermer</button>
+                </div>
+              )}
+
+              {/* Comment gagner des points */}
+              <div style={{ background: 'var(--verde-pale)', borderRadius: 4, padding: 24, marginBottom: 32 }}>
+                <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: 'var(--nero)', marginBottom: 16 }}>Comment gagner des points</h3>
+                {[
+                  { icon: '🍕', text: 'Commander à emporter avec votre compte → 1 point par euro' },
+                  { icon: '📅', text: 'Réserver et honorer votre table → +5 points bonus' },
+                  { icon: '⭐', text: 'Laisser un avis → +10 points (1 seul avis par compte)' },
+                  { icon: '🎂', text: 'Votre anniversaire → +20 points cadeau automatique' },
+                ].map(item => (
+                  <div key={item.icon} style={{ display: 'flex', gap: 12, marginBottom: 10 }}>
+                    <span>{item.icon}</span>
+                    <p style={{ fontSize: 13, color: 'var(--nero-m)', fontFamily: 'Jost', lineHeight: 1.5 }}>{item.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Réservations */}
+              <div style={{ marginBottom: 32 }}>
+                <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>Mes réservations</h2>
                 {reservations.length === 0 ? (
                   <div style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: 24, textAlign: 'center' }}>
-                    <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)' }}>Aucune réservation pour le moment</p>
+                    <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 17, fontStyle: 'italic', color: 'var(--grigio)' }}>Aucune réservation pour le moment</p>
+                    <Link href="/#reserver" className="btn-primary" style={{ display: 'inline-block', textDecoration: 'none', marginTop: 12, fontSize: 13, padding: '10px 24px' }}>Réserver une table</Link>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {reservations.map(r => (
-                      <div key={r.id} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: '16px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+                      <div key={r.id} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
                         <div>
-                          <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, color: 'var(--nero)', marginBottom: 4 }}>
+                          <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: 'var(--nero)', marginBottom: 2 }}>
                             {new Date(r.date_reservation).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })} à {r.heure_reservation}
                           </p>
-                          <p style={{ fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)' }}>{r.nombre_couverts} personnes{r.zone ? ` · ${r.zone}` : ''}</p>
+                          <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'var(--grigio)' }}>{r.nombre_couverts} personnes{r.zone ? ` · ${r.zone}` : ''}</p>
                         </div>
-                        <span style={{ fontFamily: 'Jost', fontSize: 11, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '4px 12px', borderRadius: 20, background: statutBg[r.statut] ?? '#eee', color: statutColor[r.statut] ?? 'var(--grigio)', fontWeight: 500 }}>
-                          {statutLabel[r.statut] ?? r.statut}
+                        <span style={{
+                          fontFamily: 'Jost', fontSize: 11, letterSpacing: '1px', textTransform: 'uppercase', padding: '4px 10px', borderRadius: 20, fontWeight: 500,
+                          background: r.statut === 'confirmee' ? 'var(--verde-pale)' : r.statut === 'annulee' ? 'var(--rosso-pale)' : 'var(--bianco-c)',
+                          color: r.statut === 'confirmee' ? 'var(--verde)' : r.statut === 'annulee' ? 'var(--rosso)' : 'var(--grigio)',
+                        }}>
+                          {r.statut === 'en_attente' ? 'En attente' : r.statut === 'confirmee' ? 'Confirmée' : r.statut === 'annulee' ? 'Annulée' : 'Honorée'}
                         </span>
                       </div>
                     ))}
@@ -237,16 +375,16 @@ export default function ComptePage() {
                 )}
               </div>
 
-              {/* Points history */}
+              {/* Historique points */}
               {mouvements.length > 0 && (
                 <div style={{ marginBottom: 32 }}>
-                  <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>{t.compte_historique}</h2>
+                  <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>Historique des points</h2>
                   <div style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, overflow: 'hidden' }}>
                     {mouvements.map((mv, i) => (
-                      <div key={mv.id} style={{ padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < mouvements.length - 1 ? '1px solid var(--grigio-l)' : 'none', background: i % 2 === 0 ? 'white' : 'var(--bianco-w)' }}>
+                      <div key={mv.id} style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < mouvements.length - 1 ? '1px solid var(--grigio-l)' : 'none', background: i % 2 === 0 ? 'white' : 'var(--bianco-w)' }}>
                         <div>
                           <p style={{ fontFamily: 'Jost', fontSize: 14, color: 'var(--nero)', marginBottom: 2 }}>{mv.motif}</p>
-                          <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'var(--grigio)' }}>{new Date(mv.created_at).toLocaleDateString('fr-FR')}</p>
+                          <p style={{ fontFamily: 'Jost', fontSize: 11, color: 'var(--grigio)' }}>{new Date(mv.created_at).toLocaleDateString('fr-FR')}</p>
                         </div>
                         <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: mv.points >= 0 ? 'var(--verde)' : 'var(--rosso)' }}>
                           {mv.points >= 0 ? '+' : ''}{mv.points}
@@ -259,7 +397,8 @@ export default function ComptePage() {
 
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
                 <Link href="/#reserver" className="btn-primary" style={{ fontSize: 13, textDecoration: 'none' }}>📅 Réserver une table</Link>
-                <button onClick={() => { setScreen('phone'); setClient(null); setPhone('') }} className="btn-secondary" style={{ fontSize: 13 }}>Se déconnecter</button>
+                <Link href="/#commander" className="btn-secondary" style={{ fontSize: 13, textDecoration: 'none' }}>🍕 Commander à emporter</Link>
+                <button onClick={handleDeconnexion} style={{ background: 'none', border: '1px solid var(--grigio-l)', color: 'var(--grigio)', padding: '10px 18px', borderRadius: 3, fontSize: 13, cursor: 'pointer', fontFamily: 'Jost' }}>Se déconnecter</button>
               </div>
 
               {/* RGPD Delete */}
@@ -271,15 +410,13 @@ export default function ComptePage() {
                 ) : (
                   <div style={{ background: 'var(--rosso-pale)', border: '1px solid var(--rosso-l)', borderRadius: 4, padding: 20 }}>
                     <p style={{ fontSize: 14, color: 'var(--rosso)', fontFamily: 'Jost', marginBottom: 16 }}>
-                      ⚠️ Êtes-vous sûr ? Cette action supprimera définitivement votre compte et vos points fidélité.
+                      ⚠️ Êtes-vous sûr ? Cette action supprimera définitivement votre compte et vos points.
                     </p>
                     <div style={{ display: 'flex', gap: 12 }}>
                       <button onClick={handleDelete} disabled={loading} style={{ background: 'var(--rosso)', color: 'white', border: 'none', padding: '8px 20px', borderRadius: 3, fontSize: 13, cursor: 'pointer', fontFamily: 'Jost', opacity: loading ? 0.7 : 1 }}>
-                        {loading ? '...' : 'Confirmer la suppression'}
+                        {loading ? '...' : 'Confirmer'}
                       </button>
-                      <button onClick={() => setDeleteConfirm(false)} style={{ background: 'none', border: '1px solid var(--grigio-l)', color: 'var(--grigio)', padding: '8px 16px', borderRadius: 3, fontSize: 13, cursor: 'pointer', fontFamily: 'Jost' }}>
-                        Annuler
-                      </button>
+                      <button onClick={() => setDeleteConfirm(false)} style={{ background: 'none', border: '1px solid var(--grigio-l)', color: 'var(--grigio)', padding: '8px 16px', borderRadius: 3, fontSize: 13, cursor: 'pointer', fontFamily: 'Jost' }}>Annuler</button>
                     </div>
                   </div>
                 )}
@@ -289,8 +426,8 @@ export default function ComptePage() {
         </div>
       </div>
 
-      <footer style={{ background: 'var(--nero)', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '20px clamp(20px,5vw,60px)', textAlign: 'center' }}>
-        <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>{t.footer_copyright}</p>
+      <footer style={{ background: 'var(--nero)', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '20px', textAlign: 'center' }}>
+        <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>© 2026 Roma Pizzeria Restaurante</p>
       </footer>
     </div>
   )

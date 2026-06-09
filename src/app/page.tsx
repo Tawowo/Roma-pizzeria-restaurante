@@ -419,7 +419,7 @@ export default function HomePage() {
                 icon: '🍽', name: 'André', role: "L'Accueil",
                 img: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400',
                 text: "André est le visage de Roma. Toujours souriant, il gère les réservations, les commandes et s'assure que chaque client reparte avec le sourire. C'est lui que vous entendez au téléphone !",
-                color: 'var(--oro)'
+                color: 'var(--rosso)'
               },
             ].map(p => (
               <div key={p.name} style={{ background: 'white', borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', borderTop: `3px solid ${p.color}` }}>
@@ -431,6 +431,11 @@ export default function HomePage() {
                   <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--nero)', marginBottom: 2 }}>{p.name}</h3>
                   <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', color: p.color, fontFamily: 'Jost', fontWeight: 500, marginBottom: 12 }}>{p.role}</div>
                   <p style={{ fontSize: 14, color: 'var(--grigio)', lineHeight: 1.7, fontFamily: 'Jost' }}>{p.text}</p>
+                  {p.name === 'Roberto' && (
+                    <div style={{ marginTop: 12, background: 'var(--rosso)', color: 'white', padding: '8px 14px', borderRadius: 3, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontFamily: 'Jost', fontWeight: 600 }}>
+                      🏆 7× lauréat Meilleure Pizza de Tours
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -441,7 +446,7 @@ export default function HomePage() {
             <div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
                 {[
-                  { icon: '📍', title: 'Origines en Italie', desc: "Roberto apprend l'art de la pizza napolitaine" },
+                  { icon: '📍', title: 'Origines en Italie', desc: "Pâtes fraîches pétries chaque matin, recette secrète transmise de génération en génération" },
                   { icon: '🏡', title: 'Installation en Touraine', desc: 'Ouverture de Roma à Savigné-sur-Lathan' },
                   { icon: '❤️', title: "Aujourd'hui", desc: 'La même passion, les mêmes recettes, toute la famille' },
                 ].map(step => (
@@ -1112,9 +1117,10 @@ export default function HomePage() {
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontStyle: 'italic', color: 'white', marginBottom: 12 }}>Roma 🇮🇹</div>
             <p style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>Pizzeria italienne authentique à Savigné-sur-Lathan. Four à bois, produits frais, recettes de famille.</p>
             <div style={{ display: 'flex', gap: 12 }}>
-              {['Instagram', 'Facebook'].map(s => (
-                <a key={s} href="#" style={{ background: 'rgba(255,255,255,0.1)', padding: '6px 12px', borderRadius: 2, fontSize: 11, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontFamily: 'Jost' }}>{s}</a>
-              ))}
+              <a href="https://www.facebook.com/p/Roma-Pizzeria-Restaurant-61576928932483/" target="_blank" rel="noopener noreferrer"
+                style={{ background: 'rgba(255,255,255,0.1)', padding: '6px 14px', borderRadius: 2, fontSize: 11, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontFamily: 'Jost' }}>
+                Facebook
+              </a>
             </div>
           </div>
           <div>
@@ -1139,7 +1145,7 @@ export default function HomePage() {
             ))}
           </div>
           <div>
-            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--oro)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Contact</div>
+            <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: 'var(--verde-l)', marginBottom: 20, fontFamily: 'Jost', fontWeight: 500 }}>Contact</div>
             <div style={{ fontSize: 13, lineHeight: 2, color: 'rgba(255,255,255,0.6)', fontFamily: 'Jost' }}>
               <div>📍 Savigné-sur-Lathan, 37420</div>
               <div>Indre-et-Loire, France</div>
@@ -1159,16 +1165,36 @@ export default function HomePage() {
 
       {/* MOBILE STICKY BAR */}
       <div className="mobile-cta-bar">
-        <a href="tel:0668366298" style={{ flex: 1, background: 'var(--verde)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 12, fontFamily: 'Jost' }}>📞 Appeler</a>
-        <a href="#commander" style={{ flex: 1, background: 'var(--rosso)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 12, fontFamily: 'Jost' }}>🍕 Commander</a>
-        <a href="#reserver" style={{ flex: 1, background: 'var(--nero)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 12, fontFamily: 'Jost' }}>📅 Réserver</a>
+        <a href="tel:0668366298" aria-label="Appeler" style={{ flex: 1, background: 'var(--verde)', color: 'white', textAlign: 'center', padding: '8px 4px', borderRadius: 3, textDecoration: 'none', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <span style={{ fontSize: 20 }}>📞</span><span style={{ fontSize: 10 }}>Appeler</span>
+        </a>
+        <a href="#commander" aria-label="Commander" style={{ flex: 1, background: 'var(--rosso)', color: 'white', textAlign: 'center', padding: '8px 4px', borderRadius: 3, textDecoration: 'none', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <span style={{ fontSize: 20 }}>🍕</span><span style={{ fontSize: 10 }}>Commander</span>
+        </a>
+        <a href="#reserver" aria-label="Réserver" style={{ flex: 1, background: 'transparent', color: 'var(--nero)', border: '1px solid var(--grigio-l)', textAlign: 'center', padding: '8px 4px', borderRadius: 3, textDecoration: 'none', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <span style={{ fontSize: 20 }}>📅</span><span style={{ fontSize: 10 }}>Réserver</span>
+        </a>
+        <button onClick={() => setMenuOpen(v => !v)} aria-label="Menu" style={{ flex: 1, background: 'var(--nero-m)', color: 'white', border: 'none', textAlign: 'center', padding: '8px 4px', borderRadius: 3, cursor: 'pointer', fontFamily: 'Jost', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <span style={{ fontSize: 20 }}>☰</span><span style={{ fontSize: 10 }}>Menu</span>
+        </button>
       </div>
 
       {/* PWA BANNER */}
       {pwaBanner && (
-        <div style={{ position: 'fixed', bottom: 70, left: 20, right: 20, background: 'var(--nero)', color: 'white', padding: '16px 20px', borderRadius: 4, zIndex: 150, display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.3)' }}>
-          <span style={{ fontSize: 13, fontFamily: 'Jost' }}>📱 Installer l&apos;application Roma Pizzeria sur votre téléphone</span>
-          <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed', '1') }} style={{ background: 'none', border: 'none', color: 'var(--grigio-l)', cursor: 'pointer', fontSize: 18, marginLeft: 12 }}>✕</button>
+        <div style={{ position: 'fixed', bottom: 72, left: 12, right: 12, background: 'var(--hero-bg)', color: 'white', padding: '20px 20px 16px', borderRadius: 6, zIndex: 200, boxShadow: '0 4px 24px rgba(0,0,0,0.4)', border: '1px solid rgba(27,94,32,0.4)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontStyle: 'italic', color: 'white' }}>Accès rapide à Roma 🍕</div>
+            <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed', '1') }} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: 20, lineHeight: 1, padding: 0, marginLeft: 12 }}>✕</button>
+          </div>
+          <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', fontFamily: 'Jost', marginBottom: 8 }}>
+            {typeof navigator !== 'undefined' && /iPad|iPhone|iPod/.test(navigator.userAgent)
+              ? "Appuyez sur le bouton Partager ↑ → puis \"Sur l'écran d'accueil\""
+              : "Appuyez sur ⋮ → \"Ajouter à l'écran d'accueil\""}
+          </p>
+          <button onClick={() => { setPwaBanner(false); localStorage.setItem('pwa_dismissed', '1') }}
+            className="btn-verde" style={{ padding: '8px 20px', fontSize: 12, width: '100%' }}>
+            J&apos;ai compris
+          </button>
         </div>
       )}
     </>

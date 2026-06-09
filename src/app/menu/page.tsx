@@ -39,7 +39,7 @@ export default function MenuPage() {
       {/* Header */}
       <div style={{ background: 'var(--hero-bg)', padding: '80px 20px 60px', textAlign: 'center' }}>
         <Link href="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 24, display: 'inline-block' }}>← Retour à l&apos;accueil</Link>
-        <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(36px, 5vw, 60px)', color: 'var(--oro)', fontStyle: 'italic', marginBottom: 12 }}>Notre carte</h1>
+        <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(36px, 5vw, 60px)', color: 'white', fontStyle: 'italic', marginBottom: 12 }}>Notre carte</h1>
         <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'rgba(255,255,255,0.6)' }}>Tout est préparé avec des produits frais chaque jour</p>
       </div>
 
