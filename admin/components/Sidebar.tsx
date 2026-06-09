@@ -14,6 +14,8 @@ const NAV_MONICA = [
   { label: 'Clients', href: '/clients', icon: '👥' },
   { label: 'Avis', href: '/avis', icon: '⭐' },
   { label: 'Finances', href: '/finances', icon: '💰' },
+  { label: 'Promotions', href: '/promotions', icon: '🎁' },
+  { label: 'Design du site', href: '/design', icon: '🎨' },
   { label: 'Paramètres', href: '/parametres', icon: '⚙️' },
 ]
 
@@ -44,36 +46,33 @@ export default function Sidebar({ nom, role }: SidebarProps) {
   }
 
   return (
-    <aside style={{
-      width: 240, background: '#1A1A1A', height: '100vh', position: 'sticky', top: 0,
-      display: 'flex', flexDirection: 'column', padding: '24px 0', flexShrink: 0,
-      borderRight: '1px solid #2a2a2a',
-    }}>
+    <aside className="w-64 bg-[#1B5E20] text-white min-h-screen flex flex-col shrink-0 sticky top-0 h-screen">
       {/* Logo */}
-      <div style={{ padding: '0 24px 24px', borderBottom: '1px solid #2a2a2a', marginBottom: 16 }}>
-        <div style={{ fontFamily: 'serif', fontSize: 26, fontStyle: 'italic', color: '#D4A843', fontWeight: 700 }}>Roma</div>
-        <div style={{ fontSize: 11, letterSpacing: 2, textTransform: 'uppercase', color: '#555', fontFamily: 'sans-serif' }}>Administration</div>
+      <div className="px-6 py-5 border-b border-white/10">
+        <div className="font-serif italic text-[#D4A843] text-2xl font-bold">Roma</div>
+        <div className="text-xs text-white/70 mt-0.5">Admin</div>
       </div>
 
       {/* User info */}
-      <div style={{ padding: '0 24px 16px', borderBottom: '1px solid #2a2a2a', marginBottom: 16 }}>
-        <div style={{ fontSize: 14, color: '#F5F5F5', fontWeight: 600 }}>{nom}</div>
-        <div style={{ fontSize: 11, color: '#888', textTransform: 'capitalize', marginTop: 2 }}>{role}</div>
+      <div className="px-6 py-3 border-b border-white/10">
+        <div className="text-sm font-semibold text-white">{nom}</div>
+        <div className="text-xs text-white/60 capitalize mt-0.5">{role}</div>
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '0 12px', overflowY: 'auto' }}>
+      <nav className="flex-1 px-3 py-3 overflow-y-auto">
         {nav.map(item => {
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
-            <Link key={item.href} href={item.href} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 6, marginBottom: 2,
-              background: active ? 'rgba(183,28,28,0.2)' : 'transparent',
-              color: active ? '#F5F5F5' : '#888',
-              textDecoration: 'none', fontSize: 13, fontFamily: 'sans-serif',
-              borderLeft: active ? '3px solid #B71C1C' : '3px solid transparent',
-              transition: 'all 0.2s',
-            }}>
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md mb-0.5 text-sm transition-all ${
+                active
+                  ? 'bg-[#B71C1C] text-white'
+                  : 'text-white/80 hover:bg-white/10'
+              }`}
+            >
               <span>{item.icon}</span>
               {item.label}
             </Link>
@@ -82,12 +81,11 @@ export default function Sidebar({ nom, role }: SidebarProps) {
       </nav>
 
       {/* Logout */}
-      <div style={{ padding: '16px 24px', borderTop: '1px solid #2a2a2a' }}>
-        <button onClick={handleLogout} style={{
-          width: '100%', padding: '10px 16px', background: 'rgba(183,28,28,0.15)', color: '#B71C1C',
-          border: '1px solid rgba(183,28,28,0.3)', borderRadius: 6, fontSize: 13, cursor: 'pointer',
-          fontFamily: 'sans-serif', transition: 'all 0.2s',
-        }}>
+      <div className="px-4 py-4 border-t border-white/10">
+        <button
+          onClick={handleLogout}
+          className="w-full py-2 px-4 bg-white/10 hover:bg-white/20 text-white/80 rounded-md text-sm transition-all border border-white/20"
+        >
           🚪 Se déconnecter
         </button>
       </div>
