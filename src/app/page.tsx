@@ -248,11 +248,23 @@ export default function HomePage() {
           Roma <span style={{ fontStyle: 'normal', fontWeight: 400, fontSize: 18, color: navScrolled ? 'var(--nero)' : 'rgba(255,255,255,0.8)' }}>Pizzeria</span>
         </a>
         <div style={{ display: 'flex', gap: 36 }} className="hidden md:flex">
-          {(['Histoire', 'Menu', 'Horaires', 'Réserver'] as const).map((l, i) => (
-            <a key={i} href={`#${(['histoire', 'menu', 'horaires', 'reserver'] as const)[i]}`}
-              style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost, sans-serif', fontWeight: 500 }}>
-              {l}
-            </a>
+          {[
+            { label: 'Histoire', href: '#histoire' },
+            { label: 'Menu', href: '/menu' },
+            { label: 'Horaires', href: '#horaires' },
+            { label: 'Réserver', href: '#reserver' },
+          ].map((item) => (
+            item.href.startsWith('/') ? (
+              <Link key={item.label} href={item.href}
+                style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost, sans-serif', fontWeight: 500 }}>
+                {item.label}
+              </Link>
+            ) : (
+              <a key={item.label} href={item.href}
+                style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost, sans-serif', fontWeight: 500 }}>
+                {item.label}
+              </a>
+            )
           ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -272,11 +284,18 @@ export default function HomePage() {
       {menuOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'var(--hero-bg)', zIndex: 300, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 40 }}>
           <button onClick={() => setMenuOpen(false)} style={{ position: 'absolute', top: 20, right: 20, background: 'none', border: 'none', color: 'white', fontSize: 32, cursor: 'pointer' }}>✕</button>
-          {[{ label: 'Histoire', href: '#histoire' }, { label: 'Menu', href: '#menu' }, { label: 'Horaires', href: '#horaires' }, { label: 'Réserver', href: '#reserver' }, { label: 'Mon compte', href: '/compte' }].map(item => (
-            <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)}
-              style={{ color: 'white', fontSize: 28, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none' }}>
-              {item.label}
-            </a>
+          {[{ label: 'Histoire', href: '#histoire' }, { label: 'Menu', href: '/menu' }, { label: 'Horaires', href: '#horaires' }, { label: 'Réserver', href: '#reserver' }, { label: 'Mon compte', href: '/compte' }].map(item => (
+            item.href.startsWith('/') ? (
+              <Link key={item.href} href={item.href} onClick={() => setMenuOpen(false)}
+                style={{ color: 'white', fontSize: 28, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none' }}>
+                {item.label}
+              </Link>
+            ) : (
+              <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)}
+                style={{ color: 'white', fontSize: 28, fontFamily: 'Playfair Display, serif', fontStyle: 'italic', textDecoration: 'none' }}>
+                {item.label}
+              </a>
+            )
           ))}
         </div>
       )}
@@ -630,6 +649,248 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* COMMANDER À EMPORTER */}
+      <section id="commander" style={{ padding: '100px 20px', background: 'linear-gradient(135deg, #7B0000 0%, var(--rosso-m) 100%)' }}>
+        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 50 }}>
+            <span className="badge" style={{ background: 'rgba(255,255,255,0.2)', color: 'white', marginBottom: 16, display: 'inline-block' }}>Pizza à emporter</span>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(28px, 4vw, 42px)', color: 'white', marginBottom: 12 }}>
+              🍕 Commander à <em style={{ color: 'var(--oro-l)', fontStyle: 'italic' }}>emporter</em>
+            </h2>
+            <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'rgba(255,255,255,0.7)' }}>
+              Commandez en avance, récupérez quand vous voulez
+            </p>
+          </div>
+
+          {cmdSuccess ? (
+            <div style={{ background: 'white', borderRadius: 4, padding: 48, textAlign: 'center' }}>
+              <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+              <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--verde)', marginBottom: 12 }}>Commande envoyée !</h3>
+              <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 24 }}>
+                André vous rappelle pour confirmer. 📞 06 68 36 62 98
+              </p>
+              <button onClick={() => { setCmdSuccess(false); setCmdStep(1); setCmdItems([]); setCmdForm({ nom: '', telephone: '', date: '', heure: '', notes: '' }) }} className="btn-primary">Nouvelle commande</button>
+            </div>
+          ) : (
+            <div style={{ background: 'white', borderRadius: 4, overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}>
+              {/* Steps indicator */}
+              <div style={{ display: 'flex', background: 'var(--bianco-c)' }}>
+                {[{ n: 1, label: 'Votre commande' }, { n: 2, label: 'Confirmation' }].map(s => (
+                  <div key={s.n} onClick={() => cmdStep === 2 && s.n === 1 && setCmdStep(1)}
+                    style={{ flex: 1, padding: '16px 20px', textAlign: 'center', background: cmdStep === s.n ? 'var(--rosso)' : 'transparent', color: cmdStep === s.n ? 'white' : 'var(--grigio)', fontFamily: 'Jost', fontSize: 13, fontWeight: 500, cursor: s.n === 1 && cmdStep === 2 ? 'pointer' : 'default', transition: 'all 0.3s' }}>
+                    <span style={{ marginRight: 8 }}>{s.n}.</span>{s.label}
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ padding: '32px 40px' }}>
+                {cmdStep === 1 ? (
+                  <>
+                    {/* Infos de base */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Nom *</label>
+                        <input type="text" className="form-input" placeholder="Votre nom" value={cmdForm.nom} onChange={e => setCmdForm(p => ({ ...p, nom: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Téléphone *</label>
+                        <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={cmdForm.telephone} onChange={e => setCmdForm(p => ({ ...p, telephone: e.target.value }))} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Date de retrait *</label>
+                        <input type="date" className="form-input" min={minDate()} value={cmdForm.date}
+                          onChange={e => {
+                            const d = new Date(e.target.value + 'T12:00:00')
+                            setCmdError(d.getDay() === 1 ? 'Nous sommes fermés le lundi.' : '')
+                            setCmdForm(p => ({ ...p, date: e.target.value, heure: '' }))
+                          }} />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Heure de retrait *</label>
+                        <select className="form-input" value={cmdForm.heure} onChange={e => setCmdForm(p => ({ ...p, heure: e.target.value }))} style={{ cursor: 'pointer' }}>
+                          <option value="">--:--</option>
+                          {(() => {
+                            const d = cmdForm.date ? new Date(cmdForm.date + 'T12:00:00').getDay() : -1
+                            const midi = d >= 3 && d <= 6
+                            const soir = d !== 1 && d !== -1
+                            const opts: string[] = []
+                            if (midi) opts.push('12:00', '12:30', '13:00', '13:30', '14:00', '14:30')
+                            if (soir) opts.push('19:00', '19:30', '20:00', '20:30', '21:00', '21:30')
+                            return opts.map(h => <option key={h} value={h}>{h}</option>)
+                          })()}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Sélecteur de pizzas */}
+                    <div style={{ background: 'var(--rosso-pale)', borderRadius: 3, padding: 24, marginBottom: 20 }}>
+                      <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, color: 'var(--nero)', marginBottom: 16 }}>Ajouter une pizza</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 12 }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero-m)', marginBottom: 4 }}>Pizza</label>
+                          <select className="form-input" value={cmdPizzaSelect} onChange={e => setCmdPizzaSelect(e.target.value)} style={{ cursor: 'pointer' }}>
+                            <option value="">Choisir une pizza...</option>
+                            {articles.filter(a => {
+                              const cat = categories.find(c => c.id === a.categorie_id)
+                              return cat?.nom === 'Pizzas' && a.disponible
+                            }).map(a => (
+                              <option key={a.id} value={a.id}>{a.nom} — {a.prix.toFixed(2)} €</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero-m)', marginBottom: 4 }}>Quantité</label>
+                          <select className="form-input" value={cmdPizzaQty} onChange={e => setCmdPizzaQty(parseInt(e.target.value))} style={{ cursor: 'pointer' }}>
+                            {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 11, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero-m)', marginBottom: 4 }}>Taille</label>
+                          <select className="form-input" value={cmdPizzaTaille} onChange={e => setCmdPizzaTaille(e.target.value as '33cm' | 'pala')} style={{ cursor: 'pointer' }}>
+                            <option value="33cm">33 cm</option>
+                            <option value="pala">Pala 60×40</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontFamily: 'Jost', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={cmdPizzaCalzone} onChange={e => setCmdPizzaCalzone(e.target.checked)} />
+                          En Calzone
+                        </label>
+                      </div>
+                      <button type="button" onClick={() => {
+                        const art = articles.find(a => a.id === cmdPizzaSelect)
+                        if (!art) return
+                        setCmdItems(prev => [...prev, {
+                          pizzaId: art.id, nom: art.nom,
+                          prix33: art.prix, prixPala: art.prix_pala ?? art.prix * 2.5,
+                          qty: cmdPizzaQty, taille: cmdPizzaTaille, calzone: cmdPizzaCalzone,
+                        }])
+                        setCmdPizzaSelect(''); setCmdPizzaQty(1); setCmdPizzaTaille('33cm'); setCmdPizzaCalzone(false)
+                      }} className="btn-primary" style={{ opacity: cmdPizzaSelect ? 1 : 0.5 }} disabled={!cmdPizzaSelect}>
+                        + Ajouter
+                      </button>
+                    </div>
+
+                    {/* Récapitulatif articles */}
+                    {cmdItems.length > 0 && (
+                      <div style={{ marginBottom: 20 }}>
+                        <h4 style={{ fontFamily: 'Jost', fontSize: 13, fontWeight: 600, color: 'var(--nero)', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>Ma commande</h4>
+                        {cmdItems.map((item, idx) => (
+                          <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--grigio-l)' }}>
+                            <span style={{ fontFamily: 'Jost', fontSize: 14, color: 'var(--nero)' }}>
+                              {item.qty}× {item.nom} ({item.taille}{item.calzone ? ', Calzone' : ''})
+                            </span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                              <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 700, color: 'var(--rosso)' }}>
+                                {(item.qty * (item.taille === 'pala' ? item.prixPala : item.prix33)).toFixed(2)} €
+                              </span>
+                              <button onClick={() => setCmdItems(prev => prev.filter((_, i) => i !== idx))}
+                                style={{ background: 'none', border: 'none', color: 'var(--grigio)', cursor: 'pointer', fontSize: 16 }}>✕</button>
+                            </div>
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', fontFamily: 'Playfair Display, serif', fontSize: 20, fontWeight: 700, color: 'var(--rosso)' }}>
+                          <span>Total estimé</span>
+                          <span>{cmdItems.reduce((sum, i) => sum + i.qty * (i.taille === 'pala' ? i.prixPala : i.prix33), 0).toFixed(2)} €</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ marginBottom: 20 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Notes / Allergies</label>
+                      <textarea className="form-input" placeholder="Allergie, demande particulière..." value={cmdForm.notes} onChange={e => setCmdForm(p => ({ ...p, notes: e.target.value }))} rows={2} style={{ resize: 'vertical' }} />
+                    </div>
+
+                    {cmdError && (
+                      <div style={{ padding: '12px 16px', background: 'var(--rosso-pale)', border: '1px solid var(--rosso-l)', borderRadius: 3, fontSize: 13, color: 'var(--rosso)', fontFamily: 'Jost', marginBottom: 16 }}>
+                        {cmdError}
+                      </div>
+                    )}
+
+                    <button type="button" className="btn-primary" style={{ width: '100%', padding: 16, opacity: (cmdItems.length > 0 && cmdForm.nom && cmdForm.telephone && cmdForm.date && cmdForm.heure) ? 1 : 0.5 }}
+                      disabled={!(cmdItems.length > 0 && cmdForm.nom && cmdForm.telephone && cmdForm.date && cmdForm.heure)}
+                      onClick={() => {
+                        const d = new Date(cmdForm.date + 'T12:00:00')
+                        if (d.getDay() === 1) { setCmdError('Nous sommes fermés le lundi.'); return }
+                        setCmdStep(2)
+                      }}>
+                      Voir le récapitulatif →
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Étape 2 — Confirmation */}
+                    <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 24 }}>Récapitulatif de votre commande</h3>
+                    <div style={{ background: 'var(--bianco-c)', borderRadius: 3, padding: 24, marginBottom: 24 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20, fontSize: 14, fontFamily: 'Jost' }}>
+                        <div><span style={{ color: 'var(--grigio)' }}>Nom :</span> <strong>{cmdForm.nom}</strong></div>
+                        <div><span style={{ color: 'var(--grigio)' }}>Tél :</span> <strong>{cmdForm.telephone}</strong></div>
+                        <div><span style={{ color: 'var(--grigio)' }}>Date :</span> <strong>{cmdForm.date}</strong></div>
+                        <div><span style={{ color: 'var(--grigio)' }}>Retrait :</span> <strong>{cmdForm.heure}</strong></div>
+                      </div>
+                      {cmdItems.map((item, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--grigio-l)', fontSize: 14, fontFamily: 'Jost' }}>
+                          <span>{item.qty}× {item.nom} ({item.taille}{item.calzone ? ', Calzone' : ''})</span>
+                          <strong style={{ color: 'var(--rosso)' }}>{(item.qty * (item.taille === 'pala' ? item.prixPala : item.prix33)).toFixed(2)} €</strong>
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 16, fontFamily: 'Playfair Display, serif', fontSize: 22, fontWeight: 700, color: 'var(--rosso)' }}>
+                        <span>Total estimé</span>
+                        <span>{cmdItems.reduce((sum, i) => sum + i.qty * (i.taille === 'pala' ? i.prixPala : i.prix33), 0).toFixed(2)} €</span>
+                      </div>
+                    </div>
+                    {cmdError && (
+                      <div style={{ padding: '12px 16px', background: 'var(--rosso-pale)', border: '1px solid var(--rosso-l)', borderRadius: 3, fontSize: 13, color: 'var(--rosso)', fontFamily: 'Jost', marginBottom: 16 }}>{cmdError}</div>
+                    )}
+                    <button type="button" className="btn-primary" style={{ width: '100%', padding: 16, opacity: cmdLoading ? 0.7 : 1 }} disabled={cmdLoading}
+                      onClick={async () => {
+                        setCmdLoading(true); setCmdError('')
+                        try {
+                          let clientId: string | undefined
+                          const { data: existingClient } = await supabase.from('clients').select('id').eq('telephone', cmdForm.telephone).single()
+                          if (existingClient) {
+                            clientId = existingClient.id
+                          } else {
+                            const { data: nc } = await supabase.from('clients')
+                              .insert({ nom: cmdForm.nom, telephone: cmdForm.telephone })
+                              .select('id').single()
+                            clientId = nc?.id
+                          }
+                          const total = cmdItems.reduce((sum, i) => sum + i.qty * (i.taille === 'pala' ? i.prixPala : i.prix33), 0)
+                          const { data: cmd } = await supabase.from('commandes').insert({
+                            client_id: clientId ?? null, type: 'emporter', statut: 'en_attente',
+                            total, notes: cmdForm.notes || null,
+                            heure_retrait: cmdForm.date + 'T' + cmdForm.heure,
+                          }).select('id').single()
+                          if (cmd) {
+                            await supabase.from('lignes_commande').insert(
+                              cmdItems.map(item => ({
+                                commande_id: cmd.id,
+                                article_nom: item.nom + (item.calzone ? ' (Calzone)' : ''),
+                                quantite: item.qty,
+                                taille: item.taille,
+                                prix_unitaire: item.taille === 'pala' ? item.prixPala : item.prix33,
+                              }))
+                            )
+                          }
+                          setCmdSuccess(true)
+                        } catch {
+                          setCmdError('Une erreur est survenue. Appelez le 06 68 36 62 98.')
+                        } finally {
+                          setCmdLoading(false)
+                        }
+                      }}>
+                      {cmdLoading ? '...' : '🍕 Envoyer ma commande'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* RÉSERVATION */}
       <section id="reserver" style={{ padding: '100px 20px', background: 'var(--bianco-c)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 60, alignItems: 'start' }}>
@@ -874,8 +1135,9 @@ export default function HomePage() {
 
       {/* MOBILE STICKY BAR */}
       <div className="mobile-cta-bar">
-        <a href="tel:0668366298" style={{ flex: 1, background: 'var(--verde)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 13, fontFamily: 'Jost' }}>📞 Appeler</a>
-        <a href="#reserver" style={{ flex: 1, background: 'var(--rosso)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 13, fontFamily: 'Jost' }}>📅 Réserver</a>
+        <a href="tel:0668366298" style={{ flex: 1, background: 'var(--verde)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 12, fontFamily: 'Jost' }}>📞 Appeler</a>
+        <a href="#commander" style={{ flex: 1, background: 'var(--rosso)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 12, fontFamily: 'Jost' }}>🍕 Commander</a>
+        <a href="#reserver" style={{ flex: 1, background: 'var(--nero)', color: 'white', textAlign: 'center', padding: '12px', borderRadius: 3, textDecoration: 'none', fontSize: 12, fontFamily: 'Jost' }}>📅 Réserver</a>
       </div>
 
       {/* PWA BANNER */}

@@ -26,7 +26,7 @@ export default function MentionsLegalesPage() {
           <p style={{ fontSize: 15, lineHeight: 2, color: 'var(--nero-m)' }}>
             <strong>Roma Pizzeria Restaurante</strong><br />
             Forme juridique : Entreprise individuelle<br />
-            Siège social : 1 Place de l&apos;Église, 37420 Savigné-sur-Lathan<br />
+            Siège social : 20 place Jacques du Bellay, 37420 Savigné-sur-Lathan<br />
             Téléphone : <a href="tel:0668366298" style={{ color: 'var(--rosso)' }}>06 68 36 62 98</a><br />
             Directeur de la publication : Roberto (gérant)
           </p>
@@ -72,7 +72,7 @@ export default function MentionsLegalesPage() {
           <p style={{ fontSize: 15, lineHeight: 1.8, color: 'var(--nero-m)' }}>
             Pour toute question relative au site :<br />
             <a href="tel:0668366298" style={{ color: 'var(--rosso)' }}>06 68 36 62 98</a><br />
-            1 Place de l&apos;Église, 37420 Savigné-sur-Lathan
+            20 place Jacques du Bellay, 37420 Savigné-sur-Lathan
           </p>
         </section>
       </main>

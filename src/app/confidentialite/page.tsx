@@ -26,7 +26,7 @@ export default function ConfidentialitePage() {
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>1. Responsable du traitement</h2>
           <p style={{ fontSize: 15, lineHeight: 1.8, color: 'var(--nero-m)' }}>
             Roma Pizzeria Restaurante<br />
-            1 Place de l&apos;Église, 37420 Savigné-sur-Lathan<br />
+            20 place Jacques du Bellay, 37420 Savigné-sur-Lathan<br />
             Téléphone : 06 68 36 62 98<br />
             Responsable : Roberto (gérant)
           </p>

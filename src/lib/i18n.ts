@@ -86,7 +86,7 @@ const fr = {
   footer_commander: 'Commander',
   footer_compte: 'Mon compte',
   footer_copyright: '© 2025 Roma Pizzeria Restaurante · Savigné-sur-Lathan',
-  footer_address: '1 Place de l\'Église, 37420 Savigné-sur-Lathan',
+  footer_address: '20 place Jacques du Bellay, 37420 Savigné-sur-Lathan',
   footer_phone: '06 68 36 62 98',
 
   /* Compte / Fidélité */
@@ -192,7 +192,7 @@ const it: Translations = {
   footer_commander: 'Ordinare',
   footer_compte: 'Il mio account',
   footer_copyright: '© 2025 Roma Pizzeria Restaurante · Savigné-sur-Lathan',
-  footer_address: '1 Place de l\'Église, 37420 Savigné-sur-Lathan',
+  footer_address: '20 place Jacques du Bellay, 37420 Savigné-sur-Lathan',
   footer_phone: '06 68 36 62 98',
 
   compte_title: 'Il mio spazio fedeltà',
@@ -293,7 +293,7 @@ const en: Translations = {
   footer_commander: 'Order',
   footer_compte: 'My account',
   footer_copyright: '© 2025 Roma Pizzeria Restaurante · Savigné-sur-Lathan',
-  footer_address: '1 Place de l\'Église, 37420 Savigné-sur-Lathan',
+  footer_address: '20 place Jacques du Bellay, 37420 Savigné-sur-Lathan',
   footer_phone: '06 68 36 62 98',
 
   compte_title: 'My loyalty space',

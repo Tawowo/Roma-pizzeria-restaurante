@@ -30,6 +30,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="Roma Pizzeria" />
         <meta name="theme-color" content="#B71C1C" />
+        <meta name="geo.region" content="FR-37" />
+        <meta name="geo.placename" content="Savigné-sur-Lathan" />
+        <meta name="geo.position" content="47.4833;0.2167" />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Restaurant",
+          "name": "Roma Pizzeria Restaurante",
+          "address": { "@type": "PostalAddress", "streetAddress": "20 place Jacques du Bellay", "postalCode": "37420", "addressLocality": "Savigné-sur-Lathan", "addressCountry": "FR" },
+          "telephone": "+33668366298",
+          "servesCuisine": "Italian",
+          "priceRange": "€€",
+          "openingHours": ["Tu 19:00-21:30", "We-Fr 12:00-14:30", "We-Fr 19:00-21:30", "Sa 12:00-14:30", "Sa 19:00-22:00", "Su 19:00-21:30"]
+        }) }} />
       </head>
       <body>{children}</body>
     </html>
