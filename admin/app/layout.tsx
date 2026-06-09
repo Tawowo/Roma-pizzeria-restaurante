@@ -3,41 +3,38 @@ import { Inter } from 'next/font/google'
 import './globals.css'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import Sidebar from '@/components/Sidebar'
 import { getSession } from '@/lib/auth'
 import type { AdminSession } from '@/lib/auth'
+import Sidebar from '@/components/Sidebar'
 
 const inter = Inter({ subsets: ['latin'] })
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+const NO_SIDEBAR = ['/login', '/cuisine']
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [session, setSession] = useState<AdminSession | null>(null)
-  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
     setSession(getSession())
-    setMounted(true)
   }, [pathname])
 
-  const noSidebar = pathname === '/login' || pathname === '/cuisine'
+  const noSidebar = NO_SIDEBAR.some(p => pathname === p || pathname.startsWith(p + '/'))
 
   return (
     <html lang="fr">
-      <body className={inter.className} style={{ background: '#0F0F0F', margin: 0, padding: 0 }}>
-        {!mounted ? (
-          <div style={{ background: '#0F0F0F', minHeight: '100vh' }}>{children}</div>
-        ) : noSidebar || !session ? (
-          <div style={{ background: '#0F0F0F', minHeight: '100vh' }}>{children}</div>
+      <body className={`${inter.className} bg-[#FBF6EE] text-[#1A1A1A]`}>
+        {noSidebar || !session ? (
+          children
         ) : (
-          <div style={{ display: 'flex', minHeight: '100vh', background: '#0F0F0F' }}>
+          <div className="flex min-h-screen">
             <Sidebar nom={session.nom} role={session.role} />
-            <main style={{ flex: 1, overflowY: 'auto', minHeight: '100vh' }}>
-              {children}
-            </main>
+            <div className="flex-1 flex flex-col min-h-screen">
+              <header className="h-14 bg-white border-b border-[#E0D5C5] flex items-center px-6 shrink-0">
+                <span className="text-sm text-[#555555]">Bienvenue, <strong>{session.nom}</strong></span>
+              </header>
+              <main className="flex-1 p-6">{children}</main>
+            </div>
           </div>
         )}
       </body>
