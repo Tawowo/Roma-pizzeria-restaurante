@@ -1,133 +1,140 @@
 'use client'
-import { useState, useEffect } from 'react'
+
+import { useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-
-const MIDI = ['12:00','12:15','12:30','12:45','13:00','13:15','13:30','13:45']
-const SOIR = ['19:00','19:15','19:30','19:45','20:00','20:15','20:30','20:45','21:00','21:15','21:30']
-
-function getSlots(date: string) {
-  if (!date) return []
-  const d = new Date(date + 'T12:00:00')
-  const day = d.getDay()
-  if (day === 1) return []
-  if ([3,4,5,6].includes(day)) return [...MIDI, ...SOIR]
-  return SOIR
-}
+import { T, Lang } from '@/lib/i18n'
 
 export default function ReserverPage() {
-  const [nom, setNom] = useState('')
-  const [tel, setTel] = useState('')
-  const [date, setDate] = useState('')
-  const [heure, setHeure] = useState('')
-  const [couverts, setCouverts] = useState(2)
-  const [zone, setZone] = useState('indiff')
-  const [notes, setNotes] = useState('')
-  const [err, setErr] = useState('')
+  const [lang, setLang] = useState<Lang>('fr')
+  const [form, setForm] = useState({
+    nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: ''
+  })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError]     = useState('')
+  const t = T[lang]
 
-  const slots = getSlots(date)
-  const minDate = new Date(); minDate.setDate(minDate.getDate() + 1)
-
-  const submit = async () => {
-    setErr('')
-    if (!nom.trim()) { setErr('Veuillez entrer votre nom'); return }
-    if (!tel.trim()) { setErr('Le téléphone est obligatoire'); return }
-    if (!date) { setErr('Choisissez une date'); return }
-    if (!heure) { setErr('Choisissez un horaire'); return }
-    setLoading(true)
-    const { error } = await supabase.from('reservations').insert({
-      nom, telephone: tel, date_reservation: date,
-      heure_reservation: heure, nombre_couverts: couverts,
-      zone, notes: notes || null, statut: 'en_attente',
-    })
-    setLoading(false)
-    if (error) { setErr('Erreur. Appelez le 06 68 36 62 98'); return }
-    setSuccess(true)
+  const minDate = () => {
+    const d = new Date(); d.setDate(d.getDate() + 1)
+    return d.toISOString().split('T')[0]
   }
 
-  if (success) return (
-    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-      <div style={{ textAlign: 'center', maxWidth: 420 }}>
-        <div style={{ fontSize: 64, marginBottom: 20 }}>🍕</div>
-        <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 36, marginBottom: 12 }}>Réservation envoyée !</h1>
-        <p style={{ fontSize: 15, color: 'var(--textm)', lineHeight: 1.8, marginBottom: 12 }}>
-          Merci <strong>{nom}</strong>, votre demande pour le{' '}
-          <strong>{new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</strong>{' '}
-          à <strong>{heure}</strong> pour <strong>{couverts} personne{couverts > 1 ? 's' : ''}</strong> a bien été reçue.
-        </p>
-        <p style={{ fontSize: 13, color: 'var(--textl)', marginBottom: 28 }}>
-          Nous vous confirmons par téléphone au <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
-        </p>
-        <Link href="/" className="bp" style={{ textDecoration: 'none', display: 'inline-block' }}>← Retour à l'accueil</Link>
-      </div>
-    </div>
-  )
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const day = new Date(form.date + 'T12:00:00').getDay()
+    if (day === 1) { setError(t.resa_lundi_info); return }
+    setLoading(true); setError('')
+    try {
+      let clientId: string | undefined
+      const { data: existing } = await supabase
+        .from('client').select('id').eq('telephone', form.telephone).single()
+      if (existing) { clientId = existing.id } else {
+        const { data: nc } = await supabase
+          .from('client').insert({ nom: form.nom, telephone: form.telephone, points_fidelite: 0 })
+          .select('id').single()
+        clientId = nc?.id
+      }
+      await supabase.from('reservation').insert({
+        client_id: clientId, nom: form.nom, telephone: form.telephone,
+        date_reservation: form.date, heure_reservation: form.heure,
+        nombre_couverts: parseInt(form.couverts),
+        zone: form.zone || null, notes: form.notes || null, statut: 'en_attente',
+      })
+      setSuccess(true)
+    } catch {
+      setError('Une erreur est survenue. Veuillez réessayer.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--cream)' }}>
-      <header style={{ background: 'var(--dark)', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Link href="/" style={{ textDecoration: 'none', fontFamily: "'Playfair Display',serif", fontSize: 18, color: 'white' }}>Roma <em style={{ color: 'var(--gold2)' }}>Pizzeria</em></Link>
-        <a href="tel:0668366298" style={{ color: 'var(--gold2)', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>06 68 36 62 98</a>
-      </header>
-
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: '48px 20px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div className="sl" style={{ textAlign: 'center' }}>Réservation</div>
-          <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 40, marginBottom: 12 }}>Réservez <em style={{ color: 'var(--r)' }}>votre table</em></h1>
-          <p style={{ fontSize: 15, color: 'var(--textm)', lineHeight: 1.8 }}>Pour une soirée en famille, un dîner romantique ou une occasion spéciale.</p>
+    <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flexDirection: 'column' }}>
+      {/* Nav */}
+      <nav style={{ background: 'var(--brown-d)', padding: '0 clamp(20px,5vw,60px)', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(201,148,58,0.2)' }}>
+        <Link href="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontStyle: 'italic', fontSize: '20px', color: 'var(--gold-l)', fontWeight: 600 }}>Roma</span>
+          <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '10px', fontWeight: 300, color: 'rgba(255,255,255,0.5)', letterSpacing: '3px', textTransform: 'uppercase' }}>Pizzeria</span>
+        </Link>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          {(['fr','it','en'] as Lang[]).map(l => (
+            <button key={l} onClick={() => setLang(l)} style={{ background: lang===l?'var(--terra)':'transparent', border:`1px solid ${lang===l?'var(--terra)':'rgba(255,255,255,0.2)'}`, color: '#fff', padding: '3px 8px', borderRadius: '2px', fontSize: '10px', textTransform: 'uppercase', cursor: 'pointer', fontFamily: "'Jost',sans-serif" }}>{l}</button>
+          ))}
         </div>
+      </nav>
 
-        <div style={{ background: 'white', borderRadius: 8, padding: '36px', border: '1px solid rgba(196,30,58,0.08)', boxShadow: '0 24px 80px rgba(26,10,10,0.06)', display: 'flex', flexDirection: 'column', gap: 20 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div><label className="rf-label">Nom *</label><input className="rf-input" value={nom} onChange={e => setNom(e.target.value)} placeholder="Dupont" /></div>
-            <div><label className="rf-label">Téléphone *</label><input className="rf-input" value={tel} onChange={e => setTel(e.target.value)} placeholder="06 XX XX XX XX" type="tel" /></div>
+      {/* Content */}
+      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(40px,6vw,80px) clamp(20px,5vw,40px)' }}>
+        <div style={{ width: '100%', maxWidth: '580px' }}>
+          <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+            <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--terra)', marginBottom: '10px', display: 'block' }}>Réservation</span>
+            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,42px)', color: 'var(--text)' }}>{t.resa_title}</h1>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div>
-              <label className="rf-label">Date *</label>
-              <input className="rf-input" type="date" value={date} onChange={e => { setDate(e.target.value); setHeure('') }} min={minDate.toISOString().split('T')[0]} />
-              {date && slots.length === 0 && <div style={{ fontSize: 12, color: 'var(--r)', marginTop: 4 }}>Fermé ce jour-là</div>}
-            </div>
-            <div>
-              <label className="rf-label">Personnes *</label>
-              <select className="rf-select" value={couverts} onChange={e => setCouverts(Number(e.target.value))}>
-                {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n} personne{n > 1 ? 's' : ''}</option>)}
-              </select>
-            </div>
-          </div>
-          {slots.length > 0 && (
-            <div>
-              <label className="rf-label">Heure souhaitée *</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {slots.map(s => (
-                  <button key={s} onClick={() => setHeure(s)} className={`slot ${heure === s ? 'sel' : ''}`}>{s}</button>
-                ))}
+
+          {success ? (
+            <div style={{ background: '#fff', border: '1px solid rgba(74,103,65,0.3)', borderRadius: '2px', padding: '48px', textAlign: 'center' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '24px' }}>{t.resa_success}</p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button onClick={() => { setSuccess(false); setForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }) }} className="btn-secondary">Nouvelle réservation</button>
+                <Link href="/" className="btn-primary">Retour à l&apos;accueil</Link>
               </div>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.15)', borderRadius: '2px', padding: 'clamp(24px,5vw,40px)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div><label className="rf-label">{t.resa_nom}</label><input type="text" className="rf-input" placeholder={t.resa_ph_nom} value={form.nom} onChange={e => setForm(p=>({...p,nom:e.target.value}))} required /></div>
+                <div><label className="rf-label">{t.resa_tel}</label><input type="tel" className="rf-input" placeholder={t.resa_ph_tel} value={form.telephone} onChange={e => setForm(p=>({...p,telephone:e.target.value}))} required /></div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                <div>
+                  <label className="rf-label">{t.resa_date}</label>
+                  <input type="date" className="rf-input" min={minDate()} value={form.date}
+                    onChange={e => { setError(new Date(e.target.value+'T12:00:00').getDay()===1?t.resa_lundi_info:''); setForm(p=>({...p,date:e.target.value})) }} required />
+                </div>
+                <div>
+                  <label className="rf-label">{t.resa_heure}</label>
+                  <select className="rf-select" value={form.heure} onChange={e => setForm(p=>({...p,heure:e.target.value}))} required>
+                    <option value="">--:--</option>
+                    {['12:00','12:30','13:00','13:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00'].map(h => <option key={h} value={h}>{h}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                <div>
+                  <label className="rf-label">{t.resa_couverts}</label>
+                  <select className="rf-select" value={form.couverts} onChange={e => setForm(p=>({...p,couverts:e.target.value}))}>
+                    {[1,2,3,4,5,6,7,8,10,12].map(n => <option key={n} value={n}>{n} {n===1?'personne':'personnes'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="rf-label">{t.resa_zone}</label>
+                  <select className="rf-select" value={form.zone} onChange={e => setForm(p=>({...p,zone:e.target.value}))}>
+                    <option value="">Indifférent</option>
+                    <option value="rdc">Rez-de-chaussée</option>
+                    <option value="etage">Étage</option>
+                    <option value="terrasse">Terrasse</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ marginTop: '16px' }}>
+                <label className="rf-label">{t.resa_notes}</label>
+                <textarea className="rf-textarea" placeholder={t.resa_ph_notes} value={form.notes} onChange={e => setForm(p=>({...p,notes:e.target.value}))} />
+              </div>
+              {error && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)', marginTop: '12px', padding: '10px 14px', background: 'rgba(196,98,45,0.08)', borderRadius: '2px' }}>{error}</p>}
+              <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', marginTop: '24px', padding: '16px', justifyContent: 'center', opacity: loading ? 0.7 : 1 }}>
+                {loading ? '...' : t.resa_submit}
+              </button>
+              <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', textAlign: 'center', marginTop: '14px' }}>{t.resa_note}</p>
+            </form>
           )}
-          <div>
-            <label className="rf-label">Zone préférée</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              {[{v:'indiff',l:'Indifférent'},{v:'rdc',l:'RDC'},{v:'etage',l:'Étage'},{v:'terrasse',l:'Terrasse'}].map(z => (
-                <button key={z.v} onClick={() => setZone(z.v)} className={`zone-btn ${zone === z.v ? 'sel' : ''}`}>{z.l}</button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="rf-label">Notes / Occasion spéciale</label>
-            <textarea className="rf-textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Occasion spéciale, allergie, demande particulière..." />
-          </div>
-          {err && <div style={{ color: 'var(--r)', fontSize: 13, textAlign: 'center' }}>{err}</div>}
-          <button className="btn-submit" onClick={submit} disabled={loading || slots.length === 0 || !heure}>
-            {loading ? 'Envoi...' : 'Confirmer ma réservation'}
-          </button>
-          <p style={{ textAlign: 'center', fontSize: 12, color: 'var(--textl)' }}>
-            En cas de besoin, n'hésitez pas à nous appeler au <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
-          </p>
         </div>
       </div>
+
+      <footer style={{ background: 'var(--brown-d)', borderTop: '1px solid rgba(201,148,58,0.15)', padding: '20px clamp(20px,5vw,60px)', textAlign: 'center' }}>
+        <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>{t.footer_copyright}</p>
+      </footer>
     </div>
   )
 }
