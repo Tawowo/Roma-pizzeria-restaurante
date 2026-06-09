@@ -26,10 +26,20 @@ export default function HomePage() {
   const [articles, setArticles] = useState<Article[]>([])
   const [formules, setFormules] = useState<Formule[]>([])
   const [parametre, setParametre] = useState<{ msg_fermeture?: string; site_ouvert?: string }>({})
-  const [resaForm, setResaForm] = useState({ nom: '', telephone: '', email: '', date: '', heure: '', couverts: '2', zone: '', occasion: '', notes: '' })
+  const [resaForm, setResaForm] = useState({ nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '' })
   const [resaLoading, setResaLoading] = useState(false)
   const [resaSuccess, setResaSuccess] = useState(false)
   const [resaError, setResaError] = useState('')
+  const [cmdForm, setCmdForm] = useState({ nom: '', telephone: '', date: '', heure: '', notes: '' })
+  const [cmdItems, setCmdItems] = useState<{ pizzaId: string; nom: string; prix33: number; prixPala: number; qty: number; taille: '33cm' | 'pala'; calzone: boolean }[]>([])
+  const [cmdStep, setCmdStep] = useState<1 | 2>(1)
+  const [cmdLoading, setCmdLoading] = useState(false)
+  const [cmdSuccess, setCmdSuccess] = useState(false)
+  const [cmdError, setCmdError] = useState('')
+  const [cmdPizzaSelect, setCmdPizzaSelect] = useState('')
+  const [cmdPizzaQty, setCmdPizzaQty] = useState(1)
+  const [cmdPizzaTaille, setCmdPizzaTaille] = useState<'33cm' | 'pala'>('33cm')
+  const [cmdPizzaCalzone, setCmdPizzaCalzone] = useState(false)
   const [pwaBanner, setPwaBanner] = useState(false)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -71,14 +81,14 @@ export default function HomePage() {
   /* Supabase */
   useEffect(() => {
     const today = new Date().toISOString().split('T')[0]
-    supabase.from('platdujour').select('*').eq('actif', true).lte('date_debut', today)
+    supabase.from('plats_du_jour').select('*').eq('actif', true).lte('date_debut', today)
       .order('date_debut', { ascending: false })
       .then(({ data }) => setPlats(data ?? []))
-    supabase.from('categorie').select('*').eq('actif', true).order('ordre')
+    supabase.from('categories').select('*').eq('actif', true).order('ordre')
       .then(({ data }) => setCategories(data ?? []))
-    supabase.from('article').select('*').order('ordre')
+    supabase.from('articles').select('*').order('ordre')
       .then(({ data }) => setArticles(data ?? []))
-    supabase.from('formule').select('*').eq('actif', true).order('ordre')
+    supabase.from('formules').select('*').eq('actif', true).order('ordre')
       .then(({ data }) => setFormules(data ?? []))
     supabase.from('parametres').select('*')
       .then(({ data }) => {
@@ -159,21 +169,21 @@ export default function HomePage() {
     try {
       let clientId: string | undefined
       const { data: existing } = await supabase
-        .from('client').select('id').eq('telephone', resaForm.telephone).single()
+        .from('clients').select('id').eq('telephone', resaForm.telephone).single()
       if (existing) {
         clientId = existing.id
       } else {
         const { data: nc } = await supabase
-          .from('client')
-          .insert({ nom: resaForm.nom, telephone: resaForm.telephone, email: resaForm.email || null, points_fidelite: 0 })
+          .from('clients')
+          .insert({ nom: resaForm.nom, telephone: resaForm.telephone, points_fidelite: 0 })
           .select('id').single()
         clientId = nc?.id
       }
-      await supabase.from('reservation').insert({
+      await supabase.from('reservations').insert({
         client_id: clientId, nom: resaForm.nom, telephone: resaForm.telephone,
         date_reservation: resaForm.date, heure_reservation: resaForm.heure,
         nombre_couverts: parseInt(resaForm.couverts),
-        zone: resaForm.zone || null, notes: (resaForm.notes + (resaForm.occasion ? ` · Occasion: ${resaForm.occasion}` : '')) || null, statut: 'en_attente',
+        zone: resaForm.zone || null, notes: resaForm.notes || null, statut: 'en_attente',
       })
       setResaSuccess(true)
     } catch {
@@ -335,49 +345,89 @@ export default function HomePage() {
 
       {/* NOTRE HISTOIRE */}
       <section id="histoire" style={{ padding: '100px 20px', background: 'var(--bianco-c)' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 80, alignItems: 'center' }}>
-          <div>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 60 }}>
             <span className="badge badge-verde" style={{ marginBottom: 20, display: 'inline-block' }}>Notre histoire</span>
             <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(32px, 3vw, 42px)', color: 'var(--nero)', marginBottom: 24, lineHeight: 1.2 }}>
               Une trattoria au cœur <em style={{ color: 'var(--rosso)' }}>du village</em>
             </h2>
-            <div className="section-divider" style={{ margin: '0 0 32px' }}></div>
-            <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 24, borderLeft: '3px solid var(--oro)', paddingLeft: 20 }}>
+            <div className="section-divider"></div>
+            <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 40, borderLeft: '3px solid var(--oro)', paddingLeft: 20, maxWidth: 600, margin: '0 auto 40px', textAlign: 'left' }}>
               &quot;La pizza, c&apos;est l&apos;amour qu&apos;on met dans la pâte&quot; — Roberto
             </p>
-            <p style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--nero-m)', marginBottom: 24 }}>
-              Roberto, originaire de Calabre, a grandi dans la tradition de la pizza napolitaine. Après des années à perfectionner son art dans les meilleures pizzerias d&apos;Italie, il s&apos;est installé en Touraine avec Monica et leur fils André pour ouvrir Roma — une trattoria qui porte l&apos;âme de l&apos;Italie au cœur de Savigné-sur-Lathan.
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {[
-                { icon: '📍', title: 'Origines en Italie', desc: "Roberto apprend l'art de la pizza napolitaine" },
-                { icon: '🇫🇷', title: 'Installation en Touraine', desc: 'Ouverture de Roma à Savigné-sur-Lathan' },
-                { icon: '❤️', title: "Aujourd'hui", desc: 'La même passion, les mêmes recettes, toute la famille' },
-              ].map(step => (
-                <div key={step.title} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                  <span style={{ fontSize: 24, flexShrink: 0 }}>{step.icon}</span>
-                  <div>
-                    <div style={{ fontWeight: 600, color: 'var(--nero)', fontSize: 14, fontFamily: 'Jost' }}>{step.title}</div>
-                    <div style={{ fontSize: 13, color: 'var(--grigio)', marginTop: 2 }}>{step.desc}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 20, marginTop: 32 }}>
-              {[{ icon: '🔥', label: 'Four à bois' }, { icon: '🍋', label: 'Produits frais' }, { icon: '❤️', label: 'Accueil chaleureux' }].map(i => (
-                <div key={i.label} style={{ textAlign: 'center', padding: '20px 12px', background: 'white', borderRadius: 3, borderBottom: '2px solid var(--verde)' }}>
-                  <div style={{ fontSize: 28, marginBottom: 8 }}>{i.icon}</div>
-                  <div style={{ fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', letterSpacing: 0.5 }}>{i.label}</div>
-                </div>
-              ))}
-            </div>
           </div>
-          <div style={{ position: 'relative' }}>
-            <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800" alt="L'équipe Roma Pizzeria" loading="lazy"
-              style={{ width: '100%', height: 500, objectFit: 'cover', borderRadius: 4 }} />
-            <div style={{ position: 'absolute', bottom: -20, left: -20, background: 'var(--rosso)', color: 'white', padding: '16px 24px', borderRadius: 3 }}>
-              <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, fontStyle: 'italic', fontWeight: 700 }}>15+</div>
-              <div style={{ fontSize: 11, letterSpacing: 1, textTransform: 'uppercase', fontFamily: 'Jost' }}>ans d&apos;expérience</div>
+
+          {/* 3 portraits famille */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32, marginBottom: 60 }}>
+            {[
+              {
+                icon: '🔥', name: 'Roberto', role: 'Le Chef Pizzaiolo',
+                img: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=400',
+                text: "Originaire de Calabre, Roberto a grandi dans la tradition de la pizza napolitaine. Son four à pizza Morello Forni — de fabrication italienne, sole rotative — et ses recettes transmises de génération en génération font de chaque pizza une œuvre unique.",
+                color: 'var(--rosso)'
+              },
+              {
+                icon: '🌿', name: 'Monica', role: 'La Cuisinière',
+                img: 'https://images.unsplash.com/photo-1607631568010-a87245c0daf8?w=400',
+                text: "Monica apporte chaque jour sa touche créative avec ses plats cuisinés maison — lasagnes, risottos, pâtes fraîches. Le plat du jour, c'est son territoire, et il change selon les saisons et son inspiration.",
+                color: 'var(--verde)'
+              },
+              {
+                icon: '🍽', name: 'André', role: "L'Accueil",
+                img: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400',
+                text: "André est le visage de Roma. Toujours souriant, il gère les réservations, les commandes et s'assure que chaque client reparte avec le sourire. C'est lui que vous entendez au téléphone !",
+                color: 'var(--oro)'
+              },
+            ].map(p => (
+              <div key={p.name} style={{ background: 'white', borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', borderTop: `3px solid ${p.color}` }}>
+                {/* IMAGE REMPLAÇABLE — demander la photo à la famille (400x400px carrée) */}
+                <img src={p.img} alt={`${p.name} — Roma Pizzeria`} loading="lazy"
+                  style={{ width: '100%', height: 220, objectFit: 'cover', objectPosition: 'top' }} />
+                <div style={{ padding: 24 }}>
+                  <div style={{ fontSize: 28, marginBottom: 4 }}>{p.icon}</div>
+                  <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--nero)', marginBottom: 2 }}>{p.name}</h3>
+                  <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: 'uppercase', color: p.color, fontFamily: 'Jost', fontWeight: 500, marginBottom: 12 }}>{p.role}</div>
+                  <p style={{ fontSize: 14, color: 'var(--grigio)', lineHeight: 1.7, fontFamily: 'Jost' }}>{p.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Timeline + icônes */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 48, alignItems: 'center' }}>
+            <div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
+                {[
+                  { icon: '📍', title: 'Origines en Italie', desc: "Roberto apprend l'art de la pizza napolitaine" },
+                  { icon: '🏡', title: 'Installation en Touraine', desc: 'Ouverture de Roma à Savigné-sur-Lathan' },
+                  { icon: '❤️', title: "Aujourd'hui", desc: 'La même passion, les mêmes recettes, toute la famille' },
+                ].map(step => (
+                  <div key={step.title} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: 24, flexShrink: 0 }}>{step.icon}</span>
+                    <div>
+                      <div style={{ fontWeight: 600, color: 'var(--nero)', fontSize: 14, fontFamily: 'Jost' }}>{step.title}</div>
+                      <div style={{ fontSize: 13, color: 'var(--grigio)', marginTop: 2 }}>{step.desc}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+                {[{ icon: '🔥', label: 'Four Morello Forni' }, { icon: '🍋', label: 'Produits frais' }, { icon: '❤️', label: 'Accueil chaleureux' }].map(i => (
+                  <div key={i.label} style={{ textAlign: 'center', padding: '16px 8px', background: 'white', borderRadius: 3, borderBottom: '2px solid var(--verde)' }}>
+                    <div style={{ fontSize: 24, marginBottom: 6 }}>{i.icon}</div>
+                    <div style={{ fontSize: 11, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', letterSpacing: 0.5 }}>{i.label}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ position: 'relative' }}>
+              {/* IMAGE REMPLAÇABLE — photo de la salle / du four (800x600px) */}
+              <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800" alt="Roma Pizzeria — salle du restaurant" loading="lazy"
+                style={{ width: '100%', height: 400, objectFit: 'cover', borderRadius: 4 }} />
+              <div style={{ position: 'absolute', bottom: -16, left: -16, background: 'var(--rosso)', color: 'white', padding: '14px 20px', borderRadius: 3 }}>
+                <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontStyle: 'italic', fontWeight: 700 }}>15+</div>
+                <div style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', fontFamily: 'Jost' }}>ans d&apos;expérience</div>
+              </div>
             </div>
           </div>
         </div>
@@ -499,9 +549,9 @@ export default function HomePage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
             {[
-              { icon: '🏠', title: 'Rez-de-chaussée', desc: "L'espace convivial, pour les repas en famille", img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600' },
-              { icon: '🏛', title: 'Étage', desc: "L'espace romantique, pour les dîners en amoureux", img: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600' },
-              { icon: '🌿', title: 'Terrasse (été)', desc: "L'espace estival, sous les étoiles de Touraine", img: 'https://images.unsplash.com/photo-1559329007-40df8a9345d8?w=600' },
+              { icon: '🏠', title: 'Rez-de-chaussée', desc: "L'espace convivial — idéal pour les repas en famille ou entre amis", img: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600' },
+              { icon: '🏛', title: 'Étage', desc: "L'espace cosy — parfait pour les repas entre collègues ou les dîners décontractés", img: 'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=600' },
+              { icon: '🌿', title: 'Terrasse (été)', desc: "L'espace en plein air — profitez du soleil et de la douceur tourangelle", img: 'https://images.unsplash.com/photo-1559329007-40df8a9345d8?w=600' },
             ].map(e => (
               <div key={e.title} style={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 4px 24px rgba(0,0,0,0.1)', background: 'white' }}>
                 <img src={e.img} alt={e.title} loading="lazy" style={{ width: '100%', height: 220, objectFit: 'cover' }} />
@@ -552,8 +602,8 @@ export default function HomePage() {
                     background: isToday ? 'var(--rosso-pale)' : idx % 2 === 0 ? 'white' : 'var(--verde-pale)',
                     borderLeft: isToday ? '3px solid var(--rosso)' : '3px solid transparent',
                   }}>
-                    <span style={{ fontFamily: 'Jost', fontSize: 14, fontWeight: isToday ? 600 : 400, color: isToday ? 'var(--rosso)' : 'var(--nero)' }}>{row.nom}</span>
-                    <span style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 15, fontStyle: row.closed ? 'normal' : 'italic', color: row.closed ? 'var(--rosso)' : 'var(--nero-m)' }}>{row.heures}</span>
+                    <span style={{ fontFamily: 'Jost', fontSize: 17, fontWeight: isToday ? 700 : 600, color: isToday ? 'var(--rosso)' : 'var(--nero)' }}>{row.nom}</span>
+                    <span style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 17, fontWeight: 600, fontStyle: row.closed ? 'normal' : 'italic', color: row.closed ? 'var(--rosso)' : 'var(--nero-m)' }}>{row.heures}</span>
                   </div>
                 )
               })}
@@ -572,7 +622,7 @@ export default function HomePage() {
                 📍 Itinéraire Google Maps
               </a>
               <div style={{ padding: '16px 20px', background: 'var(--nero)', color: 'white', borderRadius: 3, fontSize: 13, fontFamily: 'Jost', lineHeight: 2 }}>
-                <div>📍 1 Place de l&apos;Église, 37420 Savigné-sur-Lathan</div>
+                <div>📍 20 place Jacques du Bellay, 37420 Savigné-sur-Lathan</div>
                 <a href="tel:0668366298" style={{ color: 'var(--oro)', textDecoration: 'none' }}>📞 06 68 36 62 98</a>
               </div>
             </div>
@@ -593,7 +643,7 @@ export default function HomePage() {
               <div style={{ background: 'var(--verde-pale)', border: '1px solid var(--verde)', borderRadius: 4, padding: 40, textAlign: 'center' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
                 <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, fontStyle: 'italic', color: 'var(--verde)', marginBottom: 20 }}>{t.resa_success}</p>
-                <button onClick={() => { setResaSuccess(false); setResaForm({ nom: '', telephone: '', email: '', date: '', heure: '', couverts: '2', zone: '', occasion: '', notes: '' }) }} className="btn-secondary">Nouvelle réservation</button>
+                <button onClick={() => { setResaSuccess(false); setResaForm({ nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '' }) }} className="btn-secondary">Nouvelle réservation</button>
               </div>
             ) : (
               <form onSubmit={handleResa} style={{ background: 'white', borderRadius: 4, padding: 32, boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
@@ -606,10 +656,6 @@ export default function HomePage() {
                     <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6, letterSpacing: 0.5 }}>Téléphone *</label>
                     <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={resaForm.telephone} onChange={e => setResaForm(p => ({ ...p, telephone: e.target.value }))} required />
                   </div>
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Email (optionnel)</label>
-                  <input type="email" className="form-input" placeholder="email@exemple.com" value={resaForm.email} onChange={e => setResaForm(p => ({ ...p, email: e.target.value }))} />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                   <div>
@@ -656,16 +702,6 @@ export default function HomePage() {
                       <option value="terrasse">Terrasse</option>
                     </select>
                   </div>
-                </div>
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Occasion</label>
-                  <select className="form-input" value={resaForm.occasion} onChange={e => setResaForm(p => ({ ...p, occasion: e.target.value }))} style={{ cursor: 'pointer' }}>
-                    <option value="">Aucune</option>
-                    <option value="anniversaire">Anniversaire</option>
-                    <option value="romantique">Dîner romantique</option>
-                    <option value="business">Repas d&apos;affaires</option>
-                    <option value="famille">Repas de famille</option>
-                  </select>
                 </div>
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Notes</label>
@@ -827,7 +863,7 @@ export default function HomePage() {
           </div>
         </div>
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, maxWidth: 1200, margin: '0 auto' }}>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'Jost' }}>© 2024 Roma Pizzeria Restaurante · Tous droits réservés</span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'Jost' }}>© 2026 Roma Pizzeria Restaurante · Tous droits réservés</span>
           <div style={{ display: 'flex', gap: 24 }}>
             {[{ l: 'Politique de confidentialité', h: '/confidentialite' }, { l: 'Mentions légales', h: '/mentions-legales' }].map(i => (
               <Link key={i.l} href={i.h} style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textDecoration: 'none', fontFamily: 'Jost' }}>{i.l}</Link>
