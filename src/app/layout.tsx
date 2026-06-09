@@ -1,12 +1,17 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import '../styles/globals.css'
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: '#C4622D',
+}
 
 export const metadata: Metadata = {
   title: 'Roma Pizzeria Restaurante — Savigné-sur-Lathan',
   description: 'Pizzeria italienne authentique à Savigné-sur-Lathan, Indre-et-Loire. Pizzas au four à bois, produits frais, plats du jour et réservation en ligne.',
   manifest: '/manifest.json',
-  themeColor: '#C4622D',
-  viewport: 'width=device-width, initial-scale=1, maximum-scale=5',
   openGraph: {
     title: 'Roma Pizzeria Restaurante',
     description: 'Pizzeria italienne authentique à Savigné-sur-Lathan',
