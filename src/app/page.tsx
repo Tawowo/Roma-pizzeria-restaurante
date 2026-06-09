@@ -742,6 +742,37 @@ export default function HomePage() {
               <div style={{ padding: '32px 40px' }}>
                 {cmdStep === 1 ? (
                   <>
+                    {/* Détection fidélité commander */}
+                    <div style={{ background: 'var(--verde-pale)', borderRadius: 3, padding: '16px 20px', marginBottom: 20, border: '1px solid rgba(27,94,32,0.2)' }}>
+                      {cmdClientDetecte ? (
+                        <div style={{ fontSize: 14, color: 'var(--verde-m)', fontFamily: 'Jost' }}>
+                          🎁 Bonjour <strong>{cmdClientDetecte.nom}</strong> ! Vous gagnerez environ <strong>{cmdClientDetecte.pts} points</strong> avec cette commande ✓
+                        </div>
+                      ) : (
+                        <div>
+                          <div style={{ fontSize: 13, color: 'var(--verde-m)', fontFamily: 'Jost', fontWeight: 600, marginBottom: 8 }}>
+                            🎁 Connectez-vous pour gagner des points fidélité !
+                          </div>
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            <input type="tel" className="form-input" placeholder="Votre téléphone" value={cmdForm.telephone}
+                              onChange={e => { setCmdForm(p => ({ ...p, telephone: e.target.value })); setCmdClientDetecte(null) }}
+                              style={{ flex: 1, fontSize: 13 }} />
+                            <button type="button" onClick={async () => {
+                              if (!cmdForm.telephone.trim()) return
+                              setCmdTelSearch(true)
+                              const { data } = await supabase.from('clients').select('id,nom,points_fidelite').eq('telephone', cmdForm.telephone.trim()).single()
+                              setCmdTelSearch(false)
+                              if (data) {
+                                const estPoints = Math.round(cmdItems.reduce((s, i) => s + i.qty * (i.taille==='pala'?i.prixPala:i.prix33), 0))
+                                setCmdClientDetecte({ nom: (data as {nom:string;points_fidelite:number}).nom, pts: estPoints || 0 })
+                              }
+                            }} className="btn-verde" disabled={cmdTelSearch} style={{ flexShrink: 0, padding: '10px 16px', fontSize: 12 }}>
+                              {cmdTelSearch ? '...' : 'Vérifier'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                     {/* Infos de base */}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 24 }}>
                       <div>
@@ -971,7 +1002,21 @@ export default function HomePage() {
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6, letterSpacing: 0.5 }}>Téléphone *</label>
-                    <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={resaForm.telephone} onChange={e => setResaForm(p => ({ ...p, telephone: e.target.value }))} required />
+                    <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={resaForm.telephone} onChange={e => setResaForm(p => ({ ...p, telephone: e.target.value }))} required
+                      onBlur={async () => {
+                        if (resaForm.telephone.trim().length >= 10) {
+                          const { data } = await supabase.from('clients').select('nom').eq('telephone', resaForm.telephone.trim()).single()
+                          if (data) {
+                            setResaClientDetecte(data as {nom:string})
+                            setResaForm(p => ({ ...p, nom: (data as {nom:string}).nom }))
+                          }
+                        }
+                      }} />
+                    {resaClientDetecte && (
+                      <div style={{ fontSize: 12, color: 'var(--verde-m)', fontFamily: 'Jost', marginTop: 6 }}>
+                        ✓ Bonjour {resaClientDetecte.nom} ! +5 points bonus pour cette réservation 🎁
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
@@ -1098,25 +1143,41 @@ export default function HomePage() {
       {/* AVIS CLIENTS */}
       <section style={{ padding: '100px 20px', background: 'var(--bianco-w)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 60 }}>
-            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 16 }}>
+          <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 8 }}>
               Ce que disent <em style={{ color: 'var(--rosso)' }}>nos clients</em>
             </h2>
+            {avisData.length > 0 && (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'var(--verde-pale)', padding: '6px 16px', borderRadius: 20, marginBottom: 8 }}>
+                <span style={{ color: 'var(--rosso)', fontSize: 14 }}>{'⭐'.repeat(Math.round(avisMoyenne))}</span>
+                <span style={{ fontFamily: 'Jost', fontSize: 13, color: 'var(--verde-m)', fontWeight: 600 }}>{avisMoyenne}/5 · {avisData.length} avis</span>
+              </div>
+            )}
             <div className="section-divider"></div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32 }}>
-            {[
-              { text: "La meilleure pizza de Touraine ! Roberto et sa famille nous accueillent comme des rois.", author: "Marie D.", ville: "Langeais" },
-              { text: "On vient tous les samedis depuis 3 ans. La Burrata est à tomber !", author: "Thomas & Julie", ville: "Bourgueil" },
-              { text: "Service impeccable d'André, cuisine généreuse de Roberto. Une vraie trattoria !", author: "Famille Moreau", ville: "Chinon" },
-            ].map(r => (
-              <div key={r.author} style={{ background: 'white', padding: 32, borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', borderLeft: '3px solid var(--verde)' }}>
-                <div style={{ color: 'var(--rosso)', fontSize: 18, marginBottom: 16 }}>⭐⭐⭐⭐⭐</div>
-                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 19, fontStyle: 'italic', color: 'var(--nero-m)', lineHeight: 1.6, marginBottom: 20 }}>&quot;{r.text}&quot;</p>
-                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--rosso)', fontFamily: 'Jost' }}>{r.author}</div>
-                <div style={{ fontSize: 12, color: 'var(--grigio)' }}>{r.ville}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32, marginBottom: 32 }}>
+            {(avisData.length > 0 ? avisData.slice(0, 3) : [
+              { id:'1', texte: "La meilleure pizza de Touraine ! Roberto et sa famille nous accueillent comme des rois.", auteur: "Marie L.", ville: "Langeais", note: 5, source: 'facebook' },
+              { id:'2', texte: "On vient tous les samedis depuis 3 ans. La Burrata est à tomber !", auteur: "Thomas B.", ville: "Bourgueil", note: 5, source: 'facebook' },
+              { id:'3', texte: "Service impeccable d'André, cuisine généreuse de Roberto. Une vraie trattoria !", auteur: "Famille Moreau", ville: "Chinon", note: 5, source: 'facebook' },
+            ]).map(r => (
+              <div key={r.id} style={{ background: 'white', padding: 32, borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', borderLeft: '3px solid var(--verde)' }}>
+                <div style={{ color: 'var(--rosso)', fontSize: 16, marginBottom: 12 }}>{'⭐'.repeat(r.note)}</div>
+                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 19, fontStyle: 'italic', color: 'var(--nero-m)', lineHeight: 1.6, marginBottom: 16 }}>&quot;{r.texte}&quot;</p>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--rosso)', fontFamily: 'Jost' }}>{r.auteur ?? 'Client Roma'}</div>
+                {r.ville && <div style={{ fontSize: 12, color: 'var(--grigio)' }}>{r.ville}</div>}
+                {r.source === 'facebook' && <div style={{ fontSize: 11, color: 'var(--grigio)', marginTop: 4, fontFamily: 'Jost' }}>via Facebook</div>}
               </div>
             ))}
+          </div>
+          <div style={{ textAlign: 'center', display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <a href="https://www.facebook.com/p/Roma-Pizzeria-Restaurant-61576928932483/" target="_blank" rel="noopener noreferrer"
+              className="btn-secondary" style={{ textDecoration: 'none', fontSize: 13 }}>
+              Voir tous les avis sur Facebook →
+            </a>
+            <Link href="/avis" className="btn-verde" style={{ textDecoration: 'none', fontSize: 13 }}>
+              Laisser un avis (+10 pts)
+            </Link>
           </div>
         </div>
       </section>

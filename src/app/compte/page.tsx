@@ -14,14 +14,19 @@ const NIVEAUX = [
 ]
 
 const RECOMPENSES = [
-  { icon: '🥤', label: 'Boisson offerte', points: 30 },
-  { icon: '🥗', label: 'Salade offerte', points: 50 },
-  { icon: '🍷', label: 'Verre de vin offert', points: 40 },
-  { icon: '🍮', label: 'Dessert offert', points: 50 },
-  { icon: '🍕', label: 'Pizza Margherita offerte', points: 80 },
-  { icon: '🍕', label: 'Pizza Reine offerte', points: 80 },
-  { icon: '🍕', label: 'Pizza San Daniele offerte', points: 100 },
-  { icon: '🎉', label: 'Menu complet offert', points: 150 },
+  { icon: '🥤', label: 'Boisson offerte', points: 8 },
+  { icon: '🥗', label: 'Salade verte offerte', points: 16 },
+  { icon: '🥗', label: 'Salade Caprésé offerte', points: 28 },
+  { icon: '🍮', label: 'Dessert maison offert', points: 22 },
+  { icon: '🍷', label: 'Verre de vin offert', points: 20 },
+  { icon: '🍕', label: 'Pizza Margherita offerte', points: 32 },
+  { icon: '🍕', label: 'Pizza Reine offerte', points: 40 },
+  { icon: '🍕', label: 'Pizza 4 Fromages offerte', points: 40 },
+  { icon: '🍕', label: 'Pizza Reggina offerte', points: 48 },
+  { icon: '🍕', label: 'Pizza Bolognese offerte', points: 56 },
+  { icon: '🍕', label: 'Pizza Valtellina offerte', points: 60 },
+  { icon: '🎉', label: 'Menu Duo offert (2 pizzas)', points: 112 },
+  { icon: '🎉', label: 'Formule Famille offerte', points: 220 },
 ]
 
 function getNiveau(visites: number) {
@@ -145,7 +150,7 @@ export default function ComptePage() {
 
   const visites = reservations.filter(r => r.statut === 'honoree').length
   const niveau = getNiveau(visites)
-  const maxPoints = 500
+  const maxPoints = 60
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bianco-w)', display: 'flex', flexDirection: 'column' }}>
