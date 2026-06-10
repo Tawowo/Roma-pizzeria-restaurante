@@ -10,6 +10,7 @@ interface LigneCommande {
   quantite: number
   taille?: string
   commentaire?: string
+  statut?: string
   ajout_apres?: boolean
   created_at?: string
 }
@@ -102,7 +103,7 @@ export default function CuisinePage() {
       const { data, error } = await supabase
         .from('commandes')
         .select('*, lignes_commande(*)')
-        .eq('statut', 'en_preparation')
+        .in('statut', ['en_cours', 'en_preparation'])
         .order('created_at')
       if (error) throw error
       setCommandes(data ?? [])
@@ -143,9 +144,16 @@ export default function CuisinePage() {
     prevCountRef.current = commandes.length
   }, [commandes.length, soundOn])
 
-  const marquerPrete = async (id: string) => {
+  const marquerPrete = async (cmd: Commande) => {
     try {
-      await supabase.from('commandes').update({ statut: 'prete' }).eq('id', id)
+      // Mark all cuisine lines as pret
+      const ligneIds = cmd.lignes_commande
+        .filter(l => isArticleCuisine(l.article_nom))
+        .map(l => l.id)
+      if (ligneIds.length > 0) {
+        await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
+      }
+      await supabase.from('commandes').update({ statut: 'pret_encaisser' }).eq('id', cmd.id)
       await fetchCommandes()
     } catch (err) {
       console.error('Update error:', err)
@@ -162,8 +170,14 @@ export default function CuisinePage() {
   }
 
   // Filtrer les commandes (exclure boissons/vins) et trier (urgents en premier)
+  // Lignes visibles: envoye_cuisine, ou pas de statut (rétrocompatibilité), exclure pret/servi
+  const lignesCuisine = (cmd: Commande) =>
+    cmd.lignes_commande.filter(l =>
+      isArticleCuisine(l.article_nom) && (!l.statut || l.statut === 'envoye_cuisine')
+    )
+
   const commandesFiltrees = commandes.filter(cmd =>
-    cmd.lignes_commande.some(l => isArticleCuisine(l.article_nom))
+    lignesCuisine(cmd).length > 0
   )
 
   const commandesTri = [...commandesFiltrees].sort((a, b) => {
@@ -252,10 +266,9 @@ export default function CuisinePage() {
                   </span>
                 </div>
 
-                {/* Articles (sans boissons/vins) */}
+                {/* Articles (sans boissons/vins, envoye_cuisine seulement) */}
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, flex: 1 }}>
-                  {cmd.lignes_commande
-                    .filter(l => isArticleCuisine(l.article_nom))
+                  {lignesCuisine(cmd)
                     .map(l => (
                       <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -294,7 +307,7 @@ export default function CuisinePage() {
                     {urgents.has(cmd.id) ? '⚠️ URGENT ✓' : '⚠️ URGENT'}
                   </button>
                   <button
-                    onClick={() => marquerPrete(cmd.id)}
+                    onClick={() => marquerPrete(cmd)}
                     style={{ flex: 1, padding: '10px', background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
                   >
                     ✅ PRÊTE

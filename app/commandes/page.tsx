@@ -4,7 +4,8 @@ import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
-type StatutCmd = 'en_attente' | 'en_preparation' | 'prete' | 'payee' | 'annulee'
+type StatutCmd = 'brouillon' | 'en_cours' | 'pret_encaisser' | 'encaissee' | 'annulee'
+type LigneStatut = 'en_attente' | 'envoye_cuisine' | 'pret' | 'servi'
 type TypeCmd = 'sur_place' | 'a_emporter'
 type Zone = 'rdc' | 'etage' | 'terrasse'
 type Taille = '33cm' | 'Pala' | 'Calzone' | ''
@@ -44,6 +45,7 @@ interface LigneCmd {
   quantite: number
   taille?: string
   commentaire?: string
+  statut?: LigneStatut
   prix_unitaire: number
   ajout_apres?: boolean
   created_at?: string
@@ -95,10 +97,10 @@ const ZONES: { key: Zone; label: string; icon: string }[] = [
 ]
 
 const STATUT_LABELS: Record<StatutCmd, { label: string; tw: string }> = {
-  en_attente: { label: 'En attente', tw: 'bg-yellow-100 text-yellow-800' },
-  en_preparation: { label: 'En cuisine', tw: 'bg-blue-100 text-blue-800' },
-  prete: { label: 'Prête', tw: 'bg-green-100 text-green-800' },
-  payee: { label: 'Payée', tw: 'bg-gray-100 text-gray-600' },
+  brouillon: { label: 'Brouillon', tw: 'bg-gray-100 text-gray-600' },
+  en_cours: { label: 'En cuisine', tw: 'bg-blue-100 text-blue-800' },
+  pret_encaisser: { label: 'Prête', tw: 'bg-orange-100 text-orange-800' },
+  encaissee: { label: 'Encaissée', tw: 'bg-gray-100 text-gray-500' },
   annulee: { label: 'Annulée', tw: 'bg-red-100 text-red-800' },
 }
 
@@ -146,7 +148,10 @@ export default function CommandesPage() {
   const [saving, setSaving] = useState(false)
   const [errNom, setErrNom] = useState('')
   const [panierEnvoiSelectionne, setPanierEnvoiSelectionne] = useState<Set<number>>(new Set())
+  const [existingCmdId, setExistingCmdId] = useState<string | null>(null)
 
+  // Modal detail table occupée
+  const [modalDetail, setModalDetail] = useState<CommandeActive | null>(null)
   // Modal encaissement
   const [modalEncaiss, setModalEncaiss] = useState<CommandeActive | null>(null)
   const [modePaiement, setModePaiement] = useState<ModePaiement>('cb')
@@ -175,13 +180,13 @@ export default function CommandesPage() {
         const staticTables: TableVirtuelle[] = Array.from({ length: 12 }, (_, i) => {
           const num = i + 1
           const z: Zone = num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse'
-          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === num && !['payee', 'annulee'].includes(c.statut))
+          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === num && !['encaissee', 'annulee'].includes(c.statut))
           return { num, zone: z, statut: cmdActive ? (cmdActive.statut as StatutCmd) : 'libre', commande: cmdActive }
         })
         setTables(staticTables)
       } else {
         const tv: TableVirtuelle[] = tablesDB.map(t => {
-          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['payee', 'annulee'].includes(c.statut))
+          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['encaissee', 'annulee'].includes(c.statut))
           return { num: t.numero, zone: t.zone, statut: cmdActive ? (cmdActive.statut as StatutCmd) : 'libre', commande: cmdActive }
         })
         setTables(tv)
@@ -239,6 +244,7 @@ export default function CommandesPage() {
     setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
     setErrNom('')
     setPanierEnvoiSelectionne(new Set())
+    setExistingCmdId(null)
   }
 
   const ajouterAuPanier = (art: Article) => {
@@ -293,9 +299,48 @@ export default function CommandesPage() {
     setSaving(true)
     try {
       const total = calcTotal(panier, reduction)
+
+      // Adding articles to existing commande
+      if (existingCmdId) {
+        await supabase.from('lignes_commande').insert(
+          panierEnvoi.map(p => ({
+            commande_id: existingCmdId,
+            article_id: p.article.id,
+            article_nom: p.article.nom,
+            quantite: p.quantite,
+            taille: p.taille || null,
+            commentaire: p.commentaire || null,
+            prix_unitaire: p.article.prix,
+            statut: 'envoye_cuisine',
+            ajout_apres: true
+          }))
+        )
+        if (panierAttente.length > 0) {
+          await supabase.from('lignes_commande').insert(
+            panierAttente.map(p => ({
+              commande_id: existingCmdId,
+              article_id: p.article.id,
+              article_nom: p.article.nom,
+              quantite: p.quantite,
+              taille: p.taille || null,
+              commentaire: p.commentaire || null,
+              prix_unitaire: p.article.prix,
+              statut: 'en_attente',
+              ajout_apres: true
+            }))
+          )
+        }
+        setModalTable(null)
+        setExistingCmdId(null)
+        setPanierEnvoiSelectionne(new Set())
+        fetchTout()
+        setSaving(false)
+        return
+      }
+
       const { data: cmd } = await supabase.from('commandes').insert([{
         type: 'sur_place',
-        statut: 'en_preparation',
+        statut: 'en_cours',
         nom_client: nomClient.trim(),
         telephone: telClient,
         table_numero: modalTable?.num,
@@ -322,6 +367,7 @@ export default function CommandesPage() {
               taille: p.taille || null,
               commentaire: p.commentaire || null,
               prix_unitaire: p.article.prix,
+              statut: 'envoye_cuisine',
               ajout_apres: false
             }))
           )
@@ -337,6 +383,7 @@ export default function CommandesPage() {
               taille: p.taille || null,
               commentaire: p.commentaire || null,
               prix_unitaire: p.article.prix,
+              statut: 'en_attente',
               ajout_apres: true
             }))
           )
@@ -356,12 +403,12 @@ export default function CommandesPage() {
     try {
       const total = calcTotal(panier, reduction)
       const { data: cmd } = await supabase.from('commandes').insert([{
-        type: 'sur_place', statut: 'en_attente', nom_client: nomClient.trim(), telephone: telClient,
+        type: 'sur_place', statut: 'brouillon', nom_client: nomClient.trim(), telephone: telClient,
         table_numero: modalTable?.num, zone: modalTable?.zone, couverts, total, client_id: clientFidele?.id || null,
       }]).select().single()
       if (cmd) {
         await supabase.from('lignes_commande').insert(
-          panier.map(p => ({ commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix }))
+          panier.map(p => ({ commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix, statut: 'en_attente' }))
         )
       }
       setModalTable(null)
@@ -373,7 +420,7 @@ export default function CommandesPage() {
     if (!modalEncaiss) return
     setSaving(true)
     try {
-      await supabase.from('commandes').update({ statut: 'payee', mode_paiement: modePaiement }).eq('id', modalEncaiss.id)
+      await supabase.from('commandes').update({ statut: 'encaissee', mode_paiement: modePaiement }).eq('id', modalEncaiss.id)
       if (clientFidele && modalEncaiss.total > 0) {
         const pts = Math.floor(modalEncaiss.total)
         await supabase.from('mouvements_fidelite').insert([{ client_id: clientFidele.id, points: pts, motif: `Commande #${modalEncaiss.numero}` }])
@@ -384,12 +431,30 @@ export default function CommandesPage() {
     } catch (err) { console.error(err) } finally { setSaving(false) }
   }
 
+  const ajouterArticlesTable = (cmd: CommandeActive) => {
+    const t = tables.find(tbl => tbl.num === cmd.table_numero)
+    if (!t) return
+    setModalDetail(null)
+    setModalTable(t)
+    setEtape(2)
+    setNomClient(cmd.nom_client ?? '')
+    setTelClient('')
+    setCouverts(2)
+    setClientFidele(null)
+    setPanier([])
+    setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
+    setPanierEnvoiSelectionne(new Set())
+    // Store the existing commande id to add lines to it
+    setExistingCmdId(cmd.id)
+  }
+
   const tablesByZone = tables.filter(t => t.zone === zone)
-  const commandesEmporter = commandes.filter(c => c.type === 'a_emporter')
+  const commandesEmporter = commandes.filter(c => c.type === 'a_emporter' && !['encaissee', 'annulee'].includes(c.statut))
 
   const tableCardClass = (statut: string) => {
     if (statut === 'libre') return 'bg-green-50 border-green-300 hover:bg-green-100 cursor-pointer'
-    if (statut === 'prete') return 'bg-orange-50 border-orange-300 cursor-pointer'
+    if (statut === 'pret_encaisser') return 'bg-orange-50 border-orange-400 cursor-pointer'
+    if (statut === 'reservee') return 'bg-blue-50 border-blue-300 cursor-pointer'
     return 'bg-red-50 border-red-300 cursor-pointer'
   }
 
@@ -434,12 +499,12 @@ export default function CommandesPage() {
                 key={t.num}
                 onClick={() => {
                   if (t.statut === 'libre') ouvrirModalNvCmd(t)
-                  else if (t.commande) { setModalEncaiss(t.commande); setModePaiement('cb'); setMontantRecu('') }
+                  else if (t.commande) { setModalDetail(t.commande); setModePaiement('cb'); setMontantRecu('') }
                 }}
                 className={`rounded-xl p-4 flex flex-col items-center gap-1 border-2 transition-all ${tableCardClass(t.statut)}`}
               >
-                <div className={`text-2xl font-bold ${t.statut === 'libre' ? 'text-green-700' : 'text-red-700'}`}>T{t.num}</div>
-                <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`text-2xl font-bold ${t.statut === 'libre' ? 'text-green-700' : t.statut === 'pret_encaisser' ? 'text-orange-700' : 'text-red-700'}`}>T{t.num}</div>
+                <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : t.statut === 'pret_encaisser' ? 'text-orange-600' : 'text-red-600'}`}>
                   {t.statut === 'libre' ? 'Libre' : STATUT_LABELS[t.statut as StatutCmd]?.label ?? t.statut}
                 </div>
                 {t.commande?.nom_client && <div className="text-xs text-gray-500 truncate w-full text-center">{t.commande.nom_client}</div>}
@@ -449,7 +514,7 @@ export default function CommandesPage() {
 
           {/* Liste commandes sur place */}
           <div className="space-y-2">
-            {commandes.filter(c => c.type === 'sur_place').map(cmd => (
+            {commandes.filter(c => c.type === 'sur_place' && !['encaissee', 'annulee'].includes(c.statut)).map(cmd => (
               <CommandeRow key={cmd.id} cmd={cmd} onEncaisser={() => { setModalEncaiss(cmd); setModePaiement('cb'); setMontantRecu('') }} onUpdate={fetchTout} />
             ))}
           </div>
@@ -680,6 +745,71 @@ export default function CommandesPage() {
         </div>
       )}
 
+      {/* ===== MODAL TABLE OCCUPÉE ===== */}
+      {modalDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0D5C5]">
+              <h2 className="text-lg font-bold">Table {modalDetail.table_numero} — {modalDetail.nom_client}</h2>
+              <button onClick={() => setModalDetail(null)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Articles envoyés en cuisine */}
+              {(modalDetail.lignes ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-2">En cuisine / Prêts</h4>
+                  <div className="space-y-1">
+                    {(modalDetail.lignes ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').map(l => (
+                      <div key={l.id} className="flex justify-between text-sm py-1 border-b border-[#F0EBE0]">
+                        <span className={l.statut === 'pret' ? 'line-through text-gray-400' : ''}>
+                          {l.quantite}× {l.article_nom}{l.taille ? ` (${l.taille})` : ''}
+                          {l.commentaire && <span className="text-xs text-[#555] ml-1">— {l.commentaire}</span>}
+                        </span>
+                        <span className="ml-2">
+                          {l.statut === 'pret' && <span className="text-green-600 text-xs font-medium">✓ Prêt</span>}
+                          <span className="text-[#555] ml-2">{(l.prix_unitaire * l.quantite).toFixed(2)} €</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Articles en attente (pas encore envoyés) */}
+              {(modalDetail.lignes ?? []).filter(l => l.statut === 'en_attente').length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2">En attente d&apos;envoi</h4>
+                  <div className="space-y-1">
+                    {(modalDetail.lignes ?? []).filter(l => l.statut === 'en_attente').map(l => (
+                      <div key={l.id} className="flex justify-between text-sm py-1 border-b border-[#F0EBE0]">
+                        <span className="text-yellow-700">{l.quantite}× {l.article_nom}{l.taille ? ` (${l.taille})` : ''}</span>
+                        <span className="text-[#555]">{(l.prix_unitaire * l.quantite).toFixed(2)} €</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="border-t border-[#E0D5C5] pt-3 font-bold text-[#B71C1C]">
+                Total : {modalDetail.total?.toFixed(2)} €
+              </div>
+              <div className="flex gap-3 flex-wrap">
+                <button
+                  onClick={() => ajouterArticlesTable(modalDetail)}
+                  className="flex-1 bg-[#1B5E20] hover:bg-[#2E7D32] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
+                  + Ajouter des articles
+                </button>
+                {(modalDetail.statut === 'pret_encaisser' || modalDetail.statut === 'en_cours') && (
+                  <button
+                    onClick={() => { setModalEncaiss(modalDetail); setModalDetail(null); setModePaiement('cb'); setMontantRecu('') }}
+                    className="flex-1 bg-[#B71C1C] hover:bg-[#C62828] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
+                    💳 Encaisser
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL ENCAISSEMENT ===== */}
       {modalEncaiss && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -746,13 +876,13 @@ export default function CommandesPage() {
 }
 
 function CommandeRow({ cmd, onEncaisser, onUpdate }: { cmd: CommandeActive; onEncaisser: () => void; onUpdate: () => void }) {
-  const s = STATUT_LABELS[cmd.statut] ?? STATUT_LABELS.en_attente
+  const s = STATUT_LABELS[cmd.statut] ?? STATUT_LABELS.brouillon
   const updateStatut = async (statut: StatutCmd) => {
     try { await supabase.from('commandes').update({ statut }).eq('id', cmd.id); onUpdate() } catch { /* skip */ }
   }
   const NEXT_STATUT: Partial<Record<StatutCmd, { statut: StatutCmd; label: string }>> = {
-    en_attente: { statut: 'en_preparation', label: '→ En cuisine' },
-    en_preparation: { statut: 'prete', label: '→ Prête' },
+    brouillon: { statut: 'en_cours', label: '→ En cuisine' },
+    en_cours: { statut: 'pret_encaisser', label: '→ Prête' },
   }
   const next = NEXT_STATUT[cmd.statut]
   return (
@@ -772,7 +902,7 @@ function CommandeRow({ cmd, onEncaisser, onUpdate }: { cmd: CommandeActive; onEn
             {next.label}
           </button>
         )}
-        {cmd.statut === 'prete' && (
+        {(cmd.statut === 'pret_encaisser' || cmd.statut === 'en_cours') && (
           <button onClick={onEncaisser}
             className="px-3 py-1 rounded text-xs font-medium bg-[#B71C1C] text-white">
             💳 Encaisser
