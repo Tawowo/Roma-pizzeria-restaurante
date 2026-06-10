@@ -10,12 +10,12 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Roma Pizzeria Restaurante | Savigné-sur-Lathan',
+  title: 'Roma Pizzeria Restaurant | Savigné-sur-Lathan',
   description: 'Pizzeria italienne authentique à Savigné-sur-Lathan (37). Four à bois, produits frais, recettes de famille. Réservez votre table en ligne.',
   keywords: 'pizzeria, restaurant italien, Savigné-sur-Lathan, Indre-et-Loire, pizza four à bois',
   manifest: '/manifest.json',
   openGraph: {
-    title: 'Roma Pizzeria Restaurante | Savigné-sur-Lathan',
+    title: 'Roma Pizzeria Restaurant | Savigné-sur-Lathan',
     description: 'Pizzeria italienne authentique à Savigné-sur-Lathan (37). Four à bois, produits frais, recettes de famille.',
     locale: 'fr_FR',
     type: 'website',
@@ -37,7 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
           "@context": "https://schema.org",
           "@type": "Restaurant",
-          "name": "Roma Pizzeria Restaurante",
+          "name": "Roma Pizzeria Restaurant",
           "address": { "@type": "PostalAddress", "streetAddress": "20 place Jacques du Bellay", "postalCode": "37420", "addressLocality": "Savigné-sur-Lathan", "addressCountry": "FR" },
           "telephone": "+33668366298",
           "servesCuisine": "Italian",

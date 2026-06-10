@@ -24,7 +24,7 @@ export default function MentionsLegalesPage() {
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>1. Éditeur du site</h2>
           <p style={{ fontSize: 15, lineHeight: 2, color: 'var(--nero-m)' }}>
-            <strong>Roma Pizzeria Restaurante</strong><br />
+            <strong>Roma Pizzeria Restaurant</strong><br />
             Forme juridique : Entreprise individuelle<br />
             Siège social : 20 place Jacques du Bellay, 37420 Savigné-sur-Lathan<br />
             Téléphone : <a href="tel:0668366298" style={{ color: 'var(--rosso)' }}>06 68 36 62 98</a><br />
@@ -49,14 +49,14 @@ export default function MentionsLegalesPage() {
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>3. Propriété intellectuelle</h2>
           <p style={{ fontSize: 15, lineHeight: 1.8, color: 'var(--nero-m)' }}>
-            L&apos;ensemble du contenu de ce site (textes, images, logos, graphiques) est protégé par le droit d&apos;auteur. Toute reproduction, même partielle, est interdite sans autorisation préalable de Roma Pizzeria Restaurante.
+            L&apos;ensemble du contenu de ce site (textes, images, logos, graphiques) est protégé par le droit d&apos;auteur. Toute reproduction, même partielle, est interdite sans autorisation préalable de Roma Pizzeria Restaurant.
           </p>
         </section>
 
         <section style={{ marginBottom: 40 }}>
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>4. Limitation de responsabilité</h2>
           <p style={{ fontSize: 15, lineHeight: 1.8, color: 'var(--nero-m)' }}>
-            Roma Pizzeria Restaurante s&apos;efforce de maintenir les informations du site à jour (horaires, menu, tarifs). Cependant, des modifications peuvent intervenir sans préavis. Nous déclinons toute responsabilité pour les inexactitudes éventuelles.
+            Roma Pizzeria Restaurant s&apos;efforce de maintenir les informations du site à jour (horaires, menu, tarifs). Cependant, des modifications peuvent intervenir sans préavis. Nous déclinons toute responsabilité pour les inexactitudes éventuelles.
           </p>
         </section>
 
@@ -78,7 +78,7 @@ export default function MentionsLegalesPage() {
       </main>
 
       <footer style={{ background: 'var(--nero)', padding: '24px 20px', textAlign: 'center' }}>
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'Jost' }}>© 2024 Roma Pizzeria Restaurante · Savigné-sur-Lathan</p>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'Jost' }}>© 2024 Roma Pizzeria Restaurant · Savigné-sur-Lathan</p>
       </footer>
     </div>
   )

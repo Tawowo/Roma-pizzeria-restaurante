@@ -1249,7 +1249,7 @@ export default function HomePage() {
           </div>
         </div>
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '20px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, maxWidth: 1200, margin: '0 auto' }}>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'Jost' }}>© 2026 Roma Pizzeria Restaurante · Tous droits réservés</span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)', fontFamily: 'Jost' }}>© 2026 Roma Pizzeria Restaurant · Tous droits réservés</span>
           <div style={{ display: 'flex', gap: 24 }}>
             {[{ l: 'Politique de confidentialité', h: '/confidentialite' }, { l: 'Mentions légales', h: '/mentions-legales' }].map(i => (
               <Link key={i.l} href={i.h} style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', textDecoration: 'none', fontFamily: 'Jost' }}>{i.l}</Link>

@@ -85,7 +85,7 @@ const fr = {
   footer_reserver: 'Réserver',
   footer_commander: 'Commander',
   footer_compte: 'Mon compte',
-  footer_copyright: '© 2025 Roma Pizzeria Restaurante · Savigné-sur-Lathan',
+  footer_copyright: '© 2025 Roma Pizzeria Restaurant · Savigné-sur-Lathan',
   footer_address: '20 place Jacques du Bellay, 37420 Savigné-sur-Lathan',
   footer_phone: '06 68 36 62 98',
 
@@ -191,7 +191,7 @@ const it: Translations = {
   footer_reserver: 'Prenotare',
   footer_commander: 'Ordinare',
   footer_compte: 'Il mio account',
-  footer_copyright: '© 2025 Roma Pizzeria Restaurante · Savigné-sur-Lathan',
+  footer_copyright: '© 2025 Roma Pizzeria Restaurant · Savigné-sur-Lathan',
   footer_address: '20 place Jacques du Bellay, 37420 Savigné-sur-Lathan',
   footer_phone: '06 68 36 62 98',
 
@@ -292,7 +292,7 @@ const en: Translations = {
   footer_reserver: 'Book',
   footer_commander: 'Order',
   footer_compte: 'My account',
-  footer_copyright: '© 2025 Roma Pizzeria Restaurante · Savigné-sur-Lathan',
+  footer_copyright: '© 2025 Roma Pizzeria Restaurant · Savigné-sur-Lathan',
   footer_address: '20 place Jacques du Bellay, 37420 Savigné-sur-Lathan',
   footer_phone: '06 68 36 62 98',
 

@@ -432,7 +432,7 @@ export default function ComptePage() {
       </div>
 
       <footer style={{ background: 'var(--nero)', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '20px', textAlign: 'center' }}>
-        <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>© 2026 Roma Pizzeria Restaurante</p>
+        <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.2)' }}>© 2026 Roma Pizzeria Restaurant</p>
       </footer>
     </div>
   )
