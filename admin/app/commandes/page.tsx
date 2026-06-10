@@ -17,12 +17,14 @@ interface TableResto {
   zone: Zone
   capacite: number
   actif: boolean
+  statut?: string
+  commande_id?: string
 }
 
 interface TableVirtuelle {
   num: number
   zone: Zone
-  statut: 'libre' | StatutCmd
+  statut: 'libre' | 'occupee' | 'pret_encaisser' | 'reservee' | StatutCmd
   commande?: CommandeActive
 }
 
@@ -168,28 +170,28 @@ export default function CommandesPage() {
       const cmds: CommandeActive[] = (cmdData ?? []) as CommandeActive[]
       setCommandes(cmds)
 
-      // Tables
-      let tablesDB: TableResto[] = []
-      try {
-        const { data } = await supabase.from('tables_restaurant').select('*').eq('actif', true).order('numero')
-        tablesDB = (data ?? []) as TableResto[]
-      } catch { /* table inexistante */ }
+      const { data: tablesDB } = await supabase
+        .from('tables_restaurant')
+        .select('*')
+        .eq('actif', true)
+        .order('numero')
 
-      if (tablesDB.length === 0) {
-        // Grille statique T1-T12
+      if (tablesDB && tablesDB.length > 0) {
+        const tv: TableVirtuelle[] = (tablesDB as TableResto[]).map(t => {
+          const cmdActive = cmds.find(c => c.id === t.commande_id)
+            ?? cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['encaissee', 'annulee'].includes(c.statut))
+          const statut = (t.statut ?? (cmdActive ? 'occupee' : 'libre')) as TableVirtuelle['statut']
+          return { num: t.numero, zone: t.zone, statut: cmdActive ? statut : 'libre', commande: cmdActive }
+        })
+        setTables(tv)
+      } else {
         const staticTables: TableVirtuelle[] = Array.from({ length: 12 }, (_, i) => {
           const num = i + 1
           const z: Zone = num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse'
           const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === num && !['encaissee', 'annulee'].includes(c.statut))
-          return { num, zone: z, statut: cmdActive ? (cmdActive.statut as StatutCmd) : 'libre', commande: cmdActive }
+          return { num, zone: z, statut: cmdActive ? 'occupee' : 'libre', commande: cmdActive }
         })
         setTables(staticTables)
-      } else {
-        const tv: TableVirtuelle[] = tablesDB.map(t => {
-          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['encaissee', 'annulee'].includes(c.statut))
-          return { num: t.numero, zone: t.zone, statut: cmdActive ? (cmdActive.statut as StatutCmd) : 'libre', commande: cmdActive }
-        })
-        setTables(tv)
       }
     } catch (err) {
       console.error(err)
@@ -356,43 +358,44 @@ export default function CommandesPage() {
       }]).select().single()
 
       if (cmd) {
-        // Lignes envoyées en cuisine
-        if (panierEnvoi.length > 0) {
-          await supabase.from('lignes_commande').insert(
-            panierEnvoi.map(p => ({
-              commande_id: cmd.id,
-              article_id: p.article.id,
-              article_nom: p.article.nom,
-              quantite: p.quantite,
-              taille: p.taille || null,
-              commentaire: p.commentaire || null,
-              prix_unitaire: p.article.prix,
-              statut: 'envoye_cuisine',
-              ajout_apres: false
-            }))
-          )
+        const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
+        const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean) => {
+          const cat = categories.find(c => c.id === p.article.categorie_id)
+          const nomCat = cat?.nom?.toLowerCase() ?? ''
+          const pourCuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+          return {
+            commande_id: cmd.id,
+            article_id: p.article.id,
+            article_nom: p.article.nom,
+            quantite: p.quantite,
+            taille: p.taille || null,
+            commentaire: p.commentaire || null,
+            prix_unitaire: p.article.prix,
+            categorie_nom: cat?.nom || null,
+            pour_cuisine: pourCuisine,
+            statut,
+            ajout_apres,
+          }
         }
-        // Lignes en attente (à envoyer plus tard)
+        if (panierEnvoi.length > 0) {
+          await supabase.from('lignes_commande').insert(panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', false)))
+        }
         if (panierAttente.length > 0) {
-          await supabase.from('lignes_commande').insert(
-            panierAttente.map(p => ({
-              commande_id: cmd.id,
-              article_id: p.article.id,
-              article_nom: p.article.nom,
-              quantite: p.quantite,
-              taille: p.taille || null,
-              commentaire: p.commentaire || null,
-              prix_unitaire: p.article.prix,
-              statut: 'en_attente',
-              ajout_apres: true
-            }))
-          )
+          await supabase.from('lignes_commande').insert(panierAttente.map(p => makeLigne(p, 'en_attente', true)))
+        }
+        // ✅ Mettre la table en occupée
+        if (modalTable?.num) {
+          await supabase
+            .from('tables_restaurant')
+            .update({ statut: 'occupee', commande_id: cmd.id })
+            .eq('numero', modalTable.num)
+            .eq('zone', modalTable.zone)
         }
       }
 
       setModalTable(null)
       setPanierEnvoiSelectionne(new Set())
-      fetchTout()
+      await fetchTout()
     } catch (err) { console.error(err) } finally { setSaving(false) }
   }
 
@@ -407,12 +410,24 @@ export default function CommandesPage() {
         table_numero: modalTable?.num, zone: modalTable?.zone, couverts, total, client_id: clientFidele?.id || null,
       }]).select().single()
       if (cmd) {
+        const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
         await supabase.from('lignes_commande').insert(
-          panier.map(p => ({ commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix, statut: 'en_attente' }))
+          panier.map(p => {
+            const cat = categories.find(c => c.id === p.article.categorie_id)
+            const nomCat = cat?.nom?.toLowerCase() ?? ''
+            return { commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix, categorie_nom: cat?.nom || null, pour_cuisine: !CATS_PAS_CUISINE.some(c => nomCat.includes(c)), statut: 'en_attente' }
+          })
         )
+        if (modalTable?.num) {
+          await supabase
+            .from('tables_restaurant')
+            .update({ statut: 'occupee', commande_id: cmd.id })
+            .eq('numero', modalTable.num)
+            .eq('zone', modalTable.zone)
+        }
       }
       setModalTable(null)
-      fetchTout()
+      await fetchTout()
     } catch (err) { console.error(err) } finally { setSaving(false) }
   }
 
@@ -421,6 +436,13 @@ export default function CommandesPage() {
     setSaving(true)
     try {
       await supabase.from('commandes').update({ statut: 'encaissee', mode_paiement: modePaiement }).eq('id', modalEncaiss.id)
+      // Libérer la table
+      if (modalEncaiss.table_numero) {
+        await supabase
+          .from('tables_restaurant')
+          .update({ statut: 'libre', commande_id: null })
+          .eq('numero', modalEncaiss.table_numero)
+      }
       if (clientFidele && modalEncaiss.total > 0) {
         const pts = Math.floor(modalEncaiss.total)
         await supabase.from('mouvements_fidelite').insert([{ client_id: clientFidele.id, points: pts, motif: `Commande #${modalEncaiss.numero}` }])
@@ -452,10 +474,10 @@ export default function CommandesPage() {
   const commandesEmporter = commandes.filter(c => c.type === 'a_emporter' && !['encaissee', 'annulee'].includes(c.statut))
 
   const tableCardClass = (statut: string) => {
-    if (statut === 'libre') return 'bg-green-50 border-green-300 hover:bg-green-100 cursor-pointer'
+    if (statut === 'libre') return 'bg-green-50 border-green-400 hover:bg-green-100 cursor-pointer'
     if (statut === 'pret_encaisser') return 'bg-orange-50 border-orange-400 cursor-pointer'
-    if (statut === 'reservee') return 'bg-blue-50 border-blue-300 cursor-pointer'
-    return 'bg-red-50 border-red-300 cursor-pointer'
+    if (statut === 'reservee') return 'bg-blue-50 border-blue-400 cursor-pointer'
+    return 'bg-red-50 border-red-400 cursor-pointer'
   }
 
   const articlesFiltres = articles.filter(a =>
@@ -503,9 +525,9 @@ export default function CommandesPage() {
                 }}
                 className={`rounded-xl p-4 flex flex-col items-center gap-1 border-2 transition-all ${tableCardClass(t.statut)}`}
               >
-                <div className={`text-2xl font-bold ${t.statut === 'libre' ? 'text-green-700' : t.statut === 'pret_encaisser' ? 'text-orange-700' : 'text-red-700'}`}>T{t.num}</div>
-                <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : t.statut === 'pret_encaisser' ? 'text-orange-600' : 'text-red-600'}`}>
-                  {t.statut === 'libre' ? 'Libre' : STATUT_LABELS[t.statut as StatutCmd]?.label ?? t.statut}
+                <div className={`text-2xl font-bold ${t.statut === 'libre' ? 'text-green-700' : (t.statut === 'pret_encaisser') ? 'text-orange-700' : 'text-red-700'}`}>T{t.num}</div>
+                <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : (t.statut === 'pret_encaisser') ? 'text-orange-600' : 'text-red-600'}`}>
+                  {t.statut === 'libre' ? '🟢 Libre' : t.statut === 'pret_encaisser' ? '🟠 À encaisser' : t.statut === 'reservee' ? '🔵 Réservée' : '🔴 Occupée'}
                 </div>
                 {t.commande?.nom_client && <div className="text-xs text-gray-500 truncate w-full text-center">{t.commande.nom_client}</div>}
               </div>
