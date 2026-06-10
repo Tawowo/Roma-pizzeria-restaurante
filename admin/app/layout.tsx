@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="flex min-h-screen">
             <Sidebar nom={session.nom} role={session.role} />
             <div className="flex-1 flex flex-col min-h-screen">
-              <header className="h-14 bg-white border-b border-[#E0D5C5] flex items-center px-6 shrink-0">
+              <header className="h-14 bg-white border-b border-[#E0D5C5] flex items-center px-6 pl-16 md:pl-6 shrink-0">
                 <span className="text-sm text-[#555555]">Bienvenue, <strong>{session.nom}</strong></span>
               </header>
               <main className="flex-1 p-6">{children}</main>
