@@ -444,9 +444,9 @@ export default function HomePage() {
                 color: 'var(--verde)'
               },
               {
-                icon: '🍽', name: 'André', role: "L'Accueil",
+                icon: '🍽', name: 'Andreï', role: "L'Accueil",
                 img: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400',
-                text: "André est le visage de Roma. Toujours souriant, il gère les réservations, les commandes et s'assure que chaque client reparte avec le sourire. C'est lui que vous entendez au téléphone !",
+                text: "Andreï est le visage de Roma. Toujours souriant, il gère les réservations, les commandes et s'assure que chaque client reparte avec le sourire. C'est lui que vous entendez au téléphone !",
                 color: 'var(--rosso)'
               },
             ].map(p => (
@@ -720,7 +720,7 @@ export default function HomePage() {
               <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
               <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--verde)', marginBottom: 12 }}>Commande envoyée !</h3>
               <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 24 }}>
-                André vous rappelle pour confirmer. 📞 06 68 36 62 98
+                Andreï vous rappelle pour confirmer. 📞 06 68 36 62 98
               </p>
               <button onClick={() => { setCmdSuccess(false); setCmdStep(1); setCmdItems([]); setCmdForm({ nom: '', telephone: '', date: '', heure: '', notes: '' }) }} className="btn-primary">Nouvelle commande</button>
             </div>
@@ -1156,7 +1156,7 @@ export default function HomePage() {
             {(avisData.length > 0 ? avisData.slice(0, 3) : [
               { id:'1', texte: "La meilleure pizza de Touraine ! Roberto et sa famille nous accueillent comme des rois.", auteur: "Marie L.", ville: "Langeais", note: 5, source: 'facebook' },
               { id:'2', texte: "On vient tous les samedis depuis 3 ans. La Burrata est à tomber !", auteur: "Thomas B.", ville: "Bourgueil", note: 5, source: 'facebook' },
-              { id:'3', texte: "Service impeccable d'André, cuisine généreuse de Roberto. Une vraie trattoria !", auteur: "Famille Moreau", ville: "Chinon", note: 5, source: 'facebook' },
+              { id:'3', texte: "Service impeccable d'Andreï, cuisine généreuse de Roberto. Une vraie trattoria !", auteur: "Famille Moreau", ville: "Chinon", note: 5, source: 'facebook' },
             ]).map(r => (
               <div key={r.id} style={{ background: 'white', padding: 32, borderRadius: 4, boxShadow: '0 2px 16px rgba(0,0,0,0.08)', borderLeft: '3px solid var(--verde)' }}>
                 <div style={{ color: 'var(--rosso)', fontSize: 16, marginBottom: 12 }}>{'⭐'.repeat(r.note)}</div>

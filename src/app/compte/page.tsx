@@ -328,7 +328,7 @@ export default function ComptePage() {
                   <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
                   <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--verde)', marginBottom: 8 }}>Votre bon de récompense</h3>
                   <div style={{ fontFamily: 'Jost', fontSize: 22, fontWeight: 700, color: 'var(--nero)', letterSpacing: 2, padding: '12px 20px', background: 'white', borderRadius: 3, display: 'inline-block', marginBottom: 12 }}>{bonCode}</div>
-                  <p style={{ fontSize: 13, color: 'var(--verde-m)', fontFamily: 'Jost' }}>Présentez ce code à André lors de votre prochaine visite ✓</p>
+                  <p style={{ fontSize: 13, color: 'var(--verde-m)', fontFamily: 'Jost' }}>Présentez ce code à Andreï lors de votre prochaine visite ✓</p>
                   <button onClick={() => setBonCode(null)} style={{ marginTop: 12, background: 'none', border: 'none', color: 'var(--grigio)', cursor: 'pointer', fontFamily: 'Jost', fontSize: 12, textDecoration: 'underline' }}>Fermer</button>
                 </div>
               )}
