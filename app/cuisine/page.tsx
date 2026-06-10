@@ -1,7 +1,7 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSession } from '@/lib/auth'
+import { getSession, clearSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
 interface LigneCommande {
@@ -25,6 +25,13 @@ interface Commande {
   nom_client?: string
   notes?: string
   lignes_commande: LigneCommande[]
+}
+
+const CATS_EXCLUES_CUISINE = ['boisson', 'boissons', 'vin', 'vins', 'soft', 'bière', 'biere']
+
+function isArticleCuisine(articleNom: string): boolean {
+  const nom = articleNom.toLowerCase()
+  return !CATS_EXCLUES_CUISINE.some(cat => nom.includes(cat))
 }
 
 function useTimer() {
@@ -70,10 +77,22 @@ function isAjoutApres(ligne: LigneCommande, commandeCreatedAt: string): boolean 
   return false
 }
 
+function cardStyle(cmd: Commande, urgents: Set<string>): React.CSSProperties {
+  const isUrgent = urgents.has(cmd.id)
+  const isEmporter = cmd.type === 'a_emporter'
+
+  if (isUrgent) return { background: '#2a1500', border: '2px solid #D4A843', borderRadius: 16, padding: 24 }
+  if (isEmporter) return { background: '#1a1500', border: '1px solid #F57F17', borderRadius: 16, padding: 24 }
+  return { background: cardBg(cmd.created_at), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }
+}
+
 export default function CuisinePage() {
   const router = useRouter()
   const [commandes, setCommandes] = useState<Commande[]>([])
   const [loading, setLoading] = useState(true)
+  const [urgents, setUrgents] = useState<Set<string>>(new Set())
+  const [soundOn, setSoundOn] = useState(true)
+  const prevCountRef = useRef(0)
   const tick = useTimer()
 
   const fetchCommandes = useCallback(async () => {
@@ -97,7 +116,6 @@ export default function CuisinePage() {
   useEffect(() => {
     const session = getSession()
     if (!session) { router.replace('/login'); return }
-    if (session.role !== 'roberto' && session.role !== 'monica') { router.replace('/reservations'); return }
     fetchCommandes()
   }, [router, fetchCommandes])
 
@@ -108,6 +126,23 @@ export default function CuisinePage() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchCommandes])
 
+  // Bip à chaque nouveau ticket
+  useEffect(() => {
+    if (soundOn && commandes.length > prevCountRef.current) {
+      try {
+        const ctx = new AudioContext()
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain); gain.connect(ctx.destination)
+        osc.frequency.value = 800
+        gain.gain.setValueAtTime(0.3, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+        osc.start(); osc.stop(ctx.currentTime + 0.3)
+      } catch { /* audio may not be available */ }
+    }
+    prevCountRef.current = commandes.length
+  }, [commandes.length, soundOn])
+
   const marquerPrete = async (id: string) => {
     try {
       await supabase.from('commandes').update({ statut: 'prete' }).eq('id', id)
@@ -117,47 +152,88 @@ export default function CuisinePage() {
     }
   }
 
+  const toggleUrgent = (id: string) => {
+    setUrgents(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // Filtrer les commandes (exclure boissons/vins) et trier (urgents en premier)
+  const commandesFiltrees = commandes.filter(cmd =>
+    cmd.lignes_commande.some(l => isArticleCuisine(l.article_nom))
+  )
+
+  const commandesTri = [...commandesFiltrees].sort((a, b) => {
+    const aUrgent = urgents.has(a.id) ? 0 : 1
+    const bUrgent = urgents.has(b.id) ? 0 : 1
+    if (aUrgent !== bUrgent) return aUrgent - bUrgent
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+
   // tick used to force re-render for timers
   void tick
 
   return (
     <div style={{ background: '#0A0A0A', minHeight: '100vh', color: '#F5F5F5' }}>
-      {/* Header minimal */}
+      {/* Header */}
       <div style={{ height: 48, background: '#1B5E20', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontFamily: 'serif', fontSize: 22, fontStyle: 'italic', color: '#D4A843', fontWeight: 700 }}>Roma</span>
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', letterSpacing: 2, textTransform: 'uppercase' }}>Cuisine</span>
         </div>
-        <button
-          onClick={() => router.push('/dashboard')}
-          style={{ padding: '4px 12px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: 12 }}
-        >
-          ← Dashboard
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Toggle son */}
+          <button
+            onClick={() => setSoundOn(v => !v)}
+            style={{ padding: '4px 10px', background: soundOn ? 'rgba(212,168,67,0.2)' : 'rgba(255,255,255,0.1)', border: `1px solid ${soundOn ? '#D4A843' : 'rgba(255,255,255,0.2)'}`, borderRadius: 6, color: soundOn ? '#D4A843' : 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 11 }}
+          >
+            {soundOn ? '🔔 Son ON' : '🔕 Son OFF'}
+          </button>
+          <button onClick={() => router.push('/reservations')}
+            style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: 11 }}>
+            📅 Réservations
+          </button>
+          <button onClick={() => router.push('/commandes')}
+            style={{ padding: '4px 10px', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: 'rgba(255,255,255,0.8)', cursor: 'pointer', fontSize: 11 }}>
+            🛒 Commandes
+          </button>
+          <button onClick={() => { clearSession(); router.push('/login') }}
+            style={{ padding: '4px 10px', background: 'rgba(183,28,28,0.3)', border: '1px solid rgba(183,28,28,0.5)', borderRadius: 6, color: 'rgba(255,100,100,0.9)', cursor: 'pointer', fontSize: 11 }}>
+            🚪 Déconnexion
+          </button>
+        </div>
       </div>
 
       <div style={{ padding: '24px' }}>
         {loading ? (
           <div style={{ color: '#555' }}>Chargement...</div>
-        ) : commandes.length === 0 ? (
+        ) : commandesTri.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 80, color: '#555', fontSize: 20 }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
             <div>Aucune commande en préparation</div>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-            {commandes.map(cmd => (
-              <div key={cmd.id} style={{ background: cardBg(cmd.created_at), borderRadius: 16, padding: 24, border: '1px solid rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {commandesTri.map(cmd => (
+              <div key={cmd.id} style={{ ...cardStyle(cmd, urgents), display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                 {/* Numéro + Type */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
                   <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>#{cmd.numero}</div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#888', marginBottom: 4 }}>
+                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
                       {cmd.type === 'sur_place'
                         ? `TABLE ${cmd.table_numero ?? ''} — ${(cmd.zone ?? 'RDC').toUpperCase()}`
                         : `À EMPORTER${cmd.nom_client ? ' — ' + cmd.nom_client.toUpperCase() : ''}`}
                     </div>
+                    {cmd.type === 'a_emporter' && (
+                      <span style={{ background: '#F57F17', color: '#000', fontWeight: 700, fontSize: 11, padding: '3px 8px', borderRadius: 4 }}>
+                        📦 EMPORTER
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -176,23 +252,25 @@ export default function CuisinePage() {
                   </span>
                 </div>
 
-                {/* Articles */}
+                {/* Articles (sans boissons/vins) */}
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, flex: 1 }}>
-                  {cmd.lignes_commande.map(l => (
-                    <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 18 }}>×{l.quantite}</span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
-                        {l.taille && <span style={{ fontSize: 12, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{l.taille}</span>}
-                        {isAjoutApres(l, cmd.created_at) && (
-                          <span style={{ fontSize: 11, background: '#D4A843', color: '#000', fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>AJOUT</span>
+                  {cmd.lignes_commande
+                    .filter(l => isArticleCuisine(l.article_nom))
+                    .map(l => (
+                      <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 18 }}>×{l.quantite}</span>
+                          <span style={{ fontSize: 18, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
+                          {l.taille && <span style={{ fontSize: 12, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{l.taille}</span>}
+                          {isAjoutApres(l, cmd.created_at) && (
+                            <span style={{ fontSize: 11, background: '#D4A843', color: '#000', fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>AJOUT</span>
+                          )}
+                        </div>
+                        {l.commentaire && (
+                          <div style={{ fontSize: 13, color: '#ef5350', marginTop: 2, paddingLeft: 32 }}>⚠ {l.commentaire}</div>
                         )}
                       </div>
-                      {l.commentaire && (
-                        <div style={{ fontSize: 13, color: '#ef5350', marginTop: 2, paddingLeft: 32 }}>⚠ {l.commentaire}</div>
-                      )}
-                    </div>
-                  ))}
+                    ))}
                 </div>
 
                 {/* Notes spéciales */}
@@ -202,13 +280,26 @@ export default function CuisinePage() {
                   </div>
                 )}
 
-                {/* Bouton Prête */}
-                <button
-                  onClick={() => marquerPrete(cmd.id)}
-                  style={{ width: '100%', padding: '14px', background: '#2E7D32', border: 'none', borderRadius: 10, color: '#fff', fontSize: 20, fontWeight: 700, cursor: 'pointer' }}
-                >
-                  ✅ PRÊTE
-                </button>
+                {/* Boutons URGENT + PRÊTE */}
+                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                  <button
+                    onClick={() => toggleUrgent(cmd.id)}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: 8,
+                      background: urgents.has(cmd.id) ? '#D4A843' : 'rgba(212,168,67,0.2)',
+                      border: '1px solid #D4A843', color: urgents.has(cmd.id) ? '#000' : '#D4A843',
+                      cursor: 'pointer', fontWeight: 700, fontSize: 14
+                    }}
+                  >
+                    {urgents.has(cmd.id) ? '⚠️ URGENT ✓' : '⚠️ URGENT'}
+                  </button>
+                  <button
+                    onClick={() => marquerPrete(cmd.id)}
+                    style={{ flex: 1, padding: '10px', background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    ✅ PRÊTE
+                  </button>
+                </div>
               </div>
             ))}
           </div>
