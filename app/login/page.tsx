@@ -1,15 +1,17 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import bcrypt from 'bcryptjs'
 import { setSession } from '@/lib/auth'
 import type { AdminRole } from '@/lib/auth'
+import { supabase } from '@/lib/supabase'
 
 type Profile = { role: AdminRole; nom: string; id: string; emoji: string; label: string; pw: string; activeClass: string }
 
 const PROFILES: Profile[] = [
-  { role: 'monica', nom: 'Monica', id: '1', emoji: '🌟', label: 'Monica', pw: 'monica123', activeClass: 'bg-green-900 border-green-600' },
-  { role: 'andre', nom: 'Andreï', id: '2', emoji: '🍽️', label: 'Andreï', pw: 'andre123', activeClass: 'bg-blue-900 border-blue-600' },
-  { role: 'roberto', nom: 'Roberto', id: '3', emoji: '🔥', label: 'Roberto', pw: 'roberto123', activeClass: 'bg-orange-900 border-orange-600' },
+  { role: 'monica', nom: 'Monica', id: '1', emoji: '🌟', label: 'Monica', pw: 'monica', activeClass: 'bg-green-900 border-green-600' },
+  { role: 'andre', nom: 'Andreï', id: '2', emoji: '🍽️', label: 'Andreï', pw: 'andrei', activeClass: 'bg-blue-900 border-blue-600' },
+  { role: 'roberto', nom: 'Roberto', id: '3', emoji: '🔥', label: 'Roberto', pw: 'roberto', activeClass: 'bg-orange-900 border-orange-600' },
 ]
 
 export default function LoginPage() {
@@ -18,16 +20,80 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!selected) { setError('Veuillez sélectionner un profil'); return }
-    const profile = PROFILES.find(p => p.role === selected)
-    if (!profile) return
-    if (password !== profile.pw) { setError('Mot de passe incorrect'); return }
-    setSession({ role: profile.role, nom: profile.nom, id: profile.id })
-    if (selected === 'monica') router.push('/dashboard')
-    else if (selected === 'andre') router.push('/reservations')
-    else router.push('/cuisine')
+    setLoading(true); setError('')
+
+    const selectedRole = selected
+
+    try {
+      // 1. Chercher le profil dans Supabase
+      const { data: profil, error: supabaseError } = await supabase
+        .from('profils_admin')
+        .select('*')
+        .eq('role', selectedRole)
+        .single()
+
+      if (supabaseError || !profil) {
+        // Fallback: vérifier avec les mots de passe codés en dur
+        const hardcoded = PROFILES.find(p => p.role === selectedRole)
+        if (!hardcoded || password !== hardcoded.pw) {
+          setError('Mot de passe incorrect')
+          return
+        }
+        setSession({ role: hardcoded.role, nom: hardcoded.nom, id: hardcoded.id })
+      } else {
+        // Vérifier le mot de passe
+        let isValid = false
+        const codeAcces: string = profil.code_acces || profil.mot_de_passe || ''
+
+        if (codeAcces.startsWith('$2')) {
+          // Hash bcrypt
+          isValid = await bcrypt.compare(password, codeAcces)
+        } else {
+          // Mot de passe en clair → vérifier puis migrer vers bcrypt
+          isValid = (password === codeAcces)
+          if (isValid && codeAcces) {
+            // Migration automatique vers hash
+            try {
+              const hashed = await bcrypt.hash(password, 10)
+              await supabase.from('profils_admin')
+                .update({ code_acces: hashed })
+                .eq('id', profil.id)
+            } catch { /* migration optionnelle, pas bloquante */ }
+          }
+        }
+
+        if (!isValid) {
+          setError('Mot de passe incorrect')
+          setLoading(false)
+          return
+        }
+
+        // Mettre à jour derniere_connexion
+        try {
+          await supabase.from('profils_admin')
+            .update({ derniere_connexion: new Date().toISOString() })
+            .eq('id', profil.id)
+        } catch { /* optionnel */ }
+
+        const role = (profil.role || selectedRole) as AdminRole
+        setSession({ role, nom: profil.nom || profil.name || selectedRole, id: profil.id })
+      }
+
+      // Redirection selon le rôle
+      if (selectedRole === 'monica') router.push('/dashboard')
+      else if (selectedRole === 'andre') router.push('/reservations')
+      else router.push('/cuisine')
+
+    } catch (err) {
+      console.error('Login error:', err)
+      setError('Erreur de connexion. Vérifiez votre mot de passe.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -92,10 +158,11 @@ export default function LoginPage() {
         {/* Bouton */}
         <button
           onClick={handleLogin}
-          className="w-full py-3 rounded-lg font-semibold text-white transition-all hover:bg-red-800 active:scale-95"
+          disabled={loading}
+          className="w-full py-3 rounded-lg font-semibold text-white transition-all hover:bg-red-800 active:scale-95 disabled:opacity-50"
           style={{ background: '#B71C1C' }}
         >
-          Connexion
+          {loading ? '⏳ Connexion...' : 'Connexion'}
         </button>
       </div>
     </div>
