@@ -32,7 +32,7 @@ const TEXTE_LABELS: Record<string, string> = {
   hero_titre: 'Titre', hero_sous_titre: 'Sous-titre', hero_tagline: 'Tagline',
   hero_btn1: 'Bouton 1', hero_btn2: 'Bouton 2',
   histoire_roberto: 'Texte Roberto', histoire_monica: 'Texte Monica',
-  histoire_andre: 'Texte André', citation_roberto: 'Citation Roberto',
+  histoire_andre: 'Texte Andreï', citation_roberto: 'Citation Roberto',
   ambiance_rdc_titre: 'RDC Titre', ambiance_rdc_desc: 'RDC Description',
   ambiance_etage_titre: 'Étage Titre', ambiance_etage_desc: 'Étage Description',
   ambiance_terrasse_titre: 'Terrasse Titre', ambiance_terrasse_desc: 'Terrasse Description',
@@ -56,7 +56,7 @@ const PHOTOS = [
   { cle: 'reservation_bg', label: 'Réservation background' },
   { cle: 'photo_roberto', label: 'Photo Roberto' },
   { cle: 'photo_monica', label: 'Photo Monica' },
-  { cle: 'photo_andre', label: 'Photo André' },
+  { cle: 'photo_andre', label: 'Photo Andreï' },
 ]
 
 const DEFAULT_HORAIRE: JourHoraire = { ferme: false, debut_midi: '12:00', fin_midi: '14:30', debut_soir: '19:00', fin_soir: '22:30' }
