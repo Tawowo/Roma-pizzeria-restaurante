@@ -13,6 +13,7 @@ interface CodePromo {
   usage_count?: number
   date_expiration?: string
   actif: boolean
+  visible_site?: boolean
 }
 
 interface FormPromo {
@@ -21,6 +22,7 @@ interface FormPromo {
   valeur: string
   usage_max: string
   date_expiration: string
+  visible_site: boolean
 }
 
 export default function PromotionsPage() {
@@ -29,7 +31,7 @@ export default function PromotionsPage() {
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState('')
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState<FormPromo>({ code: '', type: 'pct', valeur: '', usage_max: '', date_expiration: '' })
+  const [form, setForm] = useState<FormPromo>({ code: '', type: 'pct', valeur: '', usage_max: '', date_expiration: '', visible_site: false })
   const [saving, setSaving] = useState(false)
 
   const fetchCodes = useCallback(async () => {
@@ -56,6 +58,13 @@ export default function PromotionsPage() {
     } catch { /* skip */ }
   }
 
+  const toggleVisibleSite = async (id: string, visible_site: boolean) => {
+    try {
+      await supabase.from('codes_promo').update({ visible_site }).eq('id', id)
+      await fetchCodes()
+    } catch { /* skip */ }
+  }
+
   const supprimerCode = async (id: string) => {
     if (!confirm('Supprimer ce code promo ?')) return
     try {
@@ -75,9 +84,10 @@ export default function PromotionsPage() {
         usage_max: form.usage_max ? parseInt(form.usage_max) : null,
         date_expiration: form.date_expiration || null,
         actif: true,
+        visible_site: form.visible_site,
       }])
       setShowModal(false)
-      setForm({ code: '', type: 'pct', valeur: '', usage_max: '', date_expiration: '' })
+      setForm({ code: '', type: 'pct', valeur: '', usage_max: '', date_expiration: '', visible_site: false })
       await fetchCodes()
     } catch { /* skip */ } finally { setSaving(false) }
   }
@@ -97,36 +107,40 @@ export default function PromotionsPage() {
       {loading ? <div className="text-[#555]">Chargement...</div> : codes.length === 0 ? (
         <div className="text-[#555]">Aucun code promo.</div>
       ) : (
-        <div className="bg-white rounded-xl border border-[#E0D5C5] overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-[#F0EBE0]">
-              <tr>
-                {['Code', 'Type', 'Valeur', 'Usages', 'Expiration', 'Statut', 'Actions'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-[#555] font-medium text-xs uppercase tracking-wide">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {codes.map(c => (
-                <tr key={c.id} className="border-t border-[#E0D5C5]">
-                  <td className="px-4 py-3 font-mono font-bold text-[#1A1A1A]">{c.code}</td>
-                  <td className="px-4 py-3 text-[#555]">{c.type === 'pct' ? 'Pourcentage' : 'Montant fixe'}</td>
-                  <td className="px-4 py-3 font-bold text-[#B71C1C]">{c.valeur}{c.type === 'pct' ? '%' : ' €'}</td>
-                  <td className="px-4 py-3 text-[#555]">{c.usage_count ?? 0}{c.usage_max ? ` / ${c.usage_max}` : ''}</td>
-                  <td className="px-4 py-3 text-[#555]">{c.date_expiration ?? '—'}</td>
-                  <td className="px-4 py-3">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" checked={c.actif} onChange={e => toggleActif(c.id, e.target.checked)} className="accent-[#1B5E20]" />
-                      <span className={`text-xs font-medium ${c.actif ? 'text-green-700' : 'text-gray-400'}`}>{c.actif ? 'Actif' : 'Inactif'}</span>
-                    </label>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => supprimerCode(c.id)} className="text-red-500 hover:text-red-700 text-xs">🗑 Supprimer</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="space-y-3">
+          {codes.map(c => (
+            <div key={c.id} className="bg-white rounded-xl border border-[#E0D5C5] p-4">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-1">
+                    <span className="font-mono font-bold text-lg text-[#1A1A1A]">{c.code}</span>
+                    <span className="text-sm font-bold text-[#B71C1C]">{c.valeur}{c.type === 'pct' ? '%' : ' €'}</span>
+                    <span className="text-xs text-[#555] bg-[#F0EBE0] px-2 py-0.5 rounded">{c.type === 'pct' ? 'Pourcentage' : 'Montant fixe'}</span>
+                  </div>
+                  <div className="text-xs text-[#555] flex gap-4 flex-wrap">
+                    <span>Utilisé: <strong>{c.usage_count ?? 0} fois</strong></span>
+                    {c.usage_max && <span>/ max {c.usage_max}</span>}
+                    {c.date_expiration && <span>Expire: {c.date_expiration}</span>}
+                    <span className={c.actif ? 'text-green-600 font-medium' : 'text-red-500 font-medium'}>
+                      {c.actif ? '✓ Actif' : '✗ Inactif'}
+                    </span>
+                    {c.visible_site && <span className="text-blue-600 font-medium">👁 Visible site</span>}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#555]">
+                    <input type="checkbox" checked={c.actif} onChange={e => toggleActif(c.id, e.target.checked)} className="accent-[#1B5E20]" />
+                    Actif
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs text-[#555]">
+                    <input type="checkbox" checked={c.visible_site ?? false} onChange={e => toggleVisibleSite(c.id, e.target.checked)} className="accent-[#1565C0]" />
+                    Vitrine
+                  </label>
+                  <button onClick={() => supprimerCode(c.id)} className="text-red-500 hover:text-red-700 text-xs">🗑 Supprimer</button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -168,6 +182,12 @@ export default function PromotionsPage() {
                   <input type="date" value={form.date_expiration} onChange={e => setForm(f => ({ ...f, date_expiration: e.target.value }))}
                     className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none" />
                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="visible_site" checked={form.visible_site ?? false}
+                  onChange={e => setForm(prev => ({ ...prev, visible_site: e.target.checked }))}
+                  className="accent-[#1565C0]" />
+                <label htmlFor="visible_site" className="text-sm text-[#555]">Visible sur le site (bandeau vitrine)</label>
               </div>
             </div>
             <div className="flex gap-3 mt-5">
