@@ -145,6 +145,7 @@ export default function CommandesPage() {
   })
   const [saving, setSaving] = useState(false)
   const [errNom, setErrNom] = useState('')
+  const [panierEnvoiSelectionne, setPanierEnvoiSelectionne] = useState<Set<number>>(new Set())
 
   // Modal encaissement
   const [modalEncaiss, setModalEncaiss] = useState<CommandeActive | null>(null)
@@ -237,17 +238,20 @@ export default function CommandesPage() {
     setPanier([])
     setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
     setErrNom('')
+    setPanierEnvoiSelectionne(new Set())
   }
 
   const ajouterAuPanier = (art: Article) => {
     setPanier(prev => {
-      const idx = prev.findIndex(p => p.article.id === art.id && p.taille === '')
+      const isCatPizza = categories.find(c => c.id === art.categorie_id)?.nom?.toLowerCase().includes('pizza')
+      const tailleDef: Taille = isCatPizza ? '33cm' : ''
+      const idx = prev.findIndex(p => p.article.id === art.id && p.taille === tailleDef)
       if (idx >= 0) {
         const nv = [...prev]
         nv[idx] = { ...nv[idx], quantite: nv[idx].quantite + 1 }
         return nv
       }
-      return [...prev, { article: art, quantite: 1, taille: '', commentaire: '' }]
+      return [...prev, { article: art, quantite: 1, taille: tailleDef, commentaire: '' }]
     })
   }
 
@@ -276,6 +280,16 @@ export default function CommandesPage() {
   const envoyerEnCuisine = async () => {
     if (!nomClient.trim()) { setErrNom('Le nom est obligatoire'); return }
     if (panier.length === 0) return
+
+    // Articles à envoyer maintenant (tous si aucune sélection spécifique)
+    const indicesEnvoi = panierEnvoiSelectionne.size === 0
+      ? panier.map((_, i) => i)
+      : Array.from(panierEnvoiSelectionne)
+    const panierEnvoi = panier.filter((_, i) => indicesEnvoi.includes(i))
+    const panierAttente = panier.filter((_, i) => !indicesEnvoi.includes(i))
+
+    if (panierEnvoi.length === 0) return
+
     setSaving(true)
     try {
       const total = calcTotal(panier, reduction)
@@ -295,12 +309,42 @@ export default function CommandesPage() {
         offert_motif: reduction.offrirMotif || null,
         client_id: clientFidele?.id || null,
       }]).select().single()
+
       if (cmd) {
-        await supabase.from('lignes_commande').insert(
-          panier.map(p => ({ commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix }))
-        )
+        // Lignes envoyées en cuisine
+        if (panierEnvoi.length > 0) {
+          await supabase.from('lignes_commande').insert(
+            panierEnvoi.map(p => ({
+              commande_id: cmd.id,
+              article_id: p.article.id,
+              article_nom: p.article.nom,
+              quantite: p.quantite,
+              taille: p.taille || null,
+              commentaire: p.commentaire || null,
+              prix_unitaire: p.article.prix,
+              ajout_apres: false
+            }))
+          )
+        }
+        // Lignes en attente (à envoyer plus tard)
+        if (panierAttente.length > 0) {
+          await supabase.from('lignes_commande').insert(
+            panierAttente.map(p => ({
+              commande_id: cmd.id,
+              article_id: p.article.id,
+              article_nom: p.article.nom,
+              quantite: p.quantite,
+              taille: p.taille || null,
+              commentaire: p.commentaire || null,
+              prix_unitaire: p.article.prix,
+              ajout_apres: true
+            }))
+          )
+        }
       }
+
       setModalTable(null)
+      setPanierEnvoiSelectionne(new Set())
       fetchTout()
     } catch (err) { console.error(err) } finally { setSaving(false) }
   }
@@ -471,7 +515,7 @@ export default function CommandesPage() {
 
               {/* Étape 2 */}
               {etape === 2 && (
-                <div className="flex gap-6">
+                <div className="flex flex-col lg:flex-row gap-4">
                   {/* Articles */}
                   <div className="flex-1">
                     <input value={recherche} onChange={e => setRecherche(e.target.value)}
@@ -479,7 +523,7 @@ export default function CommandesPage() {
                       className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none" />
                     {/* Catégories */}
                     {categories.length > 0 && (
-                      <div className="flex gap-2 mb-3 flex-wrap">
+                      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide">
                         <button onClick={() => setCatActive('')}
                           className={`px-3 py-1 rounded-full text-xs font-medium border ${!catActive ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
                           Tout
@@ -505,7 +549,7 @@ export default function CommandesPage() {
                   </div>
 
                   {/* Panier */}
-                  <div className="w-72 shrink-0">
+                  <div className="w-full lg:w-72 shrink-0">
                     <h4 className="font-semibold text-[#1A1A1A] mb-3">Panier</h4>
                     {panier.length === 0 ? <div className="text-[#555] text-sm">Panier vide</div> : (
                       <div className="space-y-3 mb-4">
@@ -588,9 +632,28 @@ export default function CommandesPage() {
                     <div className="text-sm font-medium text-[#555]">Table {modalTable.num} · {couverts} couverts</div>
                     <div className="text-sm font-medium">{nomClient}</div>
                     {panier.map((item, i) => (
-                      <div key={i} className="flex justify-between text-sm">
-                        <span>{item.quantite}× {item.article.nom} {item.taille && `(${item.taille})`}</span>
-                        <span>{(item.article.prix * item.quantite).toFixed(2)} €</span>
+                      <div key={i} className="flex items-center justify-between text-sm py-1">
+                        <label className="flex items-center gap-2 cursor-pointer flex-1">
+                          <input type="checkbox"
+                            checked={panierEnvoiSelectionne.has(i) || panierEnvoiSelectionne.size === 0}
+                            onChange={(e) => {
+                              setPanierEnvoiSelectionne(prev => {
+                                const next = new Set(prev)
+                                if (next.size === 0) {
+                                  panier.forEach((_, j) => { if (j !== i) next.add(j) })
+                                } else {
+                                  if (e.target.checked) next.add(i)
+                                  else next.delete(i)
+                                }
+                                return next
+                              })
+                            }}
+                            className="rounded"
+                          />
+                          <span className="text-xs text-[#555]">Envoyer maintenant</span>
+                          <span>{item.quantite}× {item.article.nom} {item.taille && `(${item.taille})`}</span>
+                        </label>
+                        <span className="font-medium">{(item.article.prix * item.quantite).toFixed(2)} €</span>
                       </div>
                     ))}
                     <div className="border-t border-[#E0D5C5] pt-2 mt-2">
@@ -605,10 +668,11 @@ export default function CommandesPage() {
                     <button onClick={sauvegarder} disabled={saving} className="flex-1 border border-[#1B5E20] text-[#1B5E20] py-2 rounded-lg text-sm font-medium">
                       💾 Sauvegarder
                     </button>
-                    <button onClick={envoyerEnCuisine} disabled={saving} className="flex-1 bg-[#B71C1C] text-white py-2 rounded-lg text-sm font-medium">
-                      📤 En cuisine
-                    </button>
                   </div>
+                  <button onClick={envoyerEnCuisine} disabled={saving}
+                    className="w-full bg-[#B71C1C] hover:bg-[#C62828] text-white py-3 rounded-lg font-medium disabled:opacity-50">
+                    {saving ? 'Envoi...' : `📤 Envoyer ${panierEnvoiSelectionne.size === 0 ? panier.length : panierEnvoiSelectionne.size} article(s) en cuisine`}
+                  </button>
                 </div>
               )}
             </div>
@@ -692,8 +756,8 @@ function CommandeRow({ cmd, onEncaisser, onUpdate }: { cmd: CommandeActive; onEn
   }
   const next = NEXT_STATUT[cmd.statut]
   return (
-    <div className="rounded-xl p-4 flex items-center justify-between bg-white border border-[#E0D5C5] shadow-sm">
-      <div className="flex items-center gap-4">
+    <div className="w-full rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white border border-[#E0D5C5] shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
         <div className="text-xl font-bold text-[#D4A843]">#{cmd.numero}</div>
         {cmd.nom_client && <div className="text-sm font-medium text-[#1A1A1A]">{cmd.nom_client}</div>}
         {cmd.table_numero && <div className="text-sm text-[#555]">Table {cmd.table_numero}</div>}
