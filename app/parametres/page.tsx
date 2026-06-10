@@ -5,11 +5,27 @@ import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 
-type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp'
+type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp' | 'utilisateurs'
 
 interface ParamMap { [key: string]: string }
 interface TableResto { id: string; numero: number; nom?: string; zone: string; capacite: number; actif: boolean }
 interface ProfilAdmin { id: string; role: string; nom: string }
+
+interface ProfilComplet {
+  id: string
+  role: string
+  nom: string
+  derniere_connexion?: string
+  permissions?: Record<string, boolean>
+  code_acces?: string
+}
+
+interface NouveauProfil {
+  nom: string
+  role: string
+  password: string
+  confirmPassword: string
+}
 
 const INFO_KEYS = ['nom', 'telephone', 'adresse', 'message_fermeture']
 const HERO_KEYS = ['hero_annees', 'hero_nb_pizzas', 'hero_familles']
@@ -43,6 +59,11 @@ export default function ParametresPage() {
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
   const [newTable, setNewTable] = useState({ nom: '', capacite: 4, zone: 'rdc' })
+  const [profilsComplets, setProfilsComplets] = useState<ProfilComplet[]>([])
+  const [editingProfil, setEditingProfil] = useState<ProfilComplet | null>(null)
+  const [nouveauProfil, setNouveauProfil] = useState<NouveauProfil>({ nom: '', role: 'andre', password: '', confirmPassword: '' })
+  const [showAddProfil, setShowAddProfil] = useState(false)
+  const [profilMsg, setProfilMsg] = useState('')
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -60,6 +81,13 @@ export default function ParametresPage() {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  const fetchProfils = useCallback(async () => {
+    try {
+      const { data } = await supabase.from('profils_admin').select('*').order('nom')
+      setProfilsComplets(data ?? [])
+    } catch { /* skip */ }
   }, [])
 
   const fetchTables = useCallback(async () => {
@@ -80,6 +108,10 @@ export default function ParametresPage() {
     fetchAll()
     fetchTables()
   }, [router, fetchAll, fetchTables])
+
+  useEffect(() => {
+    if (section === 'utilisateurs') fetchProfils()
+  }, [section, fetchProfils])
 
   const saveParams = async (keys: string[]) => {
     setSaving(true)
@@ -165,12 +197,67 @@ export default function ParametresPage() {
     } catch (err) { console.error(err) }
   }
 
+  const createProfil = async () => {
+    if (!nouveauProfil.nom || !nouveauProfil.password) { setProfilMsg('Remplir tous les champs'); return }
+    if (nouveauProfil.password !== nouveauProfil.confirmPassword) { setProfilMsg('Mots de passe différents'); return }
+    try {
+      const bcryptjs = await import('bcryptjs')
+      const hash = await bcryptjs.default.hash(nouveauProfil.password, 10)
+      await supabase.from('profils_admin').insert({
+        nom: nouveauProfil.nom,
+        role: nouveauProfil.role,
+        code_acces: hash
+      })
+      setNouveauProfil({ nom: '', role: 'andre', password: '', confirmPassword: '' })
+      setShowAddProfil(false)
+      setProfilMsg('Profil créé ✓')
+      await fetchProfils()
+    } catch (err) {
+      console.error(err)
+      setProfilMsg('Erreur lors de la création')
+    }
+  }
+
+  const updateProfil = async (profilId: string, updates: Partial<ProfilComplet & { newPassword?: string }>) => {
+    try {
+      const updateData: Record<string, unknown> = {}
+      if (updates.nom) updateData.nom = updates.nom
+      if (updates.role) updateData.role = updates.role
+      if (updates.newPassword) {
+        const bcryptjs = await import('bcryptjs')
+        updateData.code_acces = await bcryptjs.default.hash(updates.newPassword, 10)
+      }
+      await supabase.from('profils_admin').update(updateData).eq('id', profilId)
+      setProfilMsg('Profil mis à jour ✓')
+      await fetchProfils()
+      setEditingProfil(null)
+    } catch (err) {
+      console.error(err)
+      setProfilMsg('Erreur lors de la mise à jour')
+    }
+  }
+
+  const deleteProfil = async (profilId: string, profilNom: string) => {
+    const session = getSession()
+    if (session?.id === profilId) { setProfilMsg('Impossible de supprimer votre propre compte'); return }
+    if (!confirm(`Supprimer le profil de ${profilNom} ? Cette action est irréversible.`)) return
+    try {
+      await supabase.from('profils_admin').delete().eq('id', profilId)
+      setProfilMsg('Profil supprimé')
+      await fetchProfils()
+    } catch (err) {
+      console.error(err)
+      setProfilMsg('Erreur lors de la suppression')
+    }
+  }
+
   const sections: { key: Section; label: string }[] = [
     { key: 'infos', label: 'Infos restaurant' },
     { key: 'compteurs', label: 'Compteurs hero' },
     { key: 'fidelite', label: 'Fidélité' },
     { key: 'tables', label: 'Tables' },
     { key: 'mdp', label: 'Mots de passe' },
+    { key: 'utilisateurs', label: '👥 Utilisateurs' },
   ]
 
   const renderForm = (keys: string[]) => (
@@ -311,6 +398,146 @@ export default function ParametresPage() {
                     </div>
                   )
                 })
+              )}
+            </div>
+          )}
+
+          {section === 'utilisateurs' && (
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Gestion des utilisateurs</h2>
+                <button onClick={() => setShowAddProfil(true)}
+                  className="px-4 py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium">
+                  + Ajouter un profil
+                </button>
+              </div>
+
+              {profilMsg && (
+                <div className={`mb-3 px-4 py-2 rounded-lg text-sm ${profilMsg.includes('✓') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                  {profilMsg}
+                </div>
+              )}
+
+              {/* Liste des profils */}
+              <div className="space-y-3 mb-6">
+                {profilsComplets.map(p => (
+                  <div key={p.id} className="border border-[#E0D5C5] rounded-xl p-4 bg-white">
+                    {editingProfil?.id === p.id ? (
+                      /* Mode édition */
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs text-[#555] mb-1">Nom</label>
+                            <input value={editingProfil.nom}
+                              onChange={e => setEditingProfil(prev => prev ? {...prev, nom: e.target.value} : prev)}
+                              className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg" />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-[#555] mb-1">Rôle</label>
+                            <select value={editingProfil.role}
+                              onChange={e => setEditingProfil(prev => prev ? {...prev, role: e.target.value} : prev)}
+                              className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg">
+                              <option value="monica">Gérante</option>
+                              <option value="andre">Serveur</option>
+                              <option value="roberto">Cuisinier</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-[#555] mb-1">Nouveau mot de passe (laisser vide pour ne pas changer)</label>
+                          <input type="password" placeholder="••••••••"
+                            id={`newpw-${p.id}`}
+                            className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg" />
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => {
+                            const newPw = (document.getElementById(`newpw-${p.id}`) as HTMLInputElement)?.value
+                            updateProfil(p.id, { nom: editingProfil.nom, role: editingProfil.role, newPassword: newPw || undefined })
+                          }} className="flex-1 py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium">
+                            Enregistrer
+                          </button>
+                          <button onClick={() => setEditingProfil(null)}
+                            className="px-4 py-2 border border-[#E0D5C5] text-[#555] rounded-lg text-sm">
+                            Annuler
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Mode affichage */
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-semibold text-[#1A1A1A]">{p.nom}</div>
+                          <div className="text-xs text-[#555] capitalize mt-0.5">
+                            {p.role === 'monica' ? 'Gérante' : p.role === 'andre' ? 'Serveur' : 'Cuisinier'}
+                            {p.derniere_connexion && (
+                              <span className="ml-2">· Dernière connexion : {new Date(p.derniere_connexion).toLocaleDateString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => setEditingProfil(p)}
+                            className="px-3 py-1.5 rounded-lg text-xs bg-[#F0EBE0] text-[#555] hover:bg-[#E0D5C5]">
+                            ✏️ Modifier
+                          </button>
+                          {/* Ne peut pas supprimer son propre compte */}
+                          {p.role !== 'monica' && (
+                            <button onClick={() => deleteProfil(p.id, p.nom)}
+                              className="px-3 py-1.5 rounded-lg text-xs bg-red-50 text-red-600 hover:bg-red-100">
+                              🗑️ Supprimer
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Modal ajout nouveau profil */}
+              {showAddProfil && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                  <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+                    <div className="flex items-center justify-between mb-5">
+                      <h2 className="text-lg font-bold">Nouveau profil</h2>
+                      <button onClick={() => setShowAddProfil(false)} className="text-gray-400">✕</button>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs text-[#555] mb-1">Nom / Prénom *</label>
+                        <input value={nouveauProfil.nom}
+                          onChange={e => setNouveauProfil(p => ({...p, nom: e.target.value}))}
+                          className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#555] mb-1">Rôle *</label>
+                        <select value={nouveauProfil.role}
+                          onChange={e => setNouveauProfil(p => ({...p, role: e.target.value}))}
+                          className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg">
+                          <option value="monica">Gérante</option>
+                          <option value="andre">Serveur</option>
+                          <option value="roberto">Cuisinier</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#555] mb-1">Mot de passe *</label>
+                        <input type="password" value={nouveauProfil.password}
+                          onChange={e => setNouveauProfil(p => ({...p, password: e.target.value}))}
+                          className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-[#555] mb-1">Confirmer *</label>
+                        <input type="password" value={nouveauProfil.confirmPassword}
+                          onChange={e => setNouveauProfil(p => ({...p, confirmPassword: e.target.value}))}
+                          className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg" />
+                      </div>
+                    </div>
+                    {profilMsg && <p className="text-sm text-red-600 mt-2">{profilMsg}</p>}
+                    <div className="flex gap-3 mt-5">
+                      <button onClick={() => setShowAddProfil(false)} className="flex-1 py-2 border border-[#E0D5C5] text-[#555] rounded-lg text-sm">Annuler</button>
+                      <button onClick={createProfil} className="flex-1 py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium">Créer</button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
