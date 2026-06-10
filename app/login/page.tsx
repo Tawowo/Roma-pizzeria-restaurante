@@ -8,7 +8,7 @@ type Profile = { role: AdminRole; nom: string; id: string; emoji: string; label:
 
 const PROFILES: Profile[] = [
   { role: 'monica', nom: 'Monica', id: '1', emoji: '🌟', label: 'Monica', pw: 'monica123', activeClass: 'bg-green-900 border-green-600' },
-  { role: 'andre', nom: 'André', id: '2', emoji: '🍽️', label: 'André', pw: 'andre123', activeClass: 'bg-blue-900 border-blue-600' },
+  { role: 'andre', nom: 'Andreï', id: '2', emoji: '🍽️', label: 'Andreï', pw: 'andre123', activeClass: 'bg-blue-900 border-blue-600' },
   { role: 'roberto', nom: 'Roberto', id: '3', emoji: '🔥', label: 'Roberto', pw: 'roberto123', activeClass: 'bg-orange-900 border-orange-600' },
 ]
 
