@@ -13,6 +13,8 @@ interface LigneCommande {
   statut?: string
   ajout_apres?: boolean
   created_at?: string
+  pour_cuisine?: boolean
+  categorie_nom?: string
 }
 
 interface Commande {
@@ -28,11 +30,21 @@ interface Commande {
   lignes_commande: LigneCommande[]
 }
 
-const CATS_EXCLUES_CUISINE = ['boisson', 'boissons', 'vin', 'vins', 'soft', 'bière', 'biere']
+const CATEGORIES_PAS_CUISINE = [
+  'boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés',
+  'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin',
+  'bières', 'softs', 'eaux'
+]
 
-function isArticleCuisine(articleNom: string): boolean {
-  const nom = articleNom.toLowerCase()
-  return !CATS_EXCLUES_CUISINE.some(cat => nom.includes(cat))
+const BOISSONS_NOMS = ['coca', 'pepsi', 'eau', 'bière', 'sprite', 'fanta', 'jus', 'limonade', 'café', 'thé', 'prosecco', 'lambrusco', 'chianti', 'vermentino', 'chiaretto', 'montepulciano', 'limoncello', 'disarano', 'aperol', 'garonne']
+
+function isArticleCuisine(l: LigneCommande): boolean {
+  if ('pour_cuisine' in l && l.pour_cuisine === false) return false
+  const catNom = (l.categorie_nom ?? '').toLowerCase()
+  if (catNom && CATEGORIES_PAS_CUISINE.some(c => catNom.includes(c))) return false
+  const nomArt = l.article_nom.toLowerCase()
+  if (BOISSONS_NOMS.some(b => nomArt.includes(b))) return false
+  return true
 }
 
 function useTimer() {
@@ -106,7 +118,18 @@ export default function CuisinePage() {
         .in('statut', ['en_cours', 'en_preparation'])
         .order('created_at')
       if (error) throw error
-      setCommandes(data ?? [])
+
+      // Filtrer les lignes : exclure boissons/vins, garder uniquement envoye_cuisine (ou sans statut)
+      const commandesFiltrees = (data ?? []).map((cmd: Commande) => ({
+        ...cmd,
+        lignes_commande: cmd.lignes_commande.filter((l: LigneCommande) => {
+          if (!isArticleCuisine(l)) return false
+          if (l.statut && l.statut !== 'envoye_cuisine') return false
+          return true
+        })
+      })).filter((cmd: Commande) => cmd.lignes_commande.length > 0)
+
+      setCommandes(commandesFiltrees)
     } catch (err) {
       console.error('Cuisine fetch error:', err)
     } finally {
@@ -121,8 +144,9 @@ export default function CuisinePage() {
   }, [router, fetchCommandes])
 
   useEffect(() => {
-    const channel = supabase.channel('cuisine-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes' }, fetchCommandes)
+    const channel = supabase.channel('cuisine-realtime-v2')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commandes' }, () => { fetchCommandes() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commandes' }, () => { fetchCommandes() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [fetchCommandes])
@@ -148,7 +172,7 @@ export default function CuisinePage() {
     try {
       // Mark all cuisine lines as pret
       const ligneIds = cmd.lignes_commande
-        .filter(l => isArticleCuisine(l.article_nom))
+        .filter(l => isArticleCuisine(l))
         .map(l => l.id)
       if (ligneIds.length > 0) {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
@@ -171,13 +195,11 @@ export default function CuisinePage() {
 
   // Filtrer les commandes (exclure boissons/vins) et trier (urgents en premier)
   // Lignes visibles: envoye_cuisine, ou pas de statut (rétrocompatibilité), exclure pret/servi
-  const lignesCuisine = (cmd: Commande) =>
-    cmd.lignes_commande.filter(l =>
-      isArticleCuisine(l.article_nom) && (!l.statut || l.statut === 'envoye_cuisine')
-    )
+  // Les lignes sont déjà filtrées dans fetchCommandes — on affiche tout ce qui est dans cmd.lignes_commande
+  const lignesCuisine = (cmd: Commande) => cmd.lignes_commande
 
   const commandesFiltrees = commandes.filter(cmd =>
-    lignesCuisine(cmd).length > 0
+    cmd.lignes_commande.length > 0
   )
 
   const commandesTri = [...commandesFiltrees].sort((a, b) => {
