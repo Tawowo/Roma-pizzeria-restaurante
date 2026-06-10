@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Categorie, Article, Formule } from '@/lib/supabase'
+import { useLang } from '@/lib/LanguageContext'
 
 const TAB_ICONS: Record<string, string> = {
   'Pizzas': '🍕', 'Entrées & Salades': '🥗', 'Suppléments': '➕',
@@ -13,6 +14,7 @@ const TAB_ICONS: Record<string, string> = {
 const SPECIALITES = ['Alto Adige', 'Valtellina', 'Asiatica', 'Bolognese']
 
 export default function MenuPage() {
+  const { t } = useLang()
   const [categories, setCategories] = useState<Categorie[]>([])
   const [articles, setArticles] = useState<Article[]>([])
   const [formules, setFormules] = useState<Formule[]>([])
@@ -38,15 +40,15 @@ export default function MenuPage() {
     <div style={{ minHeight: '100vh', background: 'var(--bianco-w)' }}>
       {/* Header */}
       <div style={{ background: 'var(--hero-bg)', padding: '80px 20px 60px', textAlign: 'center' }}>
-        <Link href="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 24, display: 'inline-block' }}>← Retour à l&apos;accueil</Link>
-        <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(36px, 5vw, 60px)', color: 'white', fontStyle: 'italic', marginBottom: 12 }}>Notre carte</h1>
+        <Link href="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 24, display: 'inline-block' }}>← {t('retour')}</Link>
+        <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(36px, 5vw, 60px)', color: 'white', fontStyle: 'italic', marginBottom: 12 }}>{t('menu_titre')}</h1>
         <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'rgba(255,255,255,0.6)' }}>Tout est préparé avec des produits frais chaque jour</p>
       </div>
 
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '60px 20px' }}>
         {/* Search */}
         <div style={{ maxWidth: 440, margin: '0 auto 40px', position: 'relative' }}>
-          <input type="text" className="form-input" placeholder="🔍 Rechercher une pizza, un plat..." value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 16 }} />
+          <input type="text" className="form-input" placeholder={`🔍 ${t('menu_recherche')}`} value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 16 }} />
         </div>
 
         {/* Tabs — scroll horizontal sur mobile */}
@@ -78,8 +80,8 @@ export default function MenuPage() {
                   <span style={{ position: 'absolute', top: 12, right: 12, background: 'var(--grigio-l)', color: 'var(--grigio)', fontFamily: 'Jost', fontSize: 10, letterSpacing: '1.5px', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 2 }}>Indisponible</span>
                 )}
                 <div style={{ display: 'flex', gap: 6, marginBottom: isVeg || isSpec ? 8 : 0, flexWrap: 'wrap' }}>
-                  {isVeg && <span className="badge badge-verde">🌱 Végétarien</span>}
-                  {isSpec && <span className="badge badge-rosso">🔥 Spécialité</span>}
+                  {isVeg && <span className="badge badge-verde">🌱 {t('menu_vegetarien')}</span>}
+                  {isSpec && <span className="badge badge-rosso">🔥 {t('menu_specialite')}</span>}
                 </div>
                 <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 19, color: 'var(--nero)', marginBottom: 6 }}>{art.nom}</h3>
                 {art.description && (
@@ -114,7 +116,7 @@ export default function MenuPage() {
         {/* Formulas */}
         {formules.length > 0 && (
           <div style={{ background: 'var(--verde-pale)', borderRadius: 4, padding: 40, marginBottom: 40 }}>
-            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: 'var(--nero)', textAlign: 'center', marginBottom: 32 }}>Nos formules</h2>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: 'var(--nero)', textAlign: 'center', marginBottom: 32 }}>{t('menu_titre')}</h2>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }}>
               {formules.map(f => (
                 <div key={f.id} style={{ background: 'white', borderRadius: 3, padding: 24, borderTop: '3px solid var(--verde)' }}>
@@ -131,7 +133,7 @@ export default function MenuPage() {
         {/* Notes */}
         <div style={{ display: 'grid', gap: 12 }}>
           <div style={{ padding: '14px 20px', background: 'var(--rosso-pale)', borderLeft: '3px solid var(--rosso)', borderRadius: 3 }}>
-            <p style={{ fontSize: 14, color: 'var(--rosso-m)', fontFamily: 'Jost' }}>🍕 Toutes nos pizzas 33cm peuvent être préparées en Calzone sur demande</p>
+            <p style={{ fontSize: 14, color: 'var(--rosso-m)', fontFamily: 'Jost' }}>🍕 {t('menu_calzone')}</p>
           </div>
           <div style={{ padding: '14px 20px', background: 'var(--verde-pale)', borderLeft: '3px solid var(--verde)', borderRadius: 3 }}>
             <p style={{ fontSize: 14, color: 'var(--verde-m)', fontFamily: 'Jost' }}>➕ Tous les suppléments sont calculés par pizza 33cm. Pour les tailles plus grandes, multiplier en conséquence.</p>
@@ -143,8 +145,8 @@ export default function MenuPage() {
           <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'white', marginBottom: 12 }}>Envie d&apos;une pizza ?</h3>
           <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'rgba(255,255,255,0.6)', marginBottom: 24 }}>Commandez à emporter ou réservez votre table</p>
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link href="/#commander" className="btn-primary" style={{ textDecoration: 'none' }}>🍕 Commander à emporter</Link>
-            <Link href="/#reserver" className="btn-secondary" style={{ color: 'white', borderColor: 'rgba(255,255,255,0.4)', textDecoration: 'none' }}>📅 Réserver une table</Link>
+            <Link href="/#commander" className="btn-primary" style={{ textDecoration: 'none' }}>🍕 {t('hero_cta_commander')}</Link>
+            <Link href="/#reserver" className="btn-secondary" style={{ color: 'white', borderColor: 'rgba(255,255,255,0.4)', textDecoration: 'none' }}>📅 {t('hero_cta_reserver')}</Link>
           </div>
         </div>
       </div>

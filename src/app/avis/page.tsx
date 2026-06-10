@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { useLang } from '@/lib/LanguageContext'
 
 interface Avis {
   id: string
@@ -15,6 +16,7 @@ interface Avis {
 }
 
 export default function AvisPage() {
+  const { t } = useLang()
   const [avis, setAvis] = useState<Avis[]>([])
   const [formNote, setFormNote] = useState(5)
   const [formTexte, setFormTexte] = useState('')
@@ -82,8 +84,8 @@ export default function AvisPage() {
     <div style={{ minHeight: '100vh', background: 'var(--bianco-w)' }}>
       {/* Header */}
       <div style={{ background: 'var(--hero-bg)', padding: '80px 20px 60px', textAlign: 'center' }}>
-        <Link href="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 24, display: 'inline-block' }}>← Retour à l&apos;accueil</Link>
-        <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(32px,5vw,52px)', color: 'white', fontStyle: 'italic', marginBottom: 12 }}>Avis de nos clients</h1>
+        <Link href="/" style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 24, display: 'inline-block' }}>← {t('retour')}</Link>
+        <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(32px,5vw,52px)', color: 'white', fontStyle: 'italic', marginBottom: 12 }}>{t('avis_titre')}</h1>
         {avis.length > 0 && (
           <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '8px 20px', borderRadius: 20 }}>
             <span style={{ color: 'var(--rosso-l)', fontSize: 16 }}>{'⭐'.repeat(5)}</span>
@@ -129,13 +131,13 @@ export default function AvisPage() {
 
         {/* Formulaire avis */}
         <div style={{ background: 'var(--verde-pale)', borderRadius: 4, padding: '40px', border: '1px solid rgba(27,94,32,0.2)' }}>
-          <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--nero)', marginBottom: 8 }}>Laisser un avis</h2>
+          <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--nero)', marginBottom: 8 }}>{t('avis_laisser')}</h2>
           <p style={{ fontSize: 13, color: 'var(--verde-m)', fontFamily: 'Jost', marginBottom: 24 }}>Partagez votre expérience et gagnez <strong>+10 points fidélité</strong> 🎁</p>
 
           {success ? (
             <div style={{ background: 'white', borderRadius: 3, padding: 28, textAlign: 'center', border: '1px solid var(--verde)' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
-              <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--verde)', marginBottom: 8 }}>Merci pour votre avis !</h3>
+              <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--verde)', marginBottom: 8 }}>{t('avis_succes')}</h3>
               <p style={{ fontSize: 14, color: 'var(--grigio)', fontFamily: 'Jost' }}>Votre avis sera publié après validation par notre équipe. +10 points crédités.</p>
             </div>
           ) : (
@@ -157,7 +159,7 @@ export default function AvisPage() {
                     ✅ Connecté en tant que <strong>{clientInfo?.nom}</strong> (+10 pts après validation)
                   </div>
                   <div style={{ marginBottom: 20 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Votre note</label>
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>{t('avis_note')}</label>
                     <div style={{ display: 'flex', gap: 8 }}>
                       {[5,4,3,2,1].map(n => (
                         <button key={n} type="button" onClick={() => setFormNote(n)}
@@ -168,12 +170,12 @@ export default function AvisPage() {
                     </div>
                   </div>
                   <div style={{ marginBottom: 20 }}>
-                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Votre avis *</label>
-                    <textarea className="form-input" rows={4} placeholder="Partagez votre expérience chez Roma..." value={formTexte} onChange={e => setFormTexte(e.target.value)} required style={{ resize: 'vertical' }} />
+                    <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>{t('avis_texte')} *</label>
+                    <textarea className="form-input" rows={4} placeholder={t('avis_texte')} value={formTexte} onChange={e => setFormTexte(e.target.value)} required style={{ resize: 'vertical' }} />
                   </div>
                   {error && <p style={{ fontSize: 13, color: 'var(--rosso)', marginBottom: 12, fontFamily: 'Jost' }}>{error}</p>}
                   <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', padding: 14, opacity: loading?0.7:1 }}>
-                    {loading ? '...' : '⭐ Envoyer mon avis'}
+                    {loading ? t('chargement') : `⭐ ${t('avis_btn')}`}
                   </button>
                 </>
               )}

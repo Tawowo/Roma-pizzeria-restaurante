@@ -3,17 +3,17 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { T, Lang } from '@/lib/i18n'
+import { useLang } from '@/lib/LanguageContext'
+import type { Lang } from '@/lib/translations'
 
 export default function ReserverPage() {
-  const [lang, setLang] = useState<Lang>('fr')
+  const { lang, setLang, t } = useLang()
   const [form, setForm] = useState({
     nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: ''
   })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [error, setError]     = useState('')
-  const t = T[lang]
 
   const minDate = () => {
     const d = new Date(); d.setDate(d.getDate() + 1)
@@ -23,7 +23,7 @@ export default function ReserverPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const day = new Date(form.date + 'T12:00:00').getDay()
-    if (day === 1) { setError(t.resa_lundi_info); return }
+    if (day === 1) { setError(t('reserver_lundi')); return }
     setLoading(true); setError('')
     try {
       let clientId: string | undefined
@@ -69,32 +69,32 @@ export default function ReserverPage() {
         <div style={{ width: '100%', maxWidth: '580px' }}>
           <div style={{ textAlign: 'center', marginBottom: '36px' }}>
             <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--terra)', marginBottom: '10px', display: 'block' }}>Réservation</span>
-            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,42px)', color: 'var(--text)' }}>{t.resa_title}</h1>
+            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,42px)', color: 'var(--text)' }}>{t('reserver_titre')}</h1>
           </div>
 
           {success ? (
             <div style={{ background: '#fff', border: '1px solid rgba(74,103,65,0.3)', borderRadius: '2px', padding: '48px', textAlign: 'center' }}>
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
-              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '24px' }}>{t.resa_success}</p>
+              <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '24px' }}>{t('reserver_succes')}</p>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => { setSuccess(false); setForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }) }} className="btn-secondary">Nouvelle réservation</button>
-                <Link href="/" className="btn-primary">Retour à l&apos;accueil</Link>
+                <button onClick={() => { setSuccess(false); setForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }) }} className="btn-secondary">{t('reserver_titre')}</button>
+                <Link href="/" className="btn-primary">{t('retour')}</Link>
               </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.15)', borderRadius: '2px', padding: 'clamp(24px,5vw,40px)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div><label className="rf-label">{t.resa_nom}</label><input type="text" className="rf-input" placeholder={t.resa_ph_nom} value={form.nom} onChange={e => setForm(p=>({...p,nom:e.target.value}))} required /></div>
-                <div><label className="rf-label">{t.resa_tel}</label><input type="tel" className="rf-input" placeholder={t.resa_ph_tel} value={form.telephone} onChange={e => setForm(p=>({...p,telephone:e.target.value}))} required /></div>
+                <div><label className="rf-label">{t('reserver_nom')}</label><input type="text" className="rf-input" placeholder={t('reserver_nom')} value={form.nom} onChange={e => setForm(p=>({...p,nom:e.target.value}))} required /></div>
+                <div><label className="rf-label">{t('reserver_tel')}</label><input type="tel" className="rf-input" placeholder={t('reserver_tel')} value={form.telephone} onChange={e => setForm(p=>({...p,telephone:e.target.value}))} required /></div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                 <div>
-                  <label className="rf-label">{t.resa_date}</label>
+                  <label className="rf-label">{t('reserver_date')}</label>
                   <input type="date" className="rf-input" min={minDate()} value={form.date}
-                    onChange={e => { setError(new Date(e.target.value+'T12:00:00').getDay()===1?t.resa_lundi_info:''); setForm(p=>({...p,date:e.target.value})) }} required />
+                    onChange={e => { setError(new Date(e.target.value+'T12:00:00').getDay()===1?t('reserver_lundi'):''); setForm(p=>({...p,date:e.target.value})) }} required />
                 </div>
                 <div>
-                  <label className="rf-label">{t.resa_heure}</label>
+                  <label className="rf-label">{t('reserver_heure')}</label>
                   <select className="rf-select" value={form.heure} onChange={e => setForm(p=>({...p,heure:e.target.value}))} required>
                     <option value="">--:--</option>
                     {['12:00','12:30','13:00','13:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00'].map(h => <option key={h} value={h}>{h}</option>)}
@@ -103,37 +103,37 @@ export default function ReserverPage() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                 <div>
-                  <label className="rf-label">{t.resa_couverts}</label>
+                  <label className="rf-label">{t('reserver_couverts')}</label>
                   <select className="rf-select" value={form.couverts} onChange={e => setForm(p=>({...p,couverts:e.target.value}))}>
                     {[1,2,3,4,5,6,7,8,10,12].map(n => <option key={n} value={n}>{n} {n===1?'personne':'personnes'}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="rf-label">{t.resa_zone}</label>
+                  <label className="rf-label">{t('reserver_zone')}</label>
                   <select className="rf-select" value={form.zone} onChange={e => setForm(p=>({...p,zone:e.target.value}))}>
-                    <option value="">Indifférent</option>
-                    <option value="rdc">Rez-de-chaussée</option>
-                    <option value="etage">Étage</option>
-                    <option value="terrasse">Terrasse</option>
+                    <option value="">{t('reserver_zone_indifferent')}</option>
+                    <option value="rdc">{t('reserver_zone_rdc')}</option>
+                    <option value="etage">{t('reserver_zone_etage')}</option>
+                    <option value="terrasse">{t('reserver_zone_terrasse')}</option>
                   </select>
                 </div>
               </div>
               <div style={{ marginTop: '16px' }}>
-                <label className="rf-label">{t.resa_notes}</label>
-                <textarea className="rf-textarea" placeholder={t.resa_ph_notes} value={form.notes} onChange={e => setForm(p=>({...p,notes:e.target.value}))} />
+                <label className="rf-label">{t('reserver_message')}</label>
+                <textarea className="rf-textarea" placeholder={t('reserver_message')} value={form.notes} onChange={e => setForm(p=>({...p,notes:e.target.value}))} />
               </div>
               {error && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)', marginTop: '12px', padding: '10px 14px', background: 'rgba(196,98,45,0.08)', borderRadius: '2px' }}>{error}</p>}
               <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', marginTop: '24px', padding: '16px', justifyContent: 'center', opacity: loading ? 0.7 : 1 }}>
-                {loading ? '...' : t.resa_submit}
+                {loading ? t('chargement') : t('reserver_btn')}
               </button>
-              <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', textAlign: 'center', marginTop: '14px' }}>{t.resa_note}</p>
+              <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', textAlign: 'center', marginTop: '14px' }}>Confirmation par téléphone · 06 68 36 62 98</p>
             </form>
           )}
         </div>
       </div>
 
       <footer style={{ background: 'var(--brown-d)', borderTop: '1px solid rgba(201,148,58,0.15)', padding: '20px clamp(20px,5vw,60px)', textAlign: 'center' }}>
-        <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>{t.footer_copyright}</p>
+        <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: 'rgba(255,255,255,0.2)' }}>© 2025 Roma Pizzeria Restaurant · Savigné-sur-Lathan</p>
       </footer>
     </div>
   )

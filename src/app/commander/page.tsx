@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { supabase, Article, Categorie } from '@/lib/supabase'
+import { useLang } from '@/lib/LanguageContext'
 
 type LignePanier = {
   article: Article
@@ -15,6 +16,7 @@ const SLOTS_BASE = ['19:00','19:10','19:20','19:30','19:40','19:50','20:00','20:
 const SLOTS_MIDI = ['12:00','12:10','12:20','12:30','12:40','12:50','13:00','13:10','13:20','13:30','13:40','13:50']
 
 export default function CommanderPage() {
+  const { t } = useLang()
   const [step, setStep] = useState<'menu'|'panier'|'infos'|'confirmation'>('menu')
   const [categories, setCategories] = useState<Categorie[]>([])
   const [articles, setArticles] = useState<Article[]>([])
@@ -147,7 +149,7 @@ export default function CommanderPage() {
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 420 }}>
         <div style={{ fontSize: 64, marginBottom: 20 }}>✅</div>
-        <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 36, marginBottom: 12 }}>Commande envoyée !</h1>
+        <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 36, marginBottom: 12 }}>{t('emporter_succes')}</h1>
         <div style={{ background: 'var(--r)', color: 'white', borderRadius: 4, padding: '8px 24px', display: 'inline-block', fontFamily: "'Playfair Display',serif", fontSize: 28, marginBottom: 20 }}>
           N° {numCmd}
         </div>
@@ -172,7 +174,7 @@ export default function CommanderPage() {
           <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 18, color: 'white' }}>Roma <em style={{ color: 'var(--gold2)' }}>Pizzeria</em></div>
         </Link>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>Commander à emporter</span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>{t('emporter_titre')}</span>
           {nbPanier > 0 && (
             <button onClick={() => setStep('panier')} className="bp" style={{ padding: '8px 16px', fontSize: 12 }}>
               🛍 {nbPanier} — {total.toFixed(2)} €
@@ -183,7 +185,7 @@ export default function CommanderPage() {
 
       {step === 'menu' && (
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
-          <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, marginBottom: 8 }}>Commander <em style={{ color: 'var(--r)' }}>à emporter</em></h1>
+          <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, marginBottom: 8 }}>{t('emporter_titre')}</h1>
           <p style={{ fontSize: 14, color: 'var(--textl)', marginBottom: 28 }}>Choisissez vos articles, puis indiquez l'heure de retrait</p>
 
           {/* Catégories */}
@@ -294,19 +296,19 @@ export default function CommanderPage() {
 
           <div style={{ background: 'white', borderRadius: 8, padding: 32, border: '1px solid rgba(196,30,58,0.08)', display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
-              <label className="rf-label">Nom *</label>
-              <input className="rf-input" value={nom} onChange={e => setNom(e.target.value)} placeholder="Votre nom" />
+              <label className="rf-label">{t('emporter_nom')} *</label>
+              <input className="rf-input" value={nom} onChange={e => setNom(e.target.value)} placeholder={t('emporter_nom')} />
             </div>
             <div>
-              <label className="rf-label">Téléphone *</label>
-              <input className="rf-input" value={tel} onChange={e => setTel(e.target.value)} placeholder="06 XX XX XX XX" type="tel" />
+              <label className="rf-label">{t('emporter_tel')} *</label>
+              <input className="rf-input" value={tel} onChange={e => setTel(e.target.value)} placeholder={t('emporter_tel')} type="tel" />
             </div>
             <div>
               <label className="rf-label">Date de retrait *</label>
               <input className="rf-input" value={dateRetrait} onChange={e => setDateRetrait(e.target.value)} type="date" min={new Date().toISOString().split('T')[0]} />
             </div>
             <div>
-              <label className="rf-label">Heure de retrait *</label>
+              <label className="rf-label">{t('emporter_heure')} *</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {slotsDispos.length === 0 && <div style={{ fontSize: 13, color: 'var(--textl)', fontStyle: 'italic' }}>Fermé ce jour-là</div>}
                 {slotsDispos.map(s => {
@@ -331,7 +333,7 @@ export default function CommanderPage() {
             </p>
             {err && <div style={{ color: 'var(--r)', fontSize: 13, textAlign: 'center' }}>{err}</div>}
             <button className="btn-submit btn-submit-g" onClick={submitCommande} disabled={loading}>
-              {loading ? 'Envoi...' : '✓ Confirmer ma commande'}
+              {loading ? t('chargement') : `✓ ${t('emporter_btn')}`}
             </button>
           </div>
         </div>

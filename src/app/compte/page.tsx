@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import type { Client, Reservation, MouvementFidelite } from '@/lib/supabase'
+import { useLang } from '@/lib/LanguageContext'
 
 type Screen = 'home' | 'login' | 'create' | 'dashboard'
 
@@ -38,6 +39,7 @@ function getInitiales(nom: string) {
 }
 
 export default function ComptePage() {
+  const { t } = useLang()
   const [screen, setScreen] = useState<Screen>('home')
   const [phone, setPhone] = useState('')
   const [nom, setNom] = useState('')
@@ -170,7 +172,7 @@ export default function ComptePage() {
           {screen === 'home' && (
             <div style={{ textAlign: 'center' }}>
               <div style={{ fontSize: 64, marginBottom: 16 }}>🍕</div>
-              <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(26px,4vw,38px)', color: 'var(--nero)', marginBottom: 8 }}>Mon Compte Roma</h1>
+              <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(26px,4vw,38px)', color: 'var(--nero)', marginBottom: 8 }}>{t('compte_titre')}</h1>
               <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 19, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 40 }}>Fidélité, réservations & récompenses</p>
               <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
                 <button onClick={() => setScreen('login')} className="btn-primary" style={{ padding: '14px 32px', fontSize: 15 }}>
@@ -202,7 +204,7 @@ export default function ComptePage() {
             <>
               <div style={{ textAlign: 'center', marginBottom: 32 }}>
                 <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: 32, color: 'var(--nero)', marginBottom: 8 }}>Connexion</h1>
-                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)' }}>Entrez votre numéro de téléphone</p>
+                <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)' }}>{t('compte_identifier')}</p>
               </div>
               <form onSubmit={handleLogin} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: 'clamp(24px,5vw,40px)' }}>
                 <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Téléphone *</label>
@@ -216,7 +218,7 @@ export default function ComptePage() {
                   </div>
                 )}
                 <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', marginTop: 20, padding: 14, opacity: loading ? 0.7 : 1 }}>
-                  {loading ? '...' : 'Accéder à mon compte'}
+                  {loading ? t('chargement') : t('compte_btn')}
                 </button>
                 <button type="button" onClick={() => { setScreen('home'); setError('') }} style={{ display: 'block', width: '100%', marginTop: 12, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Jost', fontSize: 13, color: 'var(--grigio)', textDecoration: 'underline' }}>← Retour</button>
               </form>
@@ -383,7 +385,7 @@ export default function ComptePage() {
               {/* Historique points */}
               {mouvements.length > 0 && (
                 <div style={{ marginBottom: 32 }}>
-                  <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>Historique des points</h2>
+                  <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>{t('compte_historique')}</h2>
                   <div style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, overflow: 'hidden' }}>
                     {mouvements.map((mv, i) => (
                       <div key={mv.id} style={{ padding: '12px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: i < mouvements.length - 1 ? '1px solid var(--grigio-l)' : 'none', background: i % 2 === 0 ? 'white' : 'var(--bianco-w)' }}>
@@ -403,7 +405,7 @@ export default function ComptePage() {
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
                 <Link href="/#reserver" className="btn-primary" style={{ fontSize: 13, textDecoration: 'none' }}>📅 Réserver une table</Link>
                 <Link href="/#commander" className="btn-secondary" style={{ fontSize: 13, textDecoration: 'none' }}>🍕 Commander à emporter</Link>
-                <button onClick={handleDeconnexion} style={{ background: 'none', border: '1px solid var(--grigio-l)', color: 'var(--grigio)', padding: '10px 18px', borderRadius: 3, fontSize: 13, cursor: 'pointer', fontFamily: 'Jost' }}>Se déconnecter</button>
+                <button onClick={handleDeconnexion} style={{ background: 'none', border: '1px solid var(--grigio-l)', color: 'var(--grigio)', padding: '10px 18px', borderRadius: 3, fontSize: 13, cursor: 'pointer', fontFamily: 'Jost' }}>{t('compte_deconnexion')}</button>
               </div>
 
               {/* RGPD Delete */}
