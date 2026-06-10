@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import jsPDF from 'jspdf'
 
 type StatutRes = 'en_attente' | 'confirmee' | 'annulee'
 type Vue = 'liste' | 'calendrier'
@@ -116,6 +117,20 @@ export default function ReservationsPage() {
   const smsText = (r: Reservation) =>
     `Bonjour ${r.nom_client}, votre réservation chez Roma le ${r.date_reservation} à ${r.heure} pour ${r.nb_couverts} pers. est confirmée. À bientôt !`
 
+  const exportPDFJour = () => {
+    const doc = new jsPDF()
+    doc.setFontSize(16)
+    doc.text(`Réservations du ${filterDate}`, 20, 20)
+    doc.setFontSize(10)
+    let y = 35
+    reservations.forEach(r => {
+      doc.text(`${r.heure}  ${r.nom_client}  ${r.nb_couverts}p  ${r.zone || ''}  [${STATUT_STYLES[r.statut]?.label}]`, 20, y)
+      y += 8
+      if (y > 270) { doc.addPage(); y = 20 }
+    })
+    doc.save(`reservations-${filterDate}.pdf`)
+  }
+
   const week = getWeek(weekBase)
 
   // Détection conflits calendrier
@@ -136,12 +151,14 @@ export default function ReservationsPage() {
         <div className="flex gap-2">
           {/* Toggle vue */}
           <div className="flex border border-[#E0D5C5] rounded-lg overflow-hidden">
-            {(['liste', 'calendrier'] as Vue[]).map(v => (
-              <button key={v} onClick={() => setVue(v)}
-                className={`px-4 py-2 text-sm font-medium transition-all ${vue === v ? 'bg-[#1B5E20] text-white' : 'bg-white text-[#555]'}`}>
-                {v === 'liste' ? '☰ Liste' : '📅 Calendrier'}
-              </button>
-            ))}
+            <button onClick={() => setVue('liste')}
+              className={`px-3 py-2 text-sm font-medium transition-all ${vue === 'liste' ? 'bg-[#1B5E20] text-white' : 'bg-white text-[#555]'}`}>
+              ☰ Liste
+            </button>
+            <button onClick={() => setVue('calendrier')}
+              className={`px-3 py-2 text-sm font-medium transition-all ${vue === 'calendrier' ? 'bg-[#1B5E20] text-white' : 'bg-white text-[#555]'}`}>
+              📅 Calendrier
+            </button>
           </div>
           <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg font-medium text-white text-sm bg-[#B71C1C] hover:bg-[#C62828]">
             + Nouvelle
@@ -152,7 +169,7 @@ export default function ReservationsPage() {
       {vue === 'liste' ? (
         <>
           {/* Filtres */}
-          <div className="flex gap-4 mb-6">
+          <div className="flex flex-wrap gap-3 mb-6">
             <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
               className="px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] bg-white focus:outline-none" />
             <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)}
@@ -162,51 +179,85 @@ export default function ReservationsPage() {
               <option value="confirmee">Confirmée</option>
               <option value="annulee">Annulée</option>
             </select>
+            <button onClick={exportPDFJour}
+              className="px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] bg-white text-[#555] hover:bg-[#F0EBE0]">
+              📄 PDF du jour
+            </button>
           </div>
 
           {loading ? <div className="text-[#555]">Chargement...</div> :
             reservations.length === 0 ? <div className="text-[#555]">Aucune réservation pour cette date.</div> : (
-              <div className="rounded-xl overflow-hidden bg-white border border-[#E0D5C5]">
-                <table className="w-full text-sm">
-                  <thead className="bg-[#F0EBE0]">
-                    <tr>
-                      {['Heure', 'Nom', 'Tél', 'Couverts', 'Zone', 'Notes', 'Statut', 'Actions'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-[#555] font-medium text-xs uppercase tracking-wide">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reservations.map(r => {
-                      const s = STATUT_STYLES[r.statut] ?? STATUT_STYLES.en_attente
-                      return (
-                        <tr key={r.id} className="border-t border-[#E0D5C5]">
-                          <td className="px-4 py-3 font-mono font-bold text-[#1A1A1A]">{r.heure}</td>
-                          <td className="px-4 py-3 font-medium text-[#1A1A1A]">{r.nom_client}</td>
-                          <td className="px-4 py-3 text-[#555]">{r.telephone}</td>
-                          <td className="px-4 py-3 text-center text-[#555]">{r.nb_couverts}</td>
-                          <td className="px-4 py-3 text-[#555]">{r.zone}</td>
-                          <td className="px-4 py-3 text-[#555] max-w-32 truncate">{r.notes}</td>
-                          <td className="px-4 py-3">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex gap-1">
-                              {r.statut !== 'confirmee' && (
-                                <button onClick={() => updateStatut(r.id, 'confirmee')} className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">✓</button>
-                              )}
-                              {r.statut !== 'annulee' && (
-                                <button onClick={() => updateStatut(r.id, 'annulee')} className="px-2 py-1 rounded text-xs bg-red-100 text-red-700">✗</button>
-                              )}
-                              <button onClick={() => setSmsModal(r)} className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">SMS</button>
-                              <button onClick={() => deleteReservation(r.id)} className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-500">🗑</button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                {/* Mobile cards */}
+                <div className="md:hidden space-y-3">
+                  {reservations.map(r => {
+                    const s = STATUT_STYLES[r.statut] ?? STATUT_STYLES.en_attente
+                    return (
+                      <div key={r.id} className="bg-white rounded-xl border border-[#E0D5C5] p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div>
+                            <span className="font-bold text-[#1A1A1A] text-lg">{r.heure}</span>
+                            <span className="ml-2 font-medium text-[#1A1A1A]">{r.nom_client}</span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
+                        </div>
+                        <div className="text-sm text-[#555] space-y-1">
+                          <div>📞 {r.telephone} · {r.nb_couverts} couverts · {r.zone || 'Indifférent'}</div>
+                          {r.notes && <div className="text-xs text-[#777]">📝 {r.notes}</div>}
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          {r.statut !== 'confirmee' && <button onClick={() => updateStatut(r.id, 'confirmee')} className="flex-1 py-2 rounded-lg text-sm bg-green-100 text-green-700 font-medium">✓ Confirmer</button>}
+                          {r.statut !== 'annulee' && <button onClick={() => updateStatut(r.id, 'annulee')} className="flex-1 py-2 rounded-lg text-sm bg-red-100 text-red-700 font-medium">✗ Annuler</button>}
+                          <button onClick={() => setSmsModal(r)} className="px-3 py-2 rounded-lg text-sm bg-blue-100 text-blue-700">SMS</button>
+                          <button onClick={() => deleteReservation(r.id)} className="px-3 py-2 rounded-lg text-sm bg-gray-100 text-gray-500">🗑</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Desktop table */}
+                <div className="hidden md:block rounded-xl overflow-hidden bg-white border border-[#E0D5C5]">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[#F0EBE0]">
+                      <tr>
+                        {['Heure', 'Nom', 'Tél', 'Couverts', 'Zone', 'Notes', 'Statut', 'Actions'].map(h => (
+                          <th key={h} className="px-4 py-3 text-left text-[#555] font-medium text-xs uppercase tracking-wide">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reservations.map(r => {
+                        const s = STATUT_STYLES[r.statut] ?? STATUT_STYLES.en_attente
+                        return (
+                          <tr key={r.id} className="border-t border-[#E0D5C5]">
+                            <td className="px-4 py-3 font-mono font-bold text-[#1A1A1A]">{r.heure}</td>
+                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{r.nom_client}</td>
+                            <td className="px-4 py-3 text-[#555]">{r.telephone}</td>
+                            <td className="px-4 py-3 text-center text-[#555]">{r.nb_couverts}</td>
+                            <td className="px-4 py-3 text-[#555]">{r.zone}</td>
+                            <td className="px-4 py-3 text-[#555] max-w-32 truncate">{r.notes}</td>
+                            <td className="px-4 py-3">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex gap-1">
+                                {r.statut !== 'confirmee' && (
+                                  <button onClick={() => updateStatut(r.id, 'confirmee')} className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">✓</button>
+                                )}
+                                {r.statut !== 'annulee' && (
+                                  <button onClick={() => updateStatut(r.id, 'annulee')} className="px-2 py-1 rounded text-xs bg-red-100 text-red-700">✗</button>
+                                )}
+                                <button onClick={() => setSmsModal(r)} className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">SMS</button>
+                                <button onClick={() => deleteReservation(r.id)} className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-500">🗑</button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
         </>
       ) : (
@@ -222,7 +273,36 @@ export default function ReservationsPage() {
               className="px-3 py-1.5 border border-[#E0D5C5] rounded-lg text-sm text-[#555] bg-white hover:bg-[#F0EBE0]">Semaine suiv. →</button>
           </div>
 
-          <div className="overflow-x-auto">
+          {/* Vue calendrier mobile: liste groupée par jour */}
+          <div className="md:hidden">
+            {Object.entries(
+              reservations.reduce((acc, r) => {
+                if (!acc[r.date_reservation]) acc[r.date_reservation] = []
+                acc[r.date_reservation].push(r)
+                return acc
+              }, {} as Record<string, Reservation[]>)
+            ).sort().map(([date, resas]) => (
+              <div key={date} className="mb-4">
+                <h3 className="font-bold text-[#1A1A1A] mb-2 px-1">
+                  {new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </h3>
+                {resas.map(r => (
+                  <div key={r.id} className="bg-white rounded-lg border border-[#E0D5C5] p-3 mb-2">
+                    <div className="flex justify-between items-center">
+                      <span className="font-mono font-bold text-[#1A1A1A]">{r.heure}</span>
+                      <span className="font-medium">{r.nom_client}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs ${STATUT_STYLES[r.statut]?.tw}`}>{STATUT_STYLES[r.statut]?.label}</span>
+                    </div>
+                    <div className="text-sm text-[#555] mt-1">{r.nb_couverts} couverts · {r.zone || 'Indifférent'}</div>
+                  </div>
+                ))}
+              </div>
+            ))}
+            {reservations.length === 0 && <div className="text-[#555] px-1">Aucune réservation cette semaine.</div>}
+          </div>
+
+          {/* Vue calendrier desktop: grille */}
+          <div className="hidden md:block overflow-x-auto">
             <div className="grid text-sm" style={{ gridTemplateColumns: `80px repeat(7, minmax(120px, 1fr))` }}>
               {/* Header jours */}
               <div className="bg-[#F0EBE0] border border-[#E0D5C5] p-2 text-xs text-[#555] font-medium rounded-tl-lg"></div>
@@ -298,21 +378,23 @@ export default function ReservationsPage() {
                     className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
                 </div>
               ))}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Date et Heure: empilés sur mobile, côte à côte sur sm+ */}
+              <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Date</label>
                   <input type="date" value={form.date_reservation} onChange={e => setForm(prev => ({ ...prev, date_reservation: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none" />
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]" />
                 </div>
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Heure</label>
                   <select value={form.heure} onChange={e => setForm(prev => ({ ...prev, heure: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none">
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]">
                     {CRENEAUX.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              {/* Couverts et Zone: empilés sur mobile, côte à côte sur sm+ */}
+              <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Couverts</label>
                   <input type="number" min={1} max={20} value={form.nb_couverts} onChange={e => setForm(prev => ({ ...prev, nb_couverts: Number(e.target.value) }))}
@@ -320,8 +402,13 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Zone</label>
-                  <input type="text" value={form.zone} onChange={e => setForm(prev => ({ ...prev, zone: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none" />
+                  <select value={form.zone} onChange={e => setForm(prev => ({ ...prev, zone: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]">
+                    <option value="">Indifférent</option>
+                    <option value="RDC">RDC</option>
+                    <option value="Étage">Étage</option>
+                    <option value="Terrasse">Terrasse</option>
+                  </select>
                 </div>
               </div>
               <div>
