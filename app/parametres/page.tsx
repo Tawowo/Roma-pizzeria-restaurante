@@ -3,16 +3,23 @@ import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
+import bcrypt from 'bcryptjs'
 
 type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp'
 
 interface ParamMap { [key: string]: string }
-interface TableResto { id: string; numero: number; zone: string; capacite: number; actif: boolean }
+interface TableResto { id: string; numero: number; nom?: string; zone: string; capacite: number; actif: boolean }
 interface ProfilAdmin { id: string; role: string; nom: string }
 
 const INFO_KEYS = ['nom', 'telephone', 'adresse', 'message_fermeture']
 const HERO_KEYS = ['hero_annees', 'hero_nb_pizzas', 'hero_familles']
 const FIDELITE_KEYS = ['points_boisson', 'points_pizza_simple', 'points_pizza_premium']
+
+const FIDELITE_ARTICLES = [
+  { cle: 'points_boisson', label: 'Boisson offerte', description: 'Points nécessaires pour une boisson gratuite' },
+  { cle: 'points_pizza_simple', label: 'Pizza simple offerte', description: 'Points pour une pizza 33cm gratuite' },
+  { cle: 'points_pizza_premium', label: 'Pizza premium offerte', description: 'Points pour une pizza Pala/Calzone gratuite' },
+]
 
 const LABELS: Record<string, string> = {
   nom: 'Nom du restaurant', telephone: 'Téléphone', adresse: 'Adresse',
@@ -35,6 +42,7 @@ export default function ParametresPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState('')
+  const [newTable, setNewTable] = useState({ nom: '', capacite: 4, zone: 'rdc' })
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -83,15 +91,47 @@ export default function ParametresPage() {
     } catch (err) { console.error(err) } finally { setSaving(false) }
   }
 
-  const saveMdp = async (profilId: string) => {
-    const pw = mdp[profilId]
-    if (!pw) return
+  const handleChangerMdp = async (profilId: string, role: string) => {
+    const session = getSession()
+    if (!session) return
+
+    const actuel = mdp[role + '_actuel'] || ''
+    const nouveau = mdp[role + '_nouveau'] || ''
+    const confirm = mdp[role + '_confirm'] || ''
+
+    if (!actuel) { setSavedMsg('Mot de passe actuel requis'); return }
+    if (nouveau !== confirm) { setSavedMsg('Les mots de passe ne correspondent pas'); return }
+    if (nouveau.length < 6) { setSavedMsg('Mot de passe trop court (min 6 caractères)'); return }
+
     setSaving(true)
     try {
-      await supabase.from('profils_admin').update({ mot_de_passe: pw }).eq('id', profilId)
+      const { data: profilData } = await supabase
+        .from('profils_admin')
+        .select('mot_de_passe_hash, mot_de_passe')
+        .eq('id', profilId)
+        .single()
+
+      let valid = false
+      if (profilData?.mot_de_passe_hash) {
+        valid = await bcrypt.compare(actuel, profilData.mot_de_passe_hash)
+      } else if (profilData?.mot_de_passe) {
+        valid = actuel === profilData.mot_de_passe
+      }
+
+      if (!valid) { setSavedMsg('Mot de passe actuel incorrect'); setSaving(false); return }
+
+      const hash = await bcrypt.hash(nouveau, 10)
+      await supabase.from('profils_admin')
+        .update({ mot_de_passe_hash: hash, mot_de_passe: null })
+        .eq('id', profilId)
+
       setSavedMsg('Mot de passe mis à jour ✓')
-      setTimeout(() => setSavedMsg(''), 2000)
-    } catch (err) { console.error(err) } finally { setSaving(false) }
+      setMdp(prev => ({ ...prev, [role + '_actuel']: '', [role + '_nouveau']: '', [role + '_confirm']: '' }))
+      setTimeout(() => setSavedMsg(''), 3000)
+    } catch (err) {
+      console.error(err)
+      setSavedMsg('Erreur lors du changement de mot de passe')
+    } finally { setSaving(false) }
   }
 
   const toggleTableActif = async (id: string, actif: boolean) => {
@@ -101,7 +141,7 @@ export default function ParametresPage() {
     } catch { /* skip */ }
   }
 
-  const supprimerTable = async (id: string) => {
+  const deleteTable = async (id: string) => {
     if (!confirm('Supprimer cette table ?')) return
     try {
       await supabase.from('tables_restaurant').delete().eq('id', id)
@@ -109,13 +149,20 @@ export default function ParametresPage() {
     } catch { /* skip */ }
   }
 
-  const ajouterTable = async (zone: string) => {
+  const addTable = async () => {
+    if (!newTable.nom) return
     try {
-      const tablesZone = tables.filter(t => t.zone === zone)
-      const maxNum = tablesZone.length > 0 ? Math.max(...tablesZone.map(t => t.numero)) : 0
-      await supabase.from('tables_restaurant').insert([{ numero: maxNum + 1, zone, capacite: 4, actif: true }])
+      const maxNum = Math.max(...tables.map(t => t.numero), 0)
+      await supabase.from('tables_restaurant').insert({
+        numero: maxNum + 1,
+        nom: newTable.nom,
+        zone: newTable.zone,
+        capacite: newTable.capacite,
+        actif: true
+      })
+      setNewTable({ nom: '', capacite: 4, zone: 'rdc' })
       await fetchTables()
-    } catch { /* skip */ }
+    } catch (err) { console.error(err) }
   }
 
   const sections: { key: Section; label: string }[] = [
@@ -156,7 +203,7 @@ export default function ParametresPage() {
       </div>
 
       {savedMsg && (
-        <div className="mb-4 px-4 py-2 rounded-lg text-sm text-green-700 bg-green-50 border border-green-200 w-fit">
+        <div className={`mb-4 px-4 py-2 rounded-lg text-sm w-fit border ${savedMsg.includes('✓') ? 'text-green-700 bg-green-50 border-green-200' : 'text-red-700 bg-red-50 border-red-200'}`}>
           {savedMsg}
         </div>
       )}
@@ -165,10 +212,68 @@ export default function ParametresPage() {
         <div className="max-w-2xl">
           {section === 'infos' && renderForm(INFO_KEYS)}
           {section === 'compteurs' && renderForm(HERO_KEYS)}
-          {section === 'fidelite' && renderForm(FIDELITE_KEYS)}
+
+          {section === 'fidelite' && (
+            <div>
+              <div className="overflow-x-auto rounded-xl border border-[#E0D5C5] mb-4">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-[#F0EBE0]">
+                      <th className="px-4 py-2 text-left font-medium text-[#555]">Récompense</th>
+                      <th className="px-4 py-2 text-left font-medium text-[#555]">Description</th>
+                      <th className="px-4 py-2 text-center font-medium text-[#555]">Points nécessaires</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {FIDELITE_ARTICLES.map(f => (
+                      <tr key={f.cle} className="border-t border-[#E0D5C5]">
+                        <td className="px-4 py-3 font-medium text-[#1A1A1A]">{f.label}</td>
+                        <td className="px-4 py-3 text-[#555]">{f.description}</td>
+                        <td className="px-4 py-3 text-center">
+                          <input type="number" min={1} value={params[f.cle] || ''}
+                            onChange={e => setParams(prev => ({ ...prev, [f.cle]: e.target.value }))}
+                            className="w-24 px-2 py-1 border border-[#E0D5C5] rounded text-center focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mb-4 p-3 bg-[#F0EBE0] rounded-lg text-sm text-[#555]">
+                💡 Un client qui dépense 40€ gagnera {Math.round(40 * 10)} points (base: 10 pts/€)
+              </div>
+              <button onClick={() => saveParams(FIDELITE_KEYS)} disabled={saving}
+                className="px-6 py-2 rounded-lg text-sm font-medium text-white bg-[#B71C1C] hover:bg-[#C62828] disabled:opacity-50">
+                {saving ? 'Sauvegarde...' : 'Sauvegarder'}
+              </button>
+            </div>
+          )}
 
           {section === 'tables' && (
             <div>
+              {/* Formulaire d'ajout */}
+              <div className="mb-6 p-4 bg-white border border-[#E0D5C5] rounded-xl">
+                <h3 className="font-semibold text-[#1A1A1A] mb-3">Ajouter une table</h3>
+                <div className="flex gap-3 flex-wrap">
+                  <input placeholder="Nom (ex: Table du fond)"
+                    value={newTable.nom}
+                    onChange={e => setNewTable(t => ({ ...t, nom: e.target.value }))}
+                    className="flex-1 min-w-0 px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
+                  <input type="number" min={1} max={20} value={newTable.capacite}
+                    onChange={e => setNewTable(t => ({ ...t, capacite: Number(e.target.value) }))}
+                    className="w-20 px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg text-center focus:outline-none" />
+                  <span className="flex items-center text-sm text-[#555]">pers.</span>
+                  <select value={newTable.zone} onChange={e => setNewTable(t => ({ ...t, zone: e.target.value }))}
+                    className="px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg focus:outline-none">
+                    {ZONES.map(z => <option key={z} value={z}>{z === 'rdc' ? 'RDC' : z === 'etage' ? 'Étage' : 'Terrasse'}</option>)}
+                  </select>
+                  <button onClick={addTable} disabled={!newTable.nom}
+                    className="px-4 py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium disabled:opacity-50 hover:bg-[#2E7D32]">
+                    + Ajouter
+                  </button>
+                </div>
+              </div>
+
               {tablesErr ? (
                 <div className="text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-4">{tablesErr}</div>
               ) : tables.length === 0 ? (
@@ -176,25 +281,33 @@ export default function ParametresPage() {
               ) : (
                 ZONES.map(zone => {
                   const tablesZone = tables.filter(t => t.zone === zone)
+                  if (tablesZone.length === 0) return null
                   return (
-                    <div key={zone} className="mb-6">
-                      <h3 className="font-semibold text-[#1A1A1A] mb-3 capitalize">{zone === 'rdc' ? '🏠 RDC' : zone === 'etage' ? '🏛 Étage' : '🌿 Terrasse'}</h3>
-                      <div className="space-y-2">
-                        {tablesZone.map(t => (
-                          <div key={t.id} className="flex items-center gap-4 bg-white border border-[#E0D5C5] rounded-lg p-3">
-                            <span className="font-medium w-16">Table {t.numero}</span>
-                            <span className="text-sm text-[#555]">{t.capacite} pers.</span>
-                            <label className="flex items-center gap-1 text-sm">
-                              <input type="checkbox" checked={t.actif} onChange={e => toggleTableActif(t.id, e.target.checked)} />
-                              Actif
-                            </label>
-                            <button onClick={() => supprimerTable(t.id)} className="ml-auto text-red-500 hover:text-red-700 text-sm">🗑 Supprimer</button>
-                          </div>
-                        ))}
-                      </div>
-                      <button onClick={() => ajouterTable(zone)} className="mt-2 text-sm text-[#1B5E20] hover:text-[#2E7D32] font-medium">
-                        + Ajouter une table
-                      </button>
+                    <div key={zone} className="mb-4">
+                      <h3 className="font-semibold text-[#1A1A1A] capitalize mb-2">
+                        {zone === 'rdc' ? '🏠 RDC' : zone === 'etage' ? '🏛 Étage' : '🌿 Terrasse'}
+                      </h3>
+                      {tablesZone.map(t => (
+                        <div key={t.id} className="flex items-center gap-3 py-2 border-b border-[#E0D5C5]">
+                          <span className="w-8 font-mono text-sm text-[#555]">#{t.numero}</span>
+                          <input defaultValue={t.nom || `Table ${t.numero}`}
+                            onBlur={async (e) => {
+                              await supabase.from('tables_restaurant').update({ nom: e.target.value }).eq('id', t.id)
+                            }}
+                            className="flex-1 px-2 py-1 text-sm border border-[#E0D5C5] rounded focus:outline-none focus:ring-1 focus:ring-[#1B5E20]" />
+                          <input type="number" defaultValue={t.capacite} min={1} max={20}
+                            onBlur={async (e) => {
+                              await supabase.from('tables_restaurant').update({ capacite: Number(e.target.value) }).eq('id', t.id)
+                            }}
+                            className="w-16 px-2 py-1 text-sm border border-[#E0D5C5] rounded text-center focus:outline-none" />
+                          <span className="text-xs text-[#555]">pers.</span>
+                          <label className="flex items-center gap-1 text-xs text-[#555]">
+                            <input type="checkbox" checked={t.actif} onChange={e => toggleTableActif(t.id, e.target.checked)} />
+                            Actif
+                          </label>
+                          <button onClick={() => deleteTable(t.id)} className="text-red-400 hover:text-red-600 text-sm">🗑</button>
+                        </div>
+                      ))}
                     </div>
                   )
                 })
@@ -203,17 +316,25 @@ export default function ParametresPage() {
           )}
 
           {section === 'mdp' && (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {profils.map(p => (
-                <div key={p.id} className="rounded-xl p-5 bg-white border border-[#E0D5C5]">
-                  <div className="font-medium mb-3 text-[#1A1A1A]">{p.nom} <span className="text-xs text-[#555] ml-2">({p.role})</span></div>
-                  <div className="flex gap-3">
-                    <input type="password" value={mdp[p.id] ?? ''} onChange={e => setMdp(prev => ({ ...prev, [p.id]: e.target.value }))}
-                      placeholder="Nouveau mot de passe"
-                      className="flex-1 px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
-                    <button onClick={() => saveMdp(p.id)} disabled={saving || !mdp[p.id]}
-                      className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-[#B71C1C] disabled:opacity-50">
-                      Changer
+                <div key={p.id} className="border border-[#E0D5C5] rounded-xl p-4">
+                  <h3 className="font-semibold mb-3 text-[#1A1A1A]">{p.nom} <span className="text-xs text-[#555] font-normal">({p.role})</span></h3>
+                  <div className="space-y-2">
+                    {(['actuel', 'nouveau', 'confirm'] as const).map(type => (
+                      <div key={type}>
+                        <label className="block text-xs text-[#555] mb-1">
+                          {type === 'actuel' ? 'Mot de passe actuel' : type === 'nouveau' ? 'Nouveau mot de passe' : 'Confirmer le nouveau'}
+                        </label>
+                        <input type="password"
+                          value={mdp[p.role + '_' + type] || ''}
+                          onChange={e => setMdp(prev => ({ ...prev, [p.role + '_' + type]: e.target.value }))}
+                          className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
+                      </div>
+                    ))}
+                    <button onClick={() => handleChangerMdp(p.id, p.role)} disabled={saving}
+                      className="w-full py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium mt-2 hover:bg-[#2E7D32] disabled:opacity-50">
+                      {saving ? 'Mise à jour...' : 'Changer le mot de passe'}
                     </button>
                   </div>
                 </div>
