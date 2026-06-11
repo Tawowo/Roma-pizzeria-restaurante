@@ -145,6 +145,7 @@ export default function CommandesPage() {
       setCommandes(cmds)
 
       const { data: tablesDB } = await supabase.from('tables_restaurant').select('*').eq('actif', true).order('numero')
+      console.log('tables DB:', tablesDB)
 
       if (tablesDB && tablesDB.length > 0) {
         const tv: TableVirtuelle[] = (tablesDB as TableResto[]).map(t => {
@@ -253,16 +254,13 @@ export default function CommandesPage() {
     } catch { setReduction(r => ({ ...r, bonFideliteMsg: 'Bon invalide', bonFideliteValeur: 0 })) }
   }
 
-  const upsertTable = async (num: number, cmdId: string) => {
-    const { data: updRows } = await supabase
-      .from('tables_restaurant').update({ statut: 'occupee', commande_id: cmdId }).eq('numero', num).select()
-    if (!updRows || updRows.length === 0) {
-      const z: Zone = num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse'
-      await supabase.from('tables_restaurant').upsert(
-        { numero: num, zone: z, capacite: 4, actif: true, statut: 'occupee', commande_id: cmdId },
-        { onConflict: 'numero' }
-      )
-    }
+  const upsertTable = async (num: number, cmdId: string, zone?: Zone) => {
+    const z: Zone = zone ?? (num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse')
+    const { error: upsErr } = await supabase.from('tables_restaurant').upsert(
+      { numero: num, zone: z, capacite: 4, actif: true, statut: 'occupee', commande_id: cmdId },
+      { onConflict: 'numero,zone' }
+    )
+    console.log('[upsertTable] table', num, 'upsert error:', upsErr)
   }
 
   const makeLigneInsert = (p: PanierItem, cmdId: string, statut: string, ajout_apres: boolean) => {
@@ -316,7 +314,7 @@ export default function CommandesPage() {
         const { error: el2 } = await supabase.from('lignes_commande').insert(panierAttente.map(p => makeLigneInsert(p, cmd.id, 'en_attente', false)))
         if (el2) throw new Error(`Insertion lignes attente: ${el2.message}`)
       }
-      if (modalTable?.num) await upsertTable(modalTable.num, cmd.id)
+      if (modalTable?.num) await upsertTable(modalTable.num, cmd.id, modalTable.zone)
       setModalTable(null); await fetchTout()
     } catch (err) {
       console.error('envoyerEnCuisine error:', err)
@@ -340,7 +338,7 @@ export default function CommandesPage() {
 
       const { error: elErr } = await supabase.from('lignes_commande').insert(panier.map(p => makeLigneInsert(p, cmd.id, 'en_attente', false)))
       if (elErr) throw new Error(`Insertion lignes: ${elErr.message}`)
-      if (modalTable?.num) await upsertTable(modalTable.num, cmd.id)
+      if (modalTable?.num) await upsertTable(modalTable.num, cmd.id, modalTable.zone)
       setModalTable(null); await fetchTout()
     } catch (err) {
       console.error('sauvegarder error:', err)
@@ -399,6 +397,7 @@ export default function CommandesPage() {
   }
 
   const modifierCommande = (cmd: CommandeActive) => {
+    console.log('modifier:', cmd.id, cmd.type)
     if (cmd.type === 'a_emporter') {
       resetModal()
       setNomClient(cmd.nom_client ?? ''); setTelClient(cmd.telephone ?? '')
@@ -935,6 +934,7 @@ function CommandeRow({ cmd, onEncaisser, onUpdate, onModifier }: {
   }
 
   const supprimer = async () => {
+    console.log('supprimer:', cmd.id)
     try {
       await supabase.from('lignes_commande').delete().eq('commande_id', cmd.id)
       await supabase.from('commandes').delete().eq('id', cmd.id)
