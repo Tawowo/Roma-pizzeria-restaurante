@@ -418,6 +418,7 @@ export default function CommandesPage() {
 
         setModalTable(null)
         setExistingCmdId(null)
+        setPanier([])
         setPanierEnvoiSelectionne(new Set())
         await fetchTout()
         return
@@ -475,6 +476,7 @@ export default function CommandesPage() {
       }
 
       setModalTable(null)
+      setPanier([])
       setPanierEnvoiSelectionne(new Set())
       await fetchTout()
     } catch (err) {
@@ -560,7 +562,7 @@ export default function CommandesPage() {
   }
 
   const supprimerCommande = async (cmd: CommandeActive) => {
-    console.log('[supprimerCommande] called for:', cmd.id, 'table:', cmd.table_numero, 'statut:', cmd.statut)
+    console.log('suppression déclenchée pour:', cmd.id)
     setSaving(true)
     setErreur(null)
     try {
