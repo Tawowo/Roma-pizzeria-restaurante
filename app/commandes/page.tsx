@@ -96,6 +96,43 @@ interface ReductionState {
   offrirMotif: string
 }
 
+// ─── Utilitaires créneaux (partagés avec la vitrine) ────────────────────────
+function genSlots(fromH: number, fromM: number, toH: number, toM: number): string[] {
+  const slots: string[] = []
+  let h = fromH, m = fromM
+  while (h * 60 + m <= toH * 60 + toM) {
+    slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+    m += 5
+    if (m >= 60) { m -= 60; h++ }
+  }
+  return slots
+}
+const EMP_SLOTS_MIDI = genSlots(12, 0, 14, 30)
+const EMP_SLOTS_SOIR = genSlots(19, 0, 22, 0)
+function getEmpSlots(dow: number): { midi: string[], soir: string[] } {
+  if (dow === 1) return { midi: [], soir: [] }
+  if (dow === 0 || dow === 2) return { midi: [], soir: EMP_SLOTS_SOIR }
+  return { midi: EMP_SLOTS_MIDI, soir: EMP_SLOTS_SOIR }
+}
+function computeEmpDate(): { date: string, label: string, midi: string[], soir: string[] } {
+  const now = new Date()
+  const JOURS = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now); d.setDate(d.getDate() + i)
+    const dow = d.getDay()
+    const { midi, soir } = getEmpSlots(dow)
+    const nowMin = now.getHours() * 60 + now.getMinutes() + 30
+    const fp = (s: string[]) => i > 0 ? s : s.filter(x => { const [h, m] = x.split(':').map(Number); return h * 60 + m > nowMin })
+    const mD = fp(midi), sD = fp(soir)
+    if (mD.length === 0 && sD.length === 0) continue
+    const dateStr = d.toISOString().split('T')[0]
+    const label = i === 0 ? `Aujourd'hui — ${JOURS[dow]}` : i === 1 ? `Demain — ${JOURS[dow]}` : JOURS[dow]
+    return { date: dateStr, label, midi: mD, soir: sD }
+  }
+  return { date: new Date().toISOString().split('T')[0], label: '', midi: [], soir: [] }
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 const ZONES: { key: Zone; label: string; icon: string }[] = [
   { key: 'rdc', label: 'RDC', icon: '🏠' },
   { key: 'etage', label: 'Étage', icon: '🏛' },
@@ -202,6 +239,20 @@ export default function CommandesPage() {
   const [confirmDelete, setConfirmDelete] = useState<CommandeActive | null>(null)
   // Filtre date pour l'historique
   const [dateFiltre, setDateFiltre] = useState(() => new Date().toISOString().split('T')[0])
+
+  // Modal nouvelle commande à emporter
+  const [modalNvEmporter, setModalNvEmporter] = useState(false)
+  const [empNom, setEmpNom] = useState('')
+  const [empTel, setEmpTel] = useState('')
+  const [empDate, setEmpDate] = useState('')
+  const [empLabelJour, setEmpLabelJour] = useState('')
+  const [empHeure, setEmpHeure] = useState('')
+  const [empSlotsMidi, setEmpSlotsMidi] = useState<string[]>([])
+  const [empSlotsSoir, setEmpSlotsSoir] = useState<string[]>([])
+  const [empPanier, setEmpPanier] = useState<PanierItem[]>([])
+  const [empCatActive, setEmpCatActive] = useState('')
+  const [empErr, setEmpErr] = useState<string | null>(null)
+  const [empSaving, setEmpSaving] = useState(false)
 
   const fetchTout = useCallback(async (dateCible?: string) => {
     const jour = dateCible ?? dateFiltre ?? new Date().toISOString().split('T')[0]
@@ -637,6 +688,71 @@ export default function CommandesPage() {
     setErreur(null)
   }
 
+  const ouvrirModalEmporter = () => {
+    const { date, label, midi, soir } = computeEmpDate()
+    setEmpDate(date)
+    setEmpLabelJour(label)
+    setEmpSlotsMidi(midi)
+    setEmpSlotsSoir(soir)
+    setEmpNom('')
+    setEmpTel('')
+    setEmpHeure('')
+    setEmpPanier([])
+    setEmpCatActive(categories[0]?.id ?? '')
+    setEmpErr(null)
+    setModalNvEmporter(true)
+  }
+
+  const validerEmporter = async () => {
+    setEmpErr(null)
+    if (!empNom.trim()) { setEmpErr('Le nom est obligatoire'); return }
+    if (!empTel.trim()) { setEmpErr('Le téléphone est obligatoire'); return }
+    if (!empHeure) { setEmpErr('Choisissez une heure de retrait'); return }
+    if (empPanier.length === 0) { setEmpErr('Ajoutez au moins un article'); return }
+    setEmpSaving(true)
+    try {
+      const total = empPanier.reduce((s, p) => s + p.article.prix * p.quantite, 0)
+      const { data: cmd, error: cmdErr } = await supabase.from('commandes').insert({
+        nom_client: empNom.trim(),
+        telephone: empTel.trim(),
+        heure_retrait: empHeure,
+        date_retrait: empDate,
+        type: 'a_emporter',
+        statut: 'en_preparation',
+        total,
+      }).select().single()
+      if (cmdErr || !cmd) throw new Error(cmdErr?.message ?? 'Erreur création commande')
+
+      const lignes = empPanier.map(p => {
+        const cat = categories.find(c => c.id === p.article.categorie_id)
+        const nomCat = cat?.nom?.toLowerCase() ?? ''
+        const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+        return {
+          commande_id: cmd.id,
+          article_id: p.article.id,
+          article_nom: p.article.nom,
+          quantite: p.quantite,
+          prix_unitaire: p.article.prix,
+          taille: p.taille || null,
+          commentaire: p.commentaire || null,
+          categorie_nom: cat?.nom || null,
+          pour_cuisine,
+          statut: 'envoye_cuisine',
+          ajout_apres: false,
+        }
+      })
+      const { error: ligErr } = await supabase.from('lignes_commande').insert(lignes)
+      if (ligErr) throw new Error(`Erreur insertion articles : ${ligErr.message}`)
+
+      setModalNvEmporter(false)
+      await fetchTout()
+    } catch (err) {
+      setEmpErr(err instanceof Error ? err.message : String(err))
+    } finally {
+      setEmpSaving(false)
+    }
+  }
+
   const tablesByZone = tables.filter(t => t.zone === zone)
   const commandesEmporter = commandes.filter(c =>
     c.type === 'a_emporter' && !['encaissee', 'annulee'].includes(c.statut)
@@ -759,6 +875,14 @@ export default function CommandesPage() {
         </>
       ) : (
         <div className="space-y-3">
+          {/* Bouton nouvelle commande à emporter */}
+          <div className="mb-4">
+            <button
+              onClick={ouvrirModalEmporter}
+              className="px-5 py-2 rounded-lg text-sm font-medium bg-[#1B5E20] text-white hover:bg-[#2E7D32] transition-all">
+              + Nouvelle commande à emporter
+            </button>
+          </div>
           {/* Sélecteur de date — historique */}
           <div className="flex items-center gap-3 mb-4">
             <label className="text-sm text-[#555] font-medium">Jour :</label>
@@ -1206,6 +1330,136 @@ export default function CommandesPage() {
               <button onClick={() => supprimerCommande(confirmDelete)} disabled={saving}
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
                 {saving ? 'Suppression...' : '🗑 Supprimer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL NOUVELLE COMMANDE À EMPORTER ===== */}
+      {modalNvEmporter && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0D5C5]">
+              <h2 className="text-lg font-bold">📦 Nouvelle commande à emporter</h2>
+              <button onClick={() => setModalNvEmporter(false)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
+            </div>
+            {empErr && (
+              <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 border border-red-300 text-red-700 text-sm">⚠️ {empErr}</div>
+            )}
+            <div className="p-6 flex flex-col gap-5">
+              {/* Infos client */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-[#555] mb-1">Nom du client *</label>
+                  <input value={empNom} onChange={e => setEmpNom(e.target.value)}
+                    className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
+                    placeholder="Nom Prénom" />
+                </div>
+                <div>
+                  <label className="block text-sm text-[#555] mb-1">Téléphone *</label>
+                  <input value={empTel} onChange={e => setEmpTel(e.target.value)} type="tel"
+                    className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
+                    placeholder="06 XX XX XX XX" />
+                </div>
+              </div>
+
+              {/* Créneaux */}
+              <div>
+                <label className="block text-sm text-[#555] mb-2">Heure de retrait * — <span className="font-medium text-[#B71C1C]">{empLabelJour}</span></label>
+                {empSlotsMidi.length === 0 && empSlotsSoir.length === 0 ? (
+                  <div className="text-sm text-[#555] italic">Aucun créneau disponible aujourd&apos;hui</div>
+                ) : (
+                  <div className="space-y-3">
+                    {empSlotsMidi.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-2">🌞 Midi</div>
+                        <div className="flex flex-wrap gap-2">
+                          {empSlotsMidi.map(s => (
+                            <button key={s} onClick={() => setEmpHeure(s)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${empHeure === s ? 'bg-[#B71C1C] text-white border-[#B71C1C]' : 'bg-white text-[#333] border-[#E0D5C5] hover:border-[#B71C1C]'}`}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {empSlotsSoir.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-2">🌙 Soir</div>
+                        <div className="flex flex-wrap gap-2">
+                          {empSlotsSoir.map(s => (
+                            <button key={s} onClick={() => setEmpHeure(s)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${empHeure === s ? 'bg-[#B71C1C] text-white border-[#B71C1C]' : 'bg-white text-[#333] border-[#E0D5C5] hover:border-[#B71C1C]'}`}>
+                              {s}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Articles + Panier */}
+              <div className="flex flex-col lg:flex-row gap-4">
+                {/* Grille articles */}
+                <div className="flex-1">
+                  <label className="block text-sm text-[#555] mb-2">Articles</label>
+                  <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+                    {categories.map(c => (
+                      <button key={c.id} onClick={() => setEmpCatActive(c.id)}
+                        className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${empCatActive === c.id ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
+                        {c.nom}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                    {articles.filter(a => a.categorie_id === empCatActive).map(art => (
+                      <button key={art.id}
+                        onClick={() => setEmpPanier(prev => {
+                          const idx = prev.findIndex(p => p.article.id === art.id)
+                          if (idx >= 0) { const n = [...prev]; n[idx] = { ...n[idx], quantite: n[idx].quantite + 1 }; return n }
+                          return [...prev, { article: art, quantite: 1, taille: '', commentaire: '' }]
+                        })}
+                        className="bg-white border border-[#E0D5C5] rounded-lg p-2 text-left hover:border-[#1B5E20] hover:shadow-sm transition-all">
+                        <div className="text-xs font-medium text-[#1A1A1A]">{art.nom}</div>
+                        <div className="text-xs text-[#B71C1C] font-bold mt-0.5">{art.prix.toFixed(2)} €</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Panier */}
+                <div className="w-full lg:w-64 shrink-0">
+                  <h4 className="font-semibold text-sm text-[#1A1A1A] mb-2">Panier</h4>
+                  {empPanier.length === 0 ? (
+                    <div className="text-[#555] text-sm">Aucun article</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {empPanier.map((item, idx) => (
+                        <div key={idx} className="flex items-center justify-between gap-2 bg-[#F0EBE0] rounded-lg px-3 py-2">
+                          <span className="text-xs font-medium flex-1">{item.article.nom}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setEmpPanier(p => p.map((x, i) => i === idx ? { ...x, quantite: Math.max(1, x.quantite - 1) } : x))} className="w-5 h-5 rounded bg-white border border-[#E0D5C5] text-xs flex items-center justify-center">-</button>
+                            <span className="text-xs font-bold w-4 text-center">{item.quantite}</span>
+                            <button onClick={() => setEmpPanier(p => p.map((x, i) => i === idx ? { ...x, quantite: x.quantite + 1 } : x))} className="w-5 h-5 rounded bg-white border border-[#E0D5C5] text-xs flex items-center justify-center">+</button>
+                          </div>
+                          <button onClick={() => setEmpPanier(p => p.filter((_, i) => i !== idx))} className="text-red-500 text-xs ml-1">✕</button>
+                        </div>
+                      ))}
+                      <div className="font-bold text-[#B71C1C] text-sm pt-2 border-t border-[#E0D5C5]">
+                        Total : {empPanier.reduce((s, p) => s + p.article.prix * p.quantite, 0).toFixed(2)} €
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Bouton valider */}
+              <button onClick={validerEmporter} disabled={empSaving}
+                className="w-full bg-[#B71C1C] hover:bg-[#C62828] text-white py-3 rounded-lg font-medium disabled:opacity-50">
+                {empSaving ? 'Envoi...' : '📤 Envoyer en cuisine'}
               </button>
             </div>
           </div>

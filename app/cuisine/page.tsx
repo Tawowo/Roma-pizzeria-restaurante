@@ -28,6 +28,8 @@ interface Commande {
   zone?: string
   nom_client?: string
   notes?: string
+  heure_retrait?: string
+  telephone?: string
   lignes_commande: LigneCommande[]
 }
 
@@ -129,6 +131,8 @@ export default function CuisinePage() {
             zone: cmd.zone,
             nom_client: cmd.nom_client,
             notes: cmd.notes,
+            heure_retrait: cmd.heure_retrait,
+            telephone: cmd.telephone,
             lignes_commande: [],
           })
         }
@@ -224,6 +228,10 @@ export default function CuisinePage() {
     const aUrgent = urgents.has(a.id) ? 0 : 1
     const bUrgent = urgents.has(b.id) ? 0 : 1
     if (aUrgent !== bUrgent) return aUrgent - bUrgent
+    // Emporter : trier par heure de retrait croissante
+    if (a.type === 'a_emporter' && b.type === 'a_emporter') {
+      return (a.heure_retrait || '99:99').localeCompare(b.heure_retrait || '99:99')
+    }
     return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   })
 
@@ -290,9 +298,19 @@ export default function CuisinePage() {
                   </div>
                 </div>
 
-                {/* Nom client */}
+                {/* Nom client + heure retrait pour emporter */}
                 {cmd.nom_client && (
                   <div style={{ fontSize: 20, color: '#F5F5F5', fontWeight: 600 }}>{cmd.nom_client}</div>
+                )}
+                {cmd.type === 'a_emporter' && cmd.heure_retrait && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 28, fontWeight: 900, color: '#F57F17', fontFamily: 'monospace', letterSpacing: 2 }}>
+                      ⏰ {cmd.heure_retrait}
+                    </span>
+                    {cmd.telephone && (
+                      <span style={{ fontSize: 13, color: '#aaa' }}>📞 {cmd.telephone}</span>
+                    )}
+                  </div>
                 )}
 
                 {/* Heure + Timer */}
