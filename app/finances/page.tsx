@@ -241,6 +241,19 @@ export default function FinancesPage() {
     if (compareMode && period2.start && period2.end) fetchKPI2()
   }, [compareMode, period2, fetchKPI2])
 
+  // Realtime : mettre à jour les finances quand une commande est encaissée
+  useEffect(() => {
+    const channel = supabase.channel('finances-realtime')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commandes' }, () => {
+        fetchData(periode, customStart, customEnd)
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commandes' }, () => {
+        fetchData(periode, customStart, customEnd)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [fetchData, periode, customStart, customEnd])
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (exportRef.current && !exportRef.current.contains(e.target as Node)) setShowExport(false)

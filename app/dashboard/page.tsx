@@ -406,6 +406,9 @@ export default function DashboardPage() {
         }
         fetchData()
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commandes' }, () => {
+        fetchData()
+      })
       .subscribe()
 
     return () => {
