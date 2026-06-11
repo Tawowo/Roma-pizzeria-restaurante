@@ -178,20 +178,24 @@ export default function CuisinePage() {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
       }
       await supabase.from('commandes').update({ statut: 'prete' }).eq('id', cmd.id)
-      // SMS notifications
+      // Notifications push via ntfy.sh (gratuit, sans inscription)
       try {
-        if (cmd.type === 'a_emporter' && cmd.telephone) {
-          await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-            to: cmd.telephone,
-            message: `Votre commande Roma Pizzeria Restaurant est prête ! Vous pouvez venir la récupérer au 20 place Jacques du Bellay, Savigné-sur-Lathan.`
-          })})
-        } else if (cmd.type === 'sur_place') {
-          await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-            to: '+33764020898',
-            message: `Roma Admin — Table ${cmd.table_numero} (${cmd.nom_client}) : commande prête !`
-          })})
+        if (cmd.type === 'a_emporter') {
+          // Notification staff : commande emporter prête
+          await fetch('https://ntfy.sh/roma-cuisine-andrei-2024', {
+            method: 'POST',
+            body: `📦 À emporter — ${cmd.nom_client ?? ''}${cmd.heure_retrait ? ` (retrait ${cmd.heure_retrait})` : ''} : commande prête !`,
+            headers: { 'Title': 'Roma — Commande à emporter prête', 'Priority': 'high', 'Tags': 'white_check_mark' }
+          })
+        } else {
+          // Notification Andreï : commande sur place prête
+          await fetch('https://ntfy.sh/roma-cuisine-andrei-2024', {
+            method: 'POST',
+            body: `🍽️ Table ${cmd.table_numero} — ${cmd.nom_client ?? ''} : commande prête !`,
+            headers: { 'Title': 'Roma — Table prête', 'Priority': 'high', 'Tags': 'bell' }
+          })
         }
-      } catch (smsErr) { console.error('SMS error (non-blocking):', smsErr) }
+      } catch (ntfyErr) { console.error('ntfy error (non-blocking):', ntfyErr) }
       await fetchCommandes()
     } catch (err) {
       console.error('Update error:', err)
