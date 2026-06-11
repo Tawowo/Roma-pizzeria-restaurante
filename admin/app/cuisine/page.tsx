@@ -26,6 +26,8 @@ interface Commande {
   table_numero?: number
   zone?: string
   nom_client?: string
+  telephone?: string
+  heure_retrait?: string
   notes?: string
   lignes_commande: LigneCommande[]
 }
@@ -171,14 +173,25 @@ export default function CuisinePage() {
 
   const marquerPrete = async (cmd: Commande) => {
     try {
-      // Mark all cuisine lines as pret
-      const ligneIds = cmd.lignes_commande
-        .filter(l => isArticleCuisine(l))
-        .map(l => l.id)
+      const ligneIds = cmd.lignes_commande.filter(l => isArticleCuisine(l)).map(l => l.id)
       if (ligneIds.length > 0) {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
       }
       await supabase.from('commandes').update({ statut: 'prete' }).eq('id', cmd.id)
+      // SMS notifications
+      try {
+        if (cmd.type === 'a_emporter' && cmd.telephone) {
+          await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+            to: cmd.telephone,
+            message: `Votre commande Roma Pizzeria Restaurant est prête ! Vous pouvez venir la récupérer au 20 place Jacques du Bellay, Savigné-sur-Lathan.`
+          })})
+        } else if (cmd.type === 'sur_place') {
+          await fetch('/api/sms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+            to: '+33764020898',
+            message: `Roma Admin — Table ${cmd.table_numero} (${cmd.nom_client}) : commande prête !`
+          })})
+        }
+      } catch (smsErr) { console.error('SMS error (non-blocking):', smsErr) }
       await fetchCommandes()
     } catch (err) {
       console.error('Update error:', err)
@@ -268,7 +281,7 @@ export default function CuisinePage() {
                     </div>
                     {cmd.type === 'a_emporter' && (
                       <span style={{ background: '#F57F17', color: '#000', fontWeight: 700, fontSize: 11, padding: '3px 8px', borderRadius: 4 }}>
-                        📦 EMPORTER
+                        📦 EMPORTER{cmd.heure_retrait ? ` — ${cmd.heure_retrait}` : ''}
                       </span>
                     )}
                   </div>
