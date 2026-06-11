@@ -111,10 +111,10 @@ export default function CommanderPage() {
 
   const submitCommande = async () => {
     setErr('')
-    if (!nom.trim()) { setErr('Veuillez entrer votre nom'); return }
-    if (!tel.trim()) { setErr('Le téléphone est obligatoire'); return }
-    if (!heureRetrait) { setErr('Choisissez une heure de retrait'); return }
-    if (panier.length === 0) { setErr('Votre panier est vide'); return }
+    if (!nom.trim()) { setErr(t('emporter_err_nom')); return }
+    if (!tel.trim()) { setErr(t('emporter_err_tel')); return }
+    if (!heureRetrait) { setErr(t('emporter_err_heure')); return }
+    if (panier.length === 0) { setErr(t('emporter_err_panier')); return }
 
     setLoading(true)
     const { data: cmd, error } = await supabase.from('commandes').insert({
@@ -126,7 +126,7 @@ export default function CommanderPage() {
       total,
     }).select().single()
 
-    if (error || !cmd) { setErr('Erreur. Appelez le 06 68 36 62 98'); setLoading(false); return }
+    if (error || !cmd) { setErr(t('emporter_err_serveur')); setLoading(false); return }
 
     await supabase.from('lignes_commande').insert(
       panier.map(l => ({
@@ -154,14 +154,14 @@ export default function CommanderPage() {
           N° {numCmd}
         </div>
         <p style={{ fontSize: 15, color: 'var(--textm)', lineHeight: 1.8, marginBottom: 12 }}>
-          {nom}, votre commande est bien reçue.<br/>
-          Retrait prévu à <strong>{heureRetrait}</strong>.
+          {nom}, {t('emporter_confirmation_desc')}<br/>
+          {t('emporter_retrait')} <strong>{heureRetrait}</strong>.
         </p>
         <p style={{ fontSize: 13, color: 'var(--textl)', marginBottom: 28 }}>
-          En cas de besoin, n'hésitez pas à nous appeler au{' '}
+          {t('emporter_besoin')}{' '}
           <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
         </p>
-        <Link href="/" className="bp" style={{ textDecoration: 'none', display: 'inline-block' }}>← Retour à l'accueil</Link>
+        <Link href="/" className="bp" style={{ textDecoration: 'none', display: 'inline-block' }}>← {t('emporter_retour_accueil')}</Link>
       </div>
     </div>
   )
@@ -186,7 +186,7 @@ export default function CommanderPage() {
       {step === 'menu' && (
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
           <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, marginBottom: 8 }}>{t('emporter_titre')}</h1>
-          <p style={{ fontSize: 14, color: 'var(--textl)', marginBottom: 28 }}>Choisissez vos articles, puis indiquez l'heure de retrait</p>
+          <p style={{ fontSize: 14, color: 'var(--textl)', marginBottom: 28 }}>{t('emporter_choisir')}</p>
 
           {/* Catégories */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
@@ -217,7 +217,7 @@ export default function CommanderPage() {
                     {a.prix_pala && <div style={{ fontSize: 11, color: 'var(--textl)' }}>Pala: {a.prix_pala.toFixed(2)} €</div>}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <button onClick={() => addToPanier(a, 'normal')} className="bp" style={{ padding: '8px 14px', fontSize: 11 }}>+ {a.prix_pala ? '33cm' : 'Ajouter'}</button>
+                    <button onClick={() => addToPanier(a, 'normal')} className="bp" style={{ padding: '8px 14px', fontSize: 11 }}>+ {a.prix_pala ? '33cm' : t('emporter_ajouter')}</button>
                     {a.prix_pala && <button onClick={() => addToPanier(a, 'pala')} style={{ padding: '8px 14px', fontSize: 11, background: 'var(--g)', color: 'white', border: 'none', borderRadius: 2, cursor: 'pointer', fontFamily: 'Jost,sans-serif', fontWeight: 600, letterSpacing: 1 }}>+ Pala</button>}
                   </div>
                 </div>
@@ -228,7 +228,7 @@ export default function CommanderPage() {
           {nbPanier > 0 && (
             <div style={{ position: 'sticky', bottom: 20, marginTop: 24 }}>
               <button onClick={() => setStep('panier')} className="bp" style={{ width: '100%', padding: 18, fontSize: 14 }}>
-                Voir mon panier ({nbPanier} article{nbPanier > 1 ? 's' : ''}) — {total.toFixed(2)} €
+                {t('emporter_voir_panier')} ({nbPanier} {nbPanier > 1 ? t('emporter_articles') : t('emporter_article')}) — {total.toFixed(2)} €
               </button>
             </div>
           )}
@@ -239,7 +239,7 @@ export default function CommanderPage() {
         <div style={{ maxWidth: 600, margin: '0 auto', padding: '32px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
             <button onClick={() => setStep('menu')} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--textl)' }}>←</button>
-            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28 }}>Mon <em style={{ color: 'var(--r)' }}>panier</em></h1>
+            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28 }}>{t('emporter_mon_panier')}</h1>
           </div>
 
           {panier.map(ligne => (
@@ -247,7 +247,7 @@ export default function CommanderPage() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 10 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: 15 }}>{ligne.article.nom}</div>
-                  <div style={{ fontSize: 12, color: 'var(--textl)' }}>{ligne.taille === 'pala' ? 'Format Pala (60×40cm)' : 'Format 33cm'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--textl)' }}>{ligne.taille === 'pala' ? t('emporter_format_pala') : t('emporter_format_normal')}</div>
                   {ligne.commentaire && <div style={{ fontSize: 12, color: 'var(--g)', marginTop: 4 }}>💬 {ligne.commentaire}</div>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -262,12 +262,12 @@ export default function CommanderPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {showCommentaire === ligne.id ? (
                   <input autoFocus value={ligne.commentaire} onChange={e => updateCommentaire(ligne.id, e.target.value)}
-                    placeholder="Ex: sans champignons, bien cuit..."
+                    placeholder={t('emporter_commentaire_placeholder')}
                     style={{ flex: 1, padding: '8px 12px', border: '1px solid rgba(196,30,58,0.2)', borderRadius: 4, fontSize: 12, fontFamily: 'Jost,sans-serif' }}
                     onBlur={() => setShowCommentaire(null)} />
                 ) : (
                   <button onClick={() => setShowCommentaire(ligne.id)} style={{ fontSize: 11, color: 'var(--textl)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-                    {ligne.commentaire ? '✏️ Modifier le commentaire' : '+ Ajouter un commentaire'}
+                    {ligne.commentaire ? `✏️ ${t('emporter_modifier_commentaire')}` : `+ ${t('emporter_ajouter_commentaire')}`}
                   </button>
                 )}
               </div>
@@ -276,13 +276,13 @@ export default function CommanderPage() {
 
           <div style={{ background: 'white', borderRadius: 6, padding: '20px', border: '1px solid rgba(196,30,58,0.08)', marginTop: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700 }}>
-              <span>Total</span><span style={{ color: 'var(--r)' }}>{total.toFixed(2)} €</span>
+              <span>{t('emporter_total')}</span><span style={{ color: 'var(--r)' }}>{total.toFixed(2)} €</span>
             </div>
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
-            <button onClick={() => setStep('menu')} className="bo" style={{ flex: 1 }}>← Ajouter des articles</button>
-            <button onClick={() => setStep('infos')} className="bp" style={{ flex: 2 }}>Continuer →</button>
+            <button onClick={() => setStep('menu')} className="bo" style={{ flex: 1 }}>← {t('emporter_ajouter_articles')}</button>
+            <button onClick={() => setStep('infos')} className="bp" style={{ flex: 2 }}>{t('emporter_continuer')} →</button>
           </div>
         </div>
       )}
@@ -291,7 +291,7 @@ export default function CommanderPage() {
         <div style={{ maxWidth: 600, margin: '0 auto', padding: '32px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
             <button onClick={() => setStep('panier')} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--textl)' }}>←</button>
-            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28 }}>Vos <em style={{ color: 'var(--r)' }}>informations</em></h1>
+            <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28 }}>{t('emporter_vos_infos')}</h1>
           </div>
 
           <div style={{ background: 'white', borderRadius: 8, padding: 32, border: '1px solid rgba(196,30,58,0.08)', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -304,32 +304,32 @@ export default function CommanderPage() {
               <input className="rf-input" value={tel} onChange={e => setTel(e.target.value)} placeholder={t('emporter_tel')} type="tel" />
             </div>
             <div>
-              <label className="rf-label">Date de retrait *</label>
+              <label className="rf-label">{t('emporter_date')} *</label>
               <input className="rf-input" value={dateRetrait} onChange={e => setDateRetrait(e.target.value)} type="date" min={new Date().toISOString().split('T')[0]} />
             </div>
             <div>
               <label className="rf-label">{t('emporter_heure')} *</label>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {slotsDispos.length === 0 && <div style={{ fontSize: 13, color: 'var(--textl)', fontStyle: 'italic' }}>Fermé ce jour-là</div>}
+                {slotsDispos.length === 0 && <div style={{ fontSize: 13, color: 'var(--textl)', fontStyle: 'italic' }}>{t('emporter_ferme_jour')}</div>}
                 {slotsDispos.map(s => {
                   const ok = canBook(s.slot)
                   const full = s.count >= 8
                   return (
                     <button key={s.slot} disabled={full || !ok} onClick={() => setHeureRetrait(s.slot)} className={`slot ${heureRetrait === s.slot ? 'sel' : ''} ${full || !ok ? 'full' : ''}`}
-                      title={full ? 'Complet' : !ok ? 'Insuffisant pour votre commande' : ''}>
+                      title={full ? t('emporter_complet') : !ok ? t('emporter_insuffisant') : ''}>
                       {s.slot}
-                      {s.count > 0 && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 4 }}>({8-s.count} dispo)</span>}
+                      {s.count > 0 && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 4 }}>({8-s.count} {t('emporter_dispo')})</span>}
                     </button>
                   )
                 })}
               </div>
             </div>
             <div>
-              <label className="rf-label">Notes (optionnel)</label>
-              <textarea className="rf-textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Sonnez à la porte rouge..." />
+              <label className="rf-label">{t('emporter_notes')}</label>
+              <textarea className="rf-textarea" value={notes} onChange={e => setNotes(e.target.value)} {...{placeholder: t('emporter_notes_placeholder')}} />
             </div>
             <p style={{ fontSize: 12, color: 'var(--textl)', lineHeight: 1.6, textAlign: 'center' }}>
-              En cas de besoin, n'hésitez pas à nous appeler au <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
+              {t('emporter_besoin_appeler')} <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
             </p>
             {err && <div style={{ color: 'var(--r)', fontSize: 13, textAlign: 'center' }}>{err}</div>}
             <button className="btn-submit btn-submit-g" onClick={submitCommande} disabled={loading}>

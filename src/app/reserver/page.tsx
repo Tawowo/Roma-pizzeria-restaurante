@@ -68,7 +68,7 @@ export default function ReserverPage() {
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(40px,6vw,80px) clamp(20px,5vw,40px)' }}>
         <div style={{ width: '100%', maxWidth: '580px' }}>
           <div style={{ textAlign: 'center', marginBottom: '36px' }}>
-            <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--terra)', marginBottom: '10px', display: 'block' }}>Réservation</span>
+            <span style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--terra)', marginBottom: '10px', display: 'block' }}>{t('reserver_badge')}</span>
             <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 'clamp(28px,4vw,42px)', color: 'var(--text)' }}>{t('reserver_titre')}</h1>
           </div>
 
@@ -105,7 +105,7 @@ export default function ReserverPage() {
                 <div>
                   <label className="rf-label">{t('reserver_couverts')}</label>
                   <select className="rf-select" value={form.couverts} onChange={e => setForm(p=>({...p,couverts:e.target.value}))}>
-                    {[1,2,3,4,5,6,7,8,10,12].map(n => <option key={n} value={n}>{n} {n===1?'personne':'personnes'}</option>)}
+                    {[1,2,3,4,5,6,7,8,10,12].map(n => <option key={n} value={n}>{n} {n===1?t('reserver_personne'):t('compte_personnes')}</option>)}
                   </select>
                 </div>
                 <div>
@@ -126,7 +126,7 @@ export default function ReserverPage() {
               <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', marginTop: '24px', padding: '16px', justifyContent: 'center', opacity: loading ? 0.7 : 1 }}>
                 {loading ? t('chargement') : t('reserver_btn')}
               </button>
-              <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', textAlign: 'center', marginTop: '14px' }}>Confirmation par téléphone · 06 68 36 62 98</p>
+              <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', textAlign: 'center', marginTop: '14px' }}>{t('reserver_confirmation')}</p>
             </form>
           )}
         </div>
