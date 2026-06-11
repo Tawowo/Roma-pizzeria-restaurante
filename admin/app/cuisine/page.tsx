@@ -118,6 +118,7 @@ export default function CuisinePage() {
         .in('statut', ['en_preparation'])
         .order('created_at')
       if (error) throw error
+      console.log('[cuisine] commandes reçues:', (data ?? []).map((c: Commande) => ({ id: c.id, statut: c.statut, lignes: c.lignes_commande?.length })))
 
       // Filtrer les lignes : exclure boissons/vins, garder uniquement envoye_cuisine (ou sans statut)
       const commandesFiltrees = (data ?? []).map((cmd: Commande) => ({

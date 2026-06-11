@@ -155,6 +155,7 @@ export default function CommandesPage() {
 
   // Modal detail table occupée
   const [modalDetail, setModalDetail] = useState<CommandeActive | null>(null)
+  const [annulationConfirm, setAnnulationConfirm] = useState(false)
   // Modal encaissement
   const [modalEncaiss, setModalEncaiss] = useState<CommandeActive | null>(null)
   const [modePaiement, setModePaiement] = useState<ModePaiement>('cb')
@@ -395,10 +396,21 @@ export default function CommandesPage() {
       }
       // Mettre la table en occupée
       if (modalTable?.num) {
-        await supabase
+        const { data: updRows, error: updErr } = await supabase
           .from('tables_restaurant')
           .update({ statut: 'occupee', commande_id: cmd.id })
           .eq('numero', modalTable.num)
+          .select()
+        console.log('[envoyerEnCuisine] table update result:', updRows, updErr)
+        if (!updRows || updRows.length === 0) {
+          // Table row missing — upsert it
+          const z: Zone = modalTable.num <= 4 ? 'rdc' : modalTable.num <= 8 ? 'etage' : 'terrasse'
+          const { error: upsErr } = await supabase.from('tables_restaurant').upsert({
+            numero: modalTable.num, zone: z, capacite: 4, actif: true,
+            statut: 'occupee', commande_id: cmd.id,
+          }, { onConflict: 'numero' })
+          console.log('[envoyerEnCuisine] upsert result:', upsErr)
+        }
       }
 
       setModalTable(null)
@@ -435,10 +447,20 @@ export default function CommandesPage() {
       if (elErr) throw new Error(`Insertion lignes: ${elErr.message}`)
 
       if (modalTable?.num) {
-        await supabase
+        const { data: updRows, error: updErr } = await supabase
           .from('tables_restaurant')
           .update({ statut: 'occupee', commande_id: cmd.id })
           .eq('numero', modalTable.num)
+          .select()
+        console.log('[sauvegarder] table update result:', updRows, updErr)
+        if (!updRows || updRows.length === 0) {
+          const z: Zone = modalTable.num <= 4 ? 'rdc' : modalTable.num <= 8 ? 'etage' : 'terrasse'
+          const { error: upsErr } = await supabase.from('tables_restaurant').upsert({
+            numero: modalTable.num, zone: z, capacite: 4, actif: true,
+            statut: 'occupee', commande_id: cmd.id,
+          }, { onConflict: 'numero' })
+          console.log('[sauvegarder] upsert result:', upsErr)
+        }
       }
       setModalTable(null)
       await fetchTout()
@@ -485,6 +507,20 @@ export default function CommandesPage() {
     setPanierEnvoiSelectionne(new Set())
     // Store the existing commande id to add lines to it
     setExistingCmdId(cmd.id)
+  }
+
+  const annulerCommande = async (cmd: CommandeActive) => {
+    try {
+      await supabase.from('commandes').update({ statut: 'annulee' }).eq('id', cmd.id)
+      if (cmd.table_numero) {
+        await supabase.from('tables_restaurant')
+          .update({ statut: 'libre', commande_id: null })
+          .eq('numero', cmd.table_numero)
+      }
+      setModalDetail(null)
+      setAnnulationConfirm(false)
+      await fetchTout()
+    } catch (err) { console.error('annulerCommande error:', err) }
   }
 
   const tablesByZone = tables.filter(t => t.zone === zone)
@@ -798,7 +834,7 @@ export default function CommandesPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0D5C5]">
               <h2 className="text-lg font-bold">Table {modalDetail.table_numero} — {modalDetail.nom_client}</h2>
-              <button onClick={() => setModalDetail(null)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
+              <button onClick={() => { setModalDetail(null); setAnnulationConfirm(false) }} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
             </div>
             <div className="p-6 space-y-4">
               {/* Articles envoyés en cuisine */}
@@ -838,20 +874,36 @@ export default function CommandesPage() {
               <div className="border-t border-[#E0D5C5] pt-3 font-bold text-[#B71C1C]">
                 Total : {modalDetail.total?.toFixed(2)} €
               </div>
-              <div className="flex gap-3 flex-wrap">
-                <button
-                  onClick={() => ajouterArticlesTable(modalDetail)}
-                  className="flex-1 bg-[#1B5E20] hover:bg-[#2E7D32] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
-                  + Ajouter des articles
-                </button>
-                {(modalDetail.statut === 'prete' || modalDetail.statut === 'en_preparation') && (
+              {annulationConfirm ? (
+                <div className="bg-red-50 border border-red-300 rounded-xl p-4 space-y-3">
+                  <p className="text-sm font-semibold text-red-700">Confirmer l&apos;annulation de la commande ?</p>
+                  <p className="text-xs text-red-600">La table sera libérée et la commande marquée comme annulée.</p>
+                  <div className="flex gap-2">
+                    <button onClick={() => setAnnulationConfirm(false)} className="flex-1 border border-[#E0D5C5] text-[#555] py-2 rounded-lg text-sm">Non, retour</button>
+                    <button onClick={() => annulerCommande(modalDetail)} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-bold">Oui, annuler</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3 flex-wrap">
                   <button
-                    onClick={() => { setModalEncaiss(modalDetail); setModalDetail(null); setModePaiement('cb'); setMontantRecu('') }}
-                    className="flex-1 bg-[#B71C1C] hover:bg-[#C62828] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
-                    💳 Encaisser
+                    onClick={() => ajouterArticlesTable(modalDetail)}
+                    className="flex-1 bg-[#1B5E20] hover:bg-[#2E7D32] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
+                    + Ajouter des articles
                   </button>
-                )}
-              </div>
+                  {!['payee', 'annulee'].includes(modalDetail.statut) && (
+                    <button
+                      onClick={() => { setModalEncaiss(modalDetail); setModalDetail(null); setModePaiement('cb'); setMontantRecu('') }}
+                      className="flex-1 bg-[#B71C1C] hover:bg-[#C62828] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
+                      💳 Encaisser
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setAnnulationConfirm(true)}
+                    className="w-full border border-red-400 text-red-600 hover:bg-red-50 py-2 rounded-lg text-sm font-medium">
+                    🗑️ Annuler la commande
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
