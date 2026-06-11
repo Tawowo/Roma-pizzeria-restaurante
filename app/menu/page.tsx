@@ -45,6 +45,7 @@ export default function MenuPage() {
   const [editArticle, setEditArticle] = useState<Article | null>(null)
   const [editFormule, setEditFormule] = useState<Formule | null>(null)
   const [saving, setSaving] = useState(false)
+  const [saveErr, setSaveErr] = useState<string | null>(null)
 
   const fetchAll = useCallback(async () => {
     try {
@@ -122,9 +123,10 @@ export default function MenuPage() {
   const saveArticle = async () => {
     if (!editArticle || role !== 'monica') return
     setSaving(true)
+    setSaveErr(null)
     try {
       if (editArticle.id) {
-        await supabase.from('articles').update({
+        const { error } = await supabase.from('articles').update({
           nom: editArticle.nom,
           description: editArticle.description,
           prix: editArticle.prix,
@@ -132,13 +134,17 @@ export default function MenuPage() {
           disponible: editArticle.disponible,
           categorie_id: editArticle.categorie_id,
         }).eq('id', editArticle.id)
+        if (error) throw new Error(`UPDATE échoué : ${error.message}`)
       } else {
-        await supabase.from('articles').insert([editArticle])
+        const { error } = await supabase.from('articles').insert([editArticle])
+        if (error) throw new Error(`INSERT échoué : ${error.message}`)
       }
       setEditArticle(null)
       await fetchAll()
     } catch (err) {
-      console.error(err)
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[saveArticle]', msg)
+      setSaveErr(msg)
     } finally {
       setSaving(false)
     }
@@ -155,22 +161,27 @@ export default function MenuPage() {
   const saveFormule = async () => {
     if (!editFormule || role !== 'monica') return
     setSaving(true)
+    setSaveErr(null)
     try {
       if (editFormule.id) {
-        await supabase.from('formules').update({
+        const { error } = await supabase.from('formules').update({
           nom: editFormule.nom,
           description: editFormule.description,
           prix: editFormule.prix,
           promotion: editFormule.promotion ?? 0,
           disponible: editFormule.disponible,
         }).eq('id', editFormule.id)
+        if (error) throw new Error(`UPDATE échoué : ${error.message}`)
       } else {
-        await supabase.from('formules').insert([editFormule])
+        const { error } = await supabase.from('formules').insert([editFormule])
+        if (error) throw new Error(`INSERT échoué : ${error.message}`)
       }
       setEditFormule(null)
       await fetchAll()
     } catch (err) {
-      console.error(err)
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[saveFormule]', msg)
+      setSaveErr(msg)
     } finally {
       setSaving(false)
     }
@@ -354,6 +365,7 @@ export default function MenuPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
           <div className="w-full max-w-md rounded-xl p-6" style={{ background: '#1A1A1A', border: '1px solid #333' }}>
             <h2 className="text-lg font-bold mb-4">{editArticle.id ? 'Modifier' : 'Nouvel'} article</h2>
+            {saveErr && <div className="mb-3 p-2 rounded text-xs text-red-400 bg-red-900/30 border border-red-800">⚠️ {saveErr}</div>}
             <div className="space-y-3">
               <InputField label="Nom" value={editArticle.nom} onChange={v => setEditArticle(prev => prev ? { ...prev, nom: v } : null)} />
               <InputField label="Description" value={editArticle.description} onChange={v => setEditArticle(prev => prev ? { ...prev, description: v } : null)} />
@@ -392,6 +404,7 @@ export default function MenuPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
           <div className="w-full max-w-md rounded-xl p-6" style={{ background: '#1A1A1A', border: '1px solid #333' }}>
             <h2 className="text-lg font-bold mb-4">{editFormule.id ? 'Modifier' : 'Nouvelle'} formule</h2>
+            {saveErr && <div className="mb-3 p-2 rounded text-xs text-red-400 bg-red-900/30 border border-red-800">⚠️ {saveErr}</div>}
             <div className="space-y-3">
               <InputField label="Nom" value={editFormule.nom} onChange={v => setEditFormule(prev => prev ? { ...prev, nom: v } : null)} />
               <InputField label="Description" value={editFormule.description} onChange={v => setEditFormule(prev => prev ? { ...prev, description: v } : null)} />

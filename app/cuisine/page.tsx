@@ -354,7 +354,7 @@ export default function CuisinePage() {
                   <button
                     onClick={() => toggleUrgent(cmd.id)}
                     style={{
-                      flex: 1, padding: '10px', borderRadius: 8,
+                      flex: 1, padding: '0 10px', minHeight: 56, borderRadius: 8,
                       background: urgents.has(cmd.id) ? '#D4A843' : 'rgba(212,168,67,0.2)',
                       border: '1px solid #D4A843', color: urgents.has(cmd.id) ? '#000' : '#D4A843',
                       cursor: 'pointer', fontWeight: 700, fontSize: 14
@@ -364,7 +364,7 @@ export default function CuisinePage() {
                   </button>
                   <button
                     onClick={() => marquerPrete(cmd)}
-                    style={{ flex: 1, padding: '10px', background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+                    style={{ flex: 1, padding: '0 10px', minHeight: 56, background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
                   >
                     ✅ PRÊTE
                   </button>
