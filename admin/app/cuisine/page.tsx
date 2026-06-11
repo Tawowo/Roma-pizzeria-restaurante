@@ -115,7 +115,7 @@ export default function CuisinePage() {
       const { data, error } = await supabase
         .from('commandes')
         .select('*, lignes_commande(*)')
-        .in('statut', ['en_cours', 'en_preparation'])
+        .in('statut', ['en_preparation'])
         .order('created_at')
       if (error) throw error
 
@@ -177,7 +177,7 @@ export default function CuisinePage() {
       if (ligneIds.length > 0) {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
       }
-      await supabase.from('commandes').update({ statut: 'pret_encaisser' }).eq('id', cmd.id)
+      await supabase.from('commandes').update({ statut: 'prete' }).eq('id', cmd.id)
       await fetchCommandes()
     } catch (err) {
       console.error('Update error:', err)

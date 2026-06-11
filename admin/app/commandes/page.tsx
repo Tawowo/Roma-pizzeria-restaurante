@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
-type StatutCmd = 'brouillon' | 'en_cours' | 'pret_encaisser' | 'encaissee' | 'annulee'
+type StatutCmd = 'en_attente' | 'en_preparation' | 'prete' | 'payee' | 'annulee'
 type LigneStatut = 'en_attente' | 'envoye_cuisine' | 'pret' | 'servi'
 type TypeCmd = 'sur_place' | 'a_emporter'
 type Zone = 'rdc' | 'etage' | 'terrasse'
@@ -24,7 +24,7 @@ interface TableResto {
 interface TableVirtuelle {
   num: number
   zone: Zone
-  statut: 'libre' | 'occupee' | 'pret_encaisser' | 'reservee' | StatutCmd
+  statut: 'libre' | 'occupee' | 'prete' | 'reservee' | StatutCmd
   commande?: CommandeActive
 }
 
@@ -99,10 +99,10 @@ const ZONES: { key: Zone; label: string; icon: string }[] = [
 ]
 
 const STATUT_LABELS: Record<StatutCmd, { label: string; tw: string }> = {
-  brouillon: { label: 'Brouillon', tw: 'bg-gray-100 text-gray-600' },
-  en_cours: { label: 'En cuisine', tw: 'bg-blue-100 text-blue-800' },
-  pret_encaisser: { label: 'Prête', tw: 'bg-orange-100 text-orange-800' },
-  encaissee: { label: 'Encaissée', tw: 'bg-gray-100 text-gray-500' },
+  en_attente: { label: 'Brouillon', tw: 'bg-gray-100 text-gray-600' },
+  en_preparation: { label: 'En cuisine', tw: 'bg-blue-100 text-blue-800' },
+  prete: { label: 'Prête', tw: 'bg-orange-100 text-orange-800' },
+  payee: { label: 'Encaissée', tw: 'bg-gray-100 text-gray-500' },
   annulee: { label: 'Annulée', tw: 'bg-red-100 text-red-800' },
 }
 
@@ -179,7 +179,7 @@ export default function CommandesPage() {
       if (tablesDB && tablesDB.length > 0) {
         const tv: TableVirtuelle[] = (tablesDB as TableResto[]).map(t => {
           const cmdActive = cmds.find(c => c.id === t.commande_id)
-            ?? cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['encaissee', 'annulee'].includes(c.statut))
+            ?? cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['payee', 'annulee'].includes(c.statut))
           const statut = (t.statut ?? (cmdActive ? 'occupee' : 'libre')) as TableVirtuelle['statut']
           return { num: t.numero, zone: t.zone, statut: cmdActive ? statut : 'libre', commande: cmdActive }
         })
@@ -188,7 +188,7 @@ export default function CommandesPage() {
         const staticTables: TableVirtuelle[] = Array.from({ length: 12 }, (_, i) => {
           const num = i + 1
           const z: Zone = num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse'
-          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === num && !['encaissee', 'annulee'].includes(c.statut))
+          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === num && !['payee', 'annulee'].includes(c.statut))
           return { num, zone: z, statut: cmdActive ? 'occupee' : 'libre', commande: cmdActive }
         })
         setTables(staticTables)
@@ -342,7 +342,7 @@ export default function CommandesPage() {
 
       const { data: cmd } = await supabase.from('commandes').insert([{
         type: 'sur_place',
-        statut: 'en_cours',
+        statut: 'en_preparation',
         nom_client: nomClient.trim(),
         telephone: telClient,
         table_numero: modalTable?.num,
@@ -406,7 +406,7 @@ export default function CommandesPage() {
     try {
       const total = calcTotal(panier, reduction)
       const { data: cmd } = await supabase.from('commandes').insert([{
-        type: 'sur_place', statut: 'brouillon', nom_client: nomClient.trim(), telephone: telClient,
+        type: 'sur_place', statut: 'en_attente', nom_client: nomClient.trim(), telephone: telClient,
         table_numero: modalTable?.num, zone: modalTable?.zone, couverts, total, client_id: clientFidele?.id || null,
       }]).select().single()
       if (cmd) {
@@ -435,7 +435,7 @@ export default function CommandesPage() {
     if (!modalEncaiss) return
     setSaving(true)
     try {
-      await supabase.from('commandes').update({ statut: 'encaissee', mode_paiement: modePaiement }).eq('id', modalEncaiss.id)
+      await supabase.from('commandes').update({ statut: 'payee', mode_paiement: modePaiement }).eq('id', modalEncaiss.id)
       // Libérer la table
       if (modalEncaiss.table_numero) {
         await supabase
@@ -471,11 +471,11 @@ export default function CommandesPage() {
   }
 
   const tablesByZone = tables.filter(t => t.zone === zone)
-  const commandesEmporter = commandes.filter(c => c.type === 'a_emporter' && !['encaissee', 'annulee'].includes(c.statut))
+  const commandesEmporter = commandes.filter(c => c.type === 'a_emporter' && !['payee', 'annulee'].includes(c.statut))
 
   const tableCardClass = (statut: string) => {
     if (statut === 'libre') return 'bg-green-50 border-green-400 hover:bg-green-100 cursor-pointer'
-    if (statut === 'pret_encaisser') return 'bg-orange-50 border-orange-400 cursor-pointer'
+    if (statut === 'prete') return 'bg-orange-50 border-orange-400 cursor-pointer'
     if (statut === 'reservee') return 'bg-blue-50 border-blue-400 cursor-pointer'
     return 'bg-red-50 border-red-400 cursor-pointer'
   }
@@ -525,9 +525,9 @@ export default function CommandesPage() {
                 }}
                 className={`rounded-xl p-4 flex flex-col items-center gap-1 border-2 transition-all ${tableCardClass(t.statut)}`}
               >
-                <div className={`text-2xl font-bold ${t.statut === 'libre' ? 'text-green-700' : (t.statut === 'pret_encaisser') ? 'text-orange-700' : 'text-red-700'}`}>T{t.num}</div>
-                <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : (t.statut === 'pret_encaisser') ? 'text-orange-600' : 'text-red-600'}`}>
-                  {t.statut === 'libre' ? '🟢 Libre' : t.statut === 'pret_encaisser' ? '🟠 À encaisser' : t.statut === 'reservee' ? '🔵 Réservée' : '🔴 Occupée'}
+                <div className={`text-2xl font-bold ${t.statut === 'libre' ? 'text-green-700' : (t.statut === 'prete') ? 'text-orange-700' : 'text-red-700'}`}>T{t.num}</div>
+                <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : (t.statut === 'prete') ? 'text-orange-600' : 'text-red-600'}`}>
+                  {t.statut === 'libre' ? '🟢 Libre' : t.statut === 'prete' ? '🟠 À encaisser' : t.statut === 'reservee' ? '🔵 Réservée' : '🔴 Occupée'}
                 </div>
                 {t.commande?.nom_client && <div className="text-xs text-gray-500 truncate w-full text-center">{t.commande.nom_client}</div>}
               </div>
@@ -536,7 +536,7 @@ export default function CommandesPage() {
 
           {/* Liste commandes sur place */}
           <div className="space-y-2">
-            {commandes.filter(c => c.type === 'sur_place' && !['encaissee', 'annulee'].includes(c.statut)).map(cmd => (
+            {commandes.filter(c => c.type === 'sur_place' && !['payee', 'annulee'].includes(c.statut)).map(cmd => (
               <CommandeRow key={cmd.id} cmd={cmd} onEncaisser={() => { setModalEncaiss(cmd); setModePaiement('cb'); setMontantRecu('') }} onUpdate={fetchTout} />
             ))}
           </div>
@@ -819,7 +819,7 @@ export default function CommandesPage() {
                   className="flex-1 bg-[#1B5E20] hover:bg-[#2E7D32] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
                   + Ajouter des articles
                 </button>
-                {(modalDetail.statut === 'pret_encaisser' || modalDetail.statut === 'en_cours') && (
+                {(modalDetail.statut === 'prete' || modalDetail.statut === 'en_preparation') && (
                   <button
                     onClick={() => { setModalEncaiss(modalDetail); setModalDetail(null); setModePaiement('cb'); setMontantRecu('') }}
                     className="flex-1 bg-[#B71C1C] hover:bg-[#C62828] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
@@ -898,13 +898,13 @@ export default function CommandesPage() {
 }
 
 function CommandeRow({ cmd, onEncaisser, onUpdate }: { cmd: CommandeActive; onEncaisser: () => void; onUpdate: () => void }) {
-  const s = STATUT_LABELS[cmd.statut] ?? STATUT_LABELS.brouillon
+  const s = STATUT_LABELS[cmd.statut] ?? STATUT_LABELS.en_attente
   const updateStatut = async (statut: StatutCmd) => {
     try { await supabase.from('commandes').update({ statut }).eq('id', cmd.id); onUpdate() } catch { /* skip */ }
   }
   const NEXT_STATUT: Partial<Record<StatutCmd, { statut: StatutCmd; label: string }>> = {
-    brouillon: { statut: 'en_cours', label: '→ En cuisine' },
-    en_cours: { statut: 'pret_encaisser', label: '→ Prête' },
+    en_attente: { statut: 'en_preparation', label: '→ En cuisine' },
+    en_preparation: { statut: 'prete', label: '→ Prête' },
   }
   const next = NEXT_STATUT[cmd.statut]
   return (
@@ -924,7 +924,7 @@ function CommandeRow({ cmd, onEncaisser, onUpdate }: { cmd: CommandeActive; onEn
             {next.label}
           </button>
         )}
-        {(cmd.statut === 'pret_encaisser' || cmd.statut === 'en_cours') && (
+        {(cmd.statut === 'prete' || cmd.statut === 'en_preparation') && (
           <button onClick={onEncaisser}
             className="px-3 py-1 rounded text-xs font-medium bg-[#B71C1C] text-white">
             💳 Encaisser
