@@ -119,9 +119,11 @@ export default function CommanderPage() {
     setLoading(true)
     const { data: cmd, error } = await supabase.from('commandes').insert({
       nom, telephone: tel,
+      nom_client: nom,
       heure_retrait: heureRetrait,
       date_retrait: dateRetrait,
-      statut: 'en_attente',
+      type: 'a_emporter',
+      statut: 'en_cours',
       notes: notes || null,
       total,
     }).select().single()
@@ -137,6 +139,8 @@ export default function CommanderPage() {
         taille: l.taille,
         prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
         commentaire: l.commentaire || null,
+        statut: 'envoye_cuisine',
+        pour_cuisine: true,
       }))
     )
 
