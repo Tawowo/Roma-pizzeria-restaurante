@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 
-type StatutCmd = 'brouillon' | 'en_cours' | 'pret_encaisser' | 'encaissee' | 'annulee'
+type StatutCmd = 'brouillon' | 'en_cours' | 'en_preparation' | 'pret_encaisser' | 'encaissee' | 'annulee'
 type LigneStatut = 'en_attente' | 'envoye_cuisine' | 'pret' | 'servi'
 type TypeCmd = 'sur_place' | 'a_emporter'
 type Zone = 'rdc' | 'etage' | 'terrasse'
@@ -24,7 +24,7 @@ interface TableResto {
 interface TableVirtuelle {
   num: number
   zone: Zone
-  statut: 'libre' | 'occupee' | 'pret_encaisser' | 'reservee' | StatutCmd
+  statut: 'libre' | 'occupee' | 'pret_encaisser' | 'reservee'
   commande?: CommandeActive
 }
 
@@ -38,11 +38,13 @@ interface CommandeActive {
   table_numero?: number
   zone?: Zone
   nom_client?: string
+  couverts?: number
   lignes_commande?: LigneCmd[]
 }
 
 interface LigneCmd {
   id: string
+  article_id?: string
   article_nom: string
   quantite: number
   taille?: string
@@ -51,6 +53,8 @@ interface LigneCmd {
   prix_unitaire: number
   ajout_apres?: boolean
   created_at?: string
+  pour_cuisine?: boolean
+  categorie_nom?: string
 }
 
 interface Article {
@@ -101,10 +105,19 @@ const ZONES: { key: Zone; label: string; icon: string }[] = [
 const STATUT_LABELS: Record<StatutCmd, { label: string; tw: string }> = {
   brouillon: { label: 'Brouillon', tw: 'bg-gray-100 text-gray-600' },
   en_cours: { label: 'En cuisine', tw: 'bg-blue-100 text-blue-800' },
+  en_preparation: { label: 'En cuisine', tw: 'bg-blue-100 text-blue-800' },
   pret_encaisser: { label: 'Prête', tw: 'bg-orange-100 text-orange-800' },
   encaissee: { label: 'Encaissée', tw: 'bg-gray-100 text-gray-500' },
   annulee: { label: 'Annulée', tw: 'bg-red-100 text-red-800' },
 }
+
+const STATUTS_ACTIFS: StatutCmd[] = ['brouillon', 'en_cours', 'en_preparation', 'pret_encaisser']
+
+const CATS_PAS_CUISINE = [
+  'boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés',
+  'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin',
+  'bières', 'softs', 'eaux'
+]
 
 function calcTotal(panier: PanierItem[], red: ReductionState): number {
   const sous = panier.reduce((s, p) => s + p.article.prix * p.quantite, 0)
@@ -119,6 +132,31 @@ function calcTotal(panier: PanierItem[], red: ReductionState): number {
   return Math.max(0, total)
 }
 
+// Met à jour ou crée la ligne dans tables_restaurant
+async function upsertTable(num: number, zone: Zone, statut: string, commande_id: string | null) {
+  const { data: updated, error: updErr } = await supabase
+    .from('tables_restaurant')
+    .update({ statut, commande_id })
+    .eq('numero', num)
+    .eq('zone', zone)
+    .select('id')
+
+  if (updErr) {
+    console.error('[upsertTable] update error:', updErr)
+    throw new Error(`Impossible de mettre à jour la table ${num} (${zone}) : ${updErr.message}`)
+  }
+
+  if (!updated || updated.length === 0) {
+    const { error: insErr } = await supabase
+      .from('tables_restaurant')
+      .insert({ numero: num, zone, statut, commande_id, actif: true, capacite: 4 })
+    if (insErr) {
+      console.error('[upsertTable] insert error:', insErr)
+      throw new Error(`Impossible de créer la table ${num} (${zone}) : ${insErr.message}`)
+    }
+  }
+}
+
 export default function CommandesPage() {
   const router = useRouter()
   const session = typeof window !== 'undefined' ? ((): import('@/lib/auth').AdminSession | null => {
@@ -130,8 +168,9 @@ export default function CommandesPage() {
   const [tables, setTables] = useState<TableVirtuelle[]>([])
   const [commandes, setCommandes] = useState<CommandeActive[]>([])
   const [loading, setLoading] = useState(true)
+  const [erreur, setErreur] = useState<string | null>(null)
 
-  // Modal nouvelle commande
+  // Modal nouvelle commande / ajout articles
   const [modalTable, setModalTable] = useState<TableVirtuelle | null>(null)
   const [etape, setEtape] = useState<1 | 2 | 3>(1)
   const [nomClient, setNomClient] = useState('')
@@ -158,48 +197,69 @@ export default function CommandesPage() {
   const [modalEncaiss, setModalEncaiss] = useState<CommandeActive | null>(null)
   const [modePaiement, setModePaiement] = useState<ModePaiement>('cb')
   const [montantRecu, setMontantRecu] = useState('')
+  // Confirmation suppression
+  const [confirmDelete, setConfirmDelete] = useState<CommandeActive | null>(null)
 
   const fetchTout = useCallback(async () => {
     try {
       const today = new Date().toISOString().split('T')[0]
-      const { data: cmdData } = await supabase
+      const { data: cmdData, error: cmdErr } = await supabase
         .from('commandes')
         .select('*, lignes_commande(*)')
         .gte('created_at', today + 'T00:00:00')
         .order('created_at', { ascending: false })
+
+      if (cmdErr) {
+        console.error('[fetchTout] commandes error:', cmdErr)
+        setErreur(`Erreur chargement commandes : ${cmdErr.message}`)
+        return
+      }
+
       const cmds: CommandeActive[] = (cmdData ?? []) as CommandeActive[]
       setCommandes(cmds)
 
-      const { data: tablesDB } = await supabase
+      const { data: tablesDB, error: tabErr } = await supabase
         .from('tables_restaurant')
         .select('*')
         .eq('actif', true)
         .order('numero')
 
+      if (tabErr) console.error('[fetchTout] tables error:', tabErr)
+
+      // Dériver le statut depuis les commandes actives (plus fiable que la colonne DB)
+      const buildStatut = (cmdActive: CommandeActive | undefined): TableVirtuelle['statut'] => {
+        if (!cmdActive) return 'libre'
+        if (cmdActive.statut === 'pret_encaisser') return 'pret_encaisser'
+        return 'occupee'
+      }
+
       if (tablesDB && tablesDB.length > 0) {
         const tv: TableVirtuelle[] = (tablesDB as TableResto[]).map(t => {
           const cmdActive = cmds.find(c => c.id === t.commande_id)
-            ?? cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['encaissee', 'annulee'].includes(c.statut))
-          const tableStatut: TableVirtuelle['statut'] = cmdActive
-            ? (cmdActive.statut === 'pret_encaisser' ? 'pret_encaisser' : 'occupee')
-            : 'libre'
-          return { num: t.numero, zone: t.zone, statut: tableStatut, commande: cmdActive }
+            ?? cmds.find(c =>
+              c.type === 'sur_place' &&
+              c.table_numero === t.numero &&
+              (STATUTS_ACTIFS as string[]).includes(c.statut)
+            )
+          return { num: t.numero, zone: t.zone, statut: buildStatut(cmdActive), commande: cmdActive }
         })
         setTables(tv)
       } else {
         const staticTables: TableVirtuelle[] = Array.from({ length: 12 }, (_, i) => {
           const num = i + 1
           const z: Zone = num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse'
-          const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === num && !['encaissee', 'annulee'].includes(c.statut))
-          const tableStatut: TableVirtuelle['statut'] = cmdActive
-            ? (cmdActive.statut === 'pret_encaisser' ? 'pret_encaisser' : 'occupee')
-            : 'libre'
-          return { num, zone: z, statut: tableStatut, commande: cmdActive }
+          const cmdActive = cmds.find(c =>
+            c.type === 'sur_place' &&
+            c.table_numero === num &&
+            (STATUTS_ACTIFS as string[]).includes(c.statut)
+          )
+          return { num, zone: z, statut: buildStatut(cmdActive), commande: cmdActive }
         })
         setTables(staticTables)
       }
     } catch (err) {
-      console.error(err)
+      console.error('[fetchTout] unexpected:', err)
+      setErreur('Erreur inattendue lors du chargement. Vérifiez la console.')
     } finally {
       setLoading(false)
     }
@@ -214,22 +274,27 @@ export default function CommandesPage() {
   }, [router, fetchTout])
 
   useEffect(() => {
-    const ch = supabase.channel('commandes-rt2')
+    const ch = supabase.channel('commandes-rt3')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes' }, fetchTout)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lignes_commande' }, fetchTout)
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [fetchTout])
 
   const loadArticles = async () => {
     try {
-      const [{ data: arts }, { data: cats }] = await Promise.all([
+      const [{ data: arts, error: artErr }, { data: cats, error: catErr }] = await Promise.all([
         supabase.from('articles').select('*').eq('disponible', true).order('nom'),
         supabase.from('categories').select('*').order('ordre'),
       ])
+      if (artErr) console.error('[loadArticles] articles error:', artErr)
+      if (catErr) console.error('[loadArticles] categories error:', catErr)
       setArticles((arts ?? []) as Article[])
       setCategories((cats ?? []) as Categorie[])
       if (cats && cats.length > 0) setCatActive(cats[0].id)
-    } catch { /* skip */ }
+    } catch (err) {
+      console.error('[loadArticles] unexpected:', err)
+    }
   }
 
   const checkClientFidele = async () => {
@@ -252,6 +317,7 @@ export default function CommandesPage() {
     setErrNom('')
     setPanierEnvoiSelectionne(new Set())
     setExistingCmdId(null)
+    setErreur(null)
   }
 
   const ajouterAuPanier = (art: Article) => {
@@ -290,11 +356,29 @@ export default function CommandesPage() {
     } catch { setReduction(r => ({ ...r, bonFideliteMsg: 'Bon invalide', bonFideliteValeur: 0 })) }
   }
 
+  const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean, commande_id: string) => {
+    const cat = categories.find(c => c.id === p.article.categorie_id)
+    const nomCat = cat?.nom?.toLowerCase() ?? ''
+    const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+    return {
+      commande_id,
+      article_id: p.article.id,
+      article_nom: p.article.nom,
+      quantite: p.quantite,
+      taille: p.taille || null,
+      commentaire: p.commentaire || null,
+      prix_unitaire: p.article.prix,
+      categorie_nom: cat?.nom || null,
+      pour_cuisine,
+      statut,
+      ajout_apres,
+    }
+  }
+
   const envoyerEnCuisine = async () => {
     if (!nomClient.trim()) { setErrNom('Le nom est obligatoire'); return }
     if (panier.length === 0) return
 
-    // Articles à envoyer maintenant (tous si aucune sélection spécifique)
     const indicesEnvoi = panierEnvoiSelectionne.size === 0
       ? panier.map((_, i) => i)
       : Array.from(panierEnvoiSelectionne)
@@ -304,183 +388,264 @@ export default function CommandesPage() {
     if (panierEnvoi.length === 0) return
 
     setSaving(true)
+    setErreur(null)
     try {
-      const total = calcTotal(panier, reduction)
-      console.log('[envoyerEnCuisine] table:', modalTable?.num, 'zone:', modalTable?.zone, 'existingCmdId:', existingCmdId)
-      console.log('[envoyerEnCuisine] panierEnvoi:', panierEnvoi.length, 'articles, total:', total)
-
-      // Adding articles to existing commande
+      // ─── CAS : ajout à une commande existante ───────────────────────────────
       if (existingCmdId) {
-        await supabase.from('lignes_commande').insert(
-          panierEnvoi.map(p => ({
-            commande_id: existingCmdId,
-            article_id: p.article.id,
-            article_nom: p.article.nom,
-            quantite: p.quantite,
-            taille: p.taille || null,
-            commentaire: p.commentaire || null,
-            prix_unitaire: p.article.prix,
-            statut: 'envoye_cuisine',
-            ajout_apres: true
-          }))
+        const { error: insEnvErr } = await supabase.from('lignes_commande').insert(
+          panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', true, existingCmdId))
         )
+        if (insEnvErr) throw new Error(`Erreur insertion lignes (ajout) : ${insEnvErr.message}`)
+
         if (panierAttente.length > 0) {
-          await supabase.from('lignes_commande').insert(
-            panierAttente.map(p => ({
-              commande_id: existingCmdId,
-              article_id: p.article.id,
-              article_nom: p.article.nom,
-              quantite: p.quantite,
-              taille: p.taille || null,
-              commentaire: p.commentaire || null,
-              prix_unitaire: p.article.prix,
-              statut: 'en_attente',
-              ajout_apres: true
-            }))
+          const { error: insAttErr } = await supabase.from('lignes_commande').insert(
+            panierAttente.map(p => makeLigne(p, 'en_attente', true, existingCmdId))
           )
+          if (insAttErr) throw new Error(`Erreur insertion lignes attente : ${insAttErr.message}`)
         }
         setModalTable(null)
         setExistingCmdId(null)
         setPanierEnvoiSelectionne(new Set())
-        fetchTout()
-        setSaving(false)
+        await fetchTout()
         return
       }
 
-      const { data: cmd, error: insertError } = await supabase.from('commandes').insert([{
-        type: 'sur_place',
-        statut: 'en_cours',
-        nom_client: nomClient.trim(),
-        telephone: telClient,
-        table_numero: modalTable?.num,
-        zone: modalTable?.zone,
-        couverts,
-        total,
-        reduction_pct: parseFloat(reduction.pct) || 0,
-        reduction_montant: parseFloat(reduction.montant) || 0,
-        code_promo: reduction.codePromo || null,
-        offert: reduction.offrir,
-        offert_motif: reduction.offrirMotif || null,
-        client_id: clientFidele?.id || null,
-      }]).select().single()
+      // ─── CAS : nouvelle commande ─────────────────────────────────────────────
+      const total = calcTotal(panier, reduction)
 
-      console.log('[envoyerEnCuisine] insert commande result:', { cmd, insertError })
-      if (cmd) {
-        const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
-        const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean) => {
-          const cat = categories.find(c => c.id === p.article.categorie_id)
-          const nomCat = cat?.nom?.toLowerCase() ?? ''
-          const pourCuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
-          return {
-            commande_id: cmd.id,
-            article_id: p.article.id,
-            article_nom: p.article.nom,
-            quantite: p.quantite,
-            taille: p.taille || null,
-            commentaire: p.commentaire || null,
-            prix_unitaire: p.article.prix,
-            categorie_nom: cat?.nom || null,
-            pour_cuisine: pourCuisine,
-            statut,
-            ajout_apres,
-          }
-        }
-        if (panierEnvoi.length > 0) {
-          await supabase.from('lignes_commande').insert(panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', false)))
-        }
-        if (panierAttente.length > 0) {
-          await supabase.from('lignes_commande').insert(panierAttente.map(p => makeLigne(p, 'en_attente', true)))
-        }
-        // ✅ Mettre la table en occupée
-        if (modalTable?.num) {
-          const { error: tableErr } = await supabase
-            .from('tables_restaurant')
-            .update({ statut: 'occupee', commande_id: cmd.id })
-            .eq('numero', modalTable.num)
-            .eq('zone', modalTable.zone)
-          console.log('[envoyerEnCuisine] update table:', { tableErr })
-        }
+      const { data: cmd, error: cmdErr } = await supabase
+        .from('commandes')
+        .insert([{
+          type: 'sur_place',
+          statut: 'en_preparation',
+          nom_client: nomClient.trim(),
+          telephone: telClient || null,
+          table_numero: modalTable?.num,
+          zone: modalTable?.zone,
+          couverts,
+          total,
+          reduction_pct: parseFloat(reduction.pct) || 0,
+          reduction_montant: parseFloat(reduction.montant) || 0,
+          code_promo: reduction.codePromo || null,
+          offert: reduction.offrir,
+          offert_motif: reduction.offrirMotif || null,
+          client_id: clientFidele?.id || null,
+        }])
+        .select()
+        .single()
+
+      if (cmdErr || !cmd) {
+        const msg = cmdErr?.message ?? 'Erreur inconnue'
+        console.error('[envoyerEnCuisine] insert commande error:', cmdErr)
+        throw new Error(`Impossible de créer la commande : ${msg}`)
+      }
+
+      console.log('[envoyerEnCuisine] commande créée:', cmd.id, 'statut: en_preparation')
+
+      // Insérer les lignes cuisine
+      const { error: lignesEnvErr } = await supabase
+        .from('lignes_commande')
+        .insert(panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', false, cmd.id)))
+      if (lignesEnvErr) throw new Error(`Erreur insertion articles cuisine : ${lignesEnvErr.message}`)
+
+      // Insérer les lignes en attente
+      if (panierAttente.length > 0) {
+        const { error: lignesAttErr } = await supabase
+          .from('lignes_commande')
+          .insert(panierAttente.map(p => makeLigne(p, 'en_attente', true, cmd.id)))
+        if (lignesAttErr) throw new Error(`Erreur insertion articles attente : ${lignesAttErr.message}`)
+      }
+
+      // Mettre à jour (ou créer) la table
+      if (modalTable?.num) {
+        await upsertTable(modalTable.num, modalTable.zone, 'occupee', cmd.id)
       }
 
       setModalTable(null)
       setPanierEnvoiSelectionne(new Set())
       await fetchTout()
-    } catch (err) { console.error('[envoyerEnCuisine] ERROR:', err) } finally { setSaving(false) }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[envoyerEnCuisine] ERROR:', msg)
+      setErreur(msg)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const sauvegarder = async () => {
     if (!nomClient.trim()) { setErrNom('Le nom est obligatoire'); return }
     if (panier.length === 0) return
     setSaving(true)
+    setErreur(null)
     try {
       const total = calcTotal(panier, reduction)
-      const { data: cmd } = await supabase.from('commandes').insert([{
-        type: 'sur_place', statut: 'brouillon', nom_client: nomClient.trim(), telephone: telClient,
-        table_numero: modalTable?.num, zone: modalTable?.zone, couverts, total, client_id: clientFidele?.id || null,
-      }]).select().single()
-      if (cmd) {
-        const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
-        await supabase.from('lignes_commande').insert(
-          panier.map(p => {
-            const cat = categories.find(c => c.id === p.article.categorie_id)
-            const nomCat = cat?.nom?.toLowerCase() ?? ''
-            return { commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix, categorie_nom: cat?.nom || null, pour_cuisine: !CATS_PAS_CUISINE.some(c => nomCat.includes(c)), statut: 'en_attente' }
-          })
-        )
-        if (modalTable?.num) {
-          await supabase
-            .from('tables_restaurant')
-            .update({ statut: 'occupee', commande_id: cmd.id })
-            .eq('numero', modalTable.num)
-            .eq('zone', modalTable.zone)
-        }
+      const { data: cmd, error: cmdErr } = await supabase
+        .from('commandes')
+        .insert([{
+          type: 'sur_place', statut: 'brouillon',
+          nom_client: nomClient.trim(), telephone: telClient || null,
+          table_numero: modalTable?.num, zone: modalTable?.zone,
+          couverts, total, client_id: clientFidele?.id || null,
+        }])
+        .select()
+        .single()
+
+      if (cmdErr || !cmd) throw new Error(cmdErr?.message ?? 'Erreur création brouillon')
+
+      const { error: ligErr } = await supabase.from('lignes_commande').insert(
+        panier.map(p => makeLigne(p, 'en_attente', false, cmd.id))
+      )
+      if (ligErr) throw new Error(`Erreur insertion articles : ${ligErr.message}`)
+
+      if (modalTable?.num) {
+        await upsertTable(modalTable.num, modalTable.zone, 'occupee', cmd.id)
       }
       setModalTable(null)
       await fetchTout()
-    } catch (err) { console.error(err) } finally { setSaving(false) }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[sauvegarder] ERROR:', msg)
+      setErreur(msg)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const validerPaiement = async () => {
     if (!modalEncaiss) return
     setSaving(true)
+    setErreur(null)
     try {
-      await supabase.from('commandes').update({ statut: 'encaissee', mode_paiement: modePaiement }).eq('id', modalEncaiss.id)
-      // Libérer la table
+      const { error: payErr } = await supabase
+        .from('commandes')
+        .update({ statut: 'encaissee', mode_paiement: modePaiement })
+        .eq('id', modalEncaiss.id)
+      if (payErr) throw new Error(`Erreur encaissement : ${payErr.message}`)
+
+      // Libérer la table (avec filtre zone pour éviter collisions)
       if (modalEncaiss.table_numero) {
-        await supabase
+        let q = supabase
           .from('tables_restaurant')
           .update({ statut: 'libre', commande_id: null })
           .eq('numero', modalEncaiss.table_numero)
+        if (modalEncaiss.zone) q = q.eq('zone', modalEncaiss.zone)
+        const { error: tabErr } = await q
+        if (tabErr) console.error('[validerPaiement] table release error:', tabErr)
       }
-      if (clientFidele && modalEncaiss.total > 0) {
-        const pts = Math.floor(modalEncaiss.total)
-        await supabase.from('mouvements_fidelite').insert([{ client_id: clientFidele.id, points: pts, motif: `Commande #${modalEncaiss.numero_commande}` }])
+
+      // Points fidélité
+      if (clientFidele && (modalEncaiss.total ?? 0) > 0) {
+        const pts = Math.floor(modalEncaiss.total ?? 0)
+        await supabase.from('mouvements_fidelite').insert([{
+          client_id: clientFidele.id,
+          points: pts,
+          motif: `Commande #${modalEncaiss.numero_commande}`
+        }])
         await supabase.from('clients').update({ points: clientFidele.points + pts }).eq('id', clientFidele.id)
       }
+
       setModalEncaiss(null)
-      fetchTout()
-    } catch (err) { console.error(err) } finally { setSaving(false) }
+      await fetchTout()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[validerPaiement] ERROR:', msg)
+      setErreur(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const annulerCommande = async (cmd: CommandeActive) => {
+    setSaving(true)
+    setErreur(null)
+    try {
+      const { error: annErr } = await supabase
+        .from('commandes')
+        .update({ statut: 'annulee' })
+        .eq('id', cmd.id)
+      if (annErr) throw new Error(`Erreur annulation : ${annErr.message}`)
+
+      if (cmd.table_numero) {
+        let q = supabase
+          .from('tables_restaurant')
+          .update({ statut: 'libre', commande_id: null })
+          .eq('numero', cmd.table_numero)
+        if (cmd.zone) q = q.eq('zone', cmd.zone)
+        await q
+      }
+      setModalDetail(null)
+      await fetchTout()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[annulerCommande] ERROR:', msg)
+      setErreur(msg)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const supprimerCommande = async (cmd: CommandeActive) => {
+    setSaving(true)
+    setErreur(null)
+    try {
+      const { error: delLigErr } = await supabase
+        .from('lignes_commande')
+        .delete()
+        .eq('commande_id', cmd.id)
+      if (delLigErr) throw new Error(`Erreur suppression articles : ${delLigErr.message}`)
+
+      const { error: delCmdErr } = await supabase
+        .from('commandes')
+        .delete()
+        .eq('id', cmd.id)
+      if (delCmdErr) throw new Error(`Erreur suppression commande : ${delCmdErr.message}`)
+
+      if (cmd.table_numero && (STATUTS_ACTIFS as string[]).includes(cmd.statut)) {
+        let q = supabase
+          .from('tables_restaurant')
+          .update({ statut: 'libre', commande_id: null })
+          .eq('numero', cmd.table_numero)
+        if (cmd.zone) q = q.eq('zone', cmd.zone)
+        await q
+      }
+      setConfirmDelete(null)
+      setModalDetail(null)
+      await fetchTout()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error('[supprimerCommande] ERROR:', msg)
+      setErreur(msg)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const ajouterArticlesTable = (cmd: CommandeActive) => {
-    const t = tables.find(tbl => tbl.num === cmd.table_numero)
-    if (!t) return
+    const t = tables.find(tbl => tbl.num === cmd.table_numero) ?? {
+      num: cmd.table_numero ?? 0,
+      zone: cmd.zone ?? 'rdc',
+      statut: 'occupee' as const,
+      commande: cmd
+    }
     setModalDetail(null)
     setModalTable(t)
     setEtape(2)
     setNomClient(cmd.nom_client ?? '')
     setTelClient('')
-    setCouverts(2)
+    setCouverts(cmd.couverts ?? 2)
     setClientFidele(null)
     setPanier([])
     setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
     setPanierEnvoiSelectionne(new Set())
-    // Store the existing commande id to add lines to it
     setExistingCmdId(cmd.id)
+    setErreur(null)
   }
 
   const tablesByZone = tables.filter(t => t.zone === zone)
-  const commandesEmporter = commandes.filter(c => c.type === 'a_emporter' && !['encaissee', 'annulee'].includes(c.statut))
+  const commandesEmporter = commandes.filter(c =>
+    c.type === 'a_emporter' && !['encaissee', 'annulee'].includes(c.statut)
+  )
 
   const tableCardClass = (statut: string) => {
     if (statut === 'libre') return 'bg-green-50 border-green-400 hover:bg-green-100 cursor-pointer'
@@ -500,6 +665,15 @@ export default function CommandesPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-[#1A1A1A] mb-6">Commandes</h1>
+
+      {/* Message d'erreur global visible */}
+      {erreur && (
+        <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-300 text-red-700 text-sm flex items-start gap-2">
+          <span className="text-lg">⚠️</span>
+          <div className="flex-1">{erreur}</div>
+          <button onClick={() => setErreur(null)} className="text-red-400 hover:text-red-700 font-bold text-lg leading-none">✕</button>
+        </div>
+      )}
 
       {/* Onglets principaux */}
       <div className="flex gap-2 mb-6">
@@ -545,26 +719,43 @@ export default function CommandesPage() {
 
           {/* Liste commandes sur place */}
           <div className="space-y-2">
-            {commandes.filter(c => c.type === 'sur_place' && !['encaissee', 'annulee'].includes(c.statut)).map(cmd => (
-              <CommandeRow key={cmd.id} cmd={cmd} onEncaisser={() => { setModalEncaiss(cmd); setModePaiement('cb'); setMontantRecu('') }} onUpdate={fetchTout} />
-            ))}
+            {commandes
+              .filter(c => c.type === 'sur_place' && !['encaissee', 'annulee'].includes(c.statut))
+              .map(cmd => (
+                <CommandeRow
+                  key={cmd.id}
+                  cmd={cmd}
+                  onEncaisser={() => { setModalEncaiss(cmd); setModePaiement('cb'); setMontantRecu('') }}
+                  onSupprimer={() => setConfirmDelete(cmd)}
+                  onUpdate={fetchTout}
+                />
+              ))}
           </div>
         </>
       ) : (
         <div className="space-y-3">
-          {commandesEmporter.length === 0 ? <div className="text-[#555]">Aucune commande à emporter.</div> :
-            commandesEmporter.map(cmd => (
-              <CommandeRow key={cmd.id} cmd={cmd} onEncaisser={() => { setModalEncaiss(cmd); setModePaiement('cb'); setMontantRecu('') }} onUpdate={fetchTout} />
+          {commandesEmporter.length === 0
+            ? <div className="text-[#555]">Aucune commande à emporter.</div>
+            : commandesEmporter.map(cmd => (
+              <CommandeRow
+                key={cmd.id}
+                cmd={cmd}
+                onEncaisser={() => { setModalEncaiss(cmd); setModePaiement('cb'); setMontantRecu('') }}
+                onSupprimer={() => setConfirmDelete(cmd)}
+                onUpdate={fetchTout}
+              />
             ))}
         </div>
       )}
 
-      {/* ===== MODAL NOUVELLE COMMANDE ===== */}
+      {/* ===== MODAL NOUVELLE COMMANDE / AJOUT ===== */}
       {modalTable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0D5C5]">
-              <h2 className="text-lg font-bold">Nouvelle commande — Table {modalTable.num}</h2>
+              <h2 className="text-lg font-bold">
+                {existingCmdId ? `Ajout articles — Table ${modalTable.num}` : `Nouvelle commande — Table ${modalTable.num}`}
+              </h2>
               <div className="flex gap-2">
                 {([1, 2, 3] as const).map(n => (
                   <span key={n} className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${etape === n ? 'bg-[#B71C1C] text-white' : etape > n ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}>{n}</span>
@@ -572,6 +763,13 @@ export default function CommandesPage() {
               </div>
               <button onClick={() => setModalTable(null)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
             </div>
+
+            {/* Erreur dans le modal */}
+            {erreur && (
+              <div className="mx-6 mt-4 p-3 rounded-lg bg-red-50 border border-red-300 text-red-700 text-sm">
+                ⚠️ {erreur}
+              </div>
+            )}
 
             <div className="p-6">
               {/* Étape 1 */}
@@ -617,16 +815,15 @@ export default function CommandesPage() {
                     <input value={recherche} onChange={e => setRecherche(e.target.value)}
                       placeholder="Rechercher un article..."
                       className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none" />
-                    {/* Catégories */}
                     {categories.length > 0 && (
-                      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 scrollbar-hide">
+                      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
                         <button onClick={() => setCatActive('')}
-                          className={`px-3 py-1 rounded-full text-xs font-medium border ${!catActive ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
+                          className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${!catActive ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
                           Tout
                         </button>
                         {categories.map(c => (
                           <button key={c.id} onClick={() => setCatActive(c.id)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium border ${catActive === c.id ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
+                            className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${catActive === c.id ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
                             {c.nom}
                           </button>
                         ))}
@@ -713,7 +910,9 @@ export default function CommandesPage() {
                     </div>
 
                     <div className="flex gap-2 mt-4">
-                      <button onClick={() => setEtape(1)} className="flex-1 border border-[#E0D5C5] text-[#555] py-2 rounded-lg text-sm">← Retour</button>
+                      {!existingCmdId && (
+                        <button onClick={() => setEtape(1)} className="flex-1 border border-[#E0D5C5] text-[#555] py-2 rounded-lg text-sm">← Retour</button>
+                      )}
                       <button onClick={() => setEtape(3)} disabled={panier.length === 0} className="flex-1 bg-[#1B5E20] text-white py-2 rounded-lg text-sm font-medium disabled:opacity-40">Suivant →</button>
                     </div>
                   </div>
@@ -725,33 +924,41 @@ export default function CommandesPage() {
                 <div className="max-w-md space-y-4">
                   <h3 className="font-semibold text-[#1A1A1A]">Validation</h3>
                   <div className="bg-[#F0EBE0] rounded-xl p-4 space-y-1">
-                    <div className="text-sm font-medium text-[#555]">Table {modalTable.num} · {couverts} couverts</div>
+                    <div className="text-sm font-medium text-[#555]">Table {modalTable.num} · {couverts} couvert{couverts > 1 ? 's' : ''}</div>
                     <div className="text-sm font-medium">{nomClient}</div>
-                    {panier.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between text-sm py-1">
-                        <label className="flex items-center gap-2 cursor-pointer flex-1">
-                          <input type="checkbox"
-                            checked={panierEnvoiSelectionne.has(i) || panierEnvoiSelectionne.size === 0}
-                            onChange={(e) => {
-                              setPanierEnvoiSelectionne(prev => {
-                                const next = new Set(prev)
-                                if (next.size === 0) {
-                                  panier.forEach((_, j) => { if (j !== i) next.add(j) })
-                                } else {
-                                  if (e.target.checked) next.add(i)
-                                  else next.delete(i)
-                                }
-                                return next
-                              })
-                            }}
-                            className="rounded"
-                          />
-                          <span className="text-xs text-[#555]">Envoyer maintenant</span>
-                          <span>{item.quantite}× {item.article.nom} {item.taille && `(${item.taille})`}</span>
-                        </label>
-                        <span className="font-medium">{(item.article.prix * item.quantite).toFixed(2)} €</span>
-                      </div>
-                    ))}
+                    {panier.map((item, i) => {
+                      const cat = categories.find(c => c.id === item.article.categorie_id)
+                      const nomCat = cat?.nom?.toLowerCase() ?? ''
+                      const pourCuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+                      return (
+                        <div key={i} className="flex items-center justify-between text-sm py-1">
+                          <label className="flex items-center gap-2 cursor-pointer flex-1">
+                            <input type="checkbox"
+                              checked={panierEnvoiSelectionne.size === 0 || panierEnvoiSelectionne.has(i)}
+                              onChange={e => {
+                                setPanierEnvoiSelectionne(prev => {
+                                  const next = new Set(prev)
+                                  if (next.size === 0) {
+                                    panier.forEach((_, j) => { if (j !== i) next.add(j) })
+                                  } else {
+                                    if (e.target.checked) next.add(i)
+                                    else next.delete(i)
+                                  }
+                                  return next
+                                })
+                              }}
+                              disabled={!pourCuisine}
+                              className="rounded"
+                            />
+                            <span className="text-xs text-[#555]">
+                              {pourCuisine ? 'Envoyer en cuisine' : '🥤 Boisson/Vin'}
+                            </span>
+                            <span>{item.quantite}× {item.article.nom} {item.taille && `(${item.taille})`}</span>
+                          </label>
+                          <span className="font-medium">{(item.article.prix * item.quantite).toFixed(2)} €</span>
+                        </div>
+                      )
+                    })}
                     <div className="border-t border-[#E0D5C5] pt-2 mt-2">
                       {(parseFloat(reduction.pct) > 0 || parseFloat(reduction.montant) > 0 || reduction.codePromoValeur > 0 || reduction.bonFideliteValeur > 0) && (
                         <div className="text-xs text-green-700">Réductions appliquées</div>
@@ -761,13 +968,15 @@ export default function CommandesPage() {
                   </div>
                   <div className="flex gap-3">
                     <button onClick={() => setEtape(2)} className="flex-1 border border-[#E0D5C5] text-[#555] py-2 rounded-lg text-sm">← Retour</button>
-                    <button onClick={sauvegarder} disabled={saving} className="flex-1 border border-[#1B5E20] text-[#1B5E20] py-2 rounded-lg text-sm font-medium">
-                      💾 Sauvegarder
-                    </button>
+                    {!existingCmdId && (
+                      <button onClick={sauvegarder} disabled={saving} className="flex-1 border border-[#1B5E20] text-[#1B5E20] py-2 rounded-lg text-sm font-medium">
+                        💾 Sauvegarder
+                      </button>
+                    )}
                   </div>
                   <button onClick={envoyerEnCuisine} disabled={saving}
                     className="w-full bg-[#B71C1C] hover:bg-[#C62828] text-white py-3 rounded-lg font-medium disabled:opacity-50">
-                    {saving ? 'Envoi...' : `📤 Envoyer ${panierEnvoiSelectionne.size === 0 ? panier.length : panierEnvoiSelectionne.size} article(s) en cuisine`}
+                    {saving ? 'Envoi en cours...' : `📤 Envoyer ${panierEnvoiSelectionne.size === 0 ? panier.length : panierEnvoiSelectionne.size} article(s) en cuisine`}
                   </button>
                 </div>
               )}
@@ -781,31 +990,39 @@ export default function CommandesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0D5C5]">
-              <h2 className="text-lg font-bold">Table {modalDetail.table_numero} — {modalDetail.nom_client}</h2>
+              <div>
+                <h2 className="text-lg font-bold">Table {modalDetail.table_numero} — {modalDetail.nom_client}</h2>
+                {modalDetail.couverts && (
+                  <p className="text-xs text-[#555] mt-0.5">{modalDetail.couverts} couvert{modalDetail.couverts > 1 ? 's' : ''}</p>
+                )}
+              </div>
               <button onClick={() => setModalDetail(null)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
             </div>
             <div className="p-6 space-y-4">
-              {/* Articles envoyés en cuisine */}
+              {/* Articles en cuisine / prêts */}
               {(modalDetail.lignes_commande ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').length > 0 && (
                 <div>
                   <h4 className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-2">En cuisine / Prêts</h4>
                   <div className="space-y-1">
-                    {(modalDetail.lignes_commande ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').map(l => (
-                      <div key={l.id} className="flex justify-between text-sm py-1 border-b border-[#F0EBE0]">
-                        <span className={l.statut === 'pret' ? 'line-through text-gray-400' : ''}>
-                          {l.quantite}× {l.article_nom}{l.taille ? ` (${l.taille})` : ''}
-                          {l.commentaire && <span className="text-xs text-[#555] ml-1">— {l.commentaire}</span>}
-                        </span>
-                        <span className="ml-2">
-                          {l.statut === 'pret' && <span className="text-green-600 text-xs font-medium">✓ Prêt</span>}
-                          <span className="text-[#555] ml-2">{(l.prix_unitaire * l.quantite).toFixed(2)} €</span>
-                        </span>
-                      </div>
-                    ))}
+                    {(modalDetail.lignes_commande ?? [])
+                      .filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret')
+                      .map(l => (
+                        <div key={l.id} className="flex justify-between text-sm py-1 border-b border-[#F0EBE0]">
+                          <span className={l.statut === 'pret' ? 'line-through text-gray-400' : ''}>
+                            {l.quantite}× {l.article_nom}{l.taille ? ` (${l.taille})` : ''}
+                            {l.ajout_apres && <span className="ml-1 text-xs bg-yellow-200 text-yellow-800 px-1 rounded">AJOUT</span>}
+                            {l.commentaire && <span className="text-xs text-[#555] ml-1">— {l.commentaire}</span>}
+                          </span>
+                          <span className="ml-2 flex items-center gap-1">
+                            {l.statut === 'pret' && <span className="text-green-600 text-xs font-medium">✓ Prêt</span>}
+                            <span className="text-[#555]">{(l.prix_unitaire * l.quantite).toFixed(2)} €</span>
+                          </span>
+                        </div>
+                      ))}
                   </div>
                 </div>
               )}
-              {/* Articles en attente (pas encore envoyés) */}
+              {/* Articles en attente */}
               {(modalDetail.lignes_commande ?? []).filter(l => l.statut === 'en_attente').length > 0 && (
                 <div>
                   <h4 className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2">En attente d&apos;envoi</h4>
@@ -828,13 +1045,26 @@ export default function CommandesPage() {
                   className="flex-1 bg-[#1B5E20] hover:bg-[#2E7D32] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
                   + Ajouter des articles
                 </button>
-                {(modalDetail.statut === 'pret_encaisser' || modalDetail.statut === 'en_cours') && (
+                {(STATUTS_ACTIFS as string[]).includes(modalDetail.statut) && (
                   <button
                     onClick={() => { setModalEncaiss(modalDetail); setModalDetail(null); setModePaiement('cb'); setMontantRecu('') }}
                     className="flex-1 bg-[#B71C1C] hover:bg-[#C62828] text-white py-2 rounded-lg text-sm font-medium min-w-[140px]">
                     💳 Encaisser
                   </button>
                 )}
+              </div>
+              <div className="flex gap-3 flex-wrap border-t border-[#F0EBE0] pt-3">
+                <button
+                  onClick={() => annulerCommande(modalDetail)}
+                  disabled={saving}
+                  className="flex-1 border border-orange-300 text-orange-700 py-2 rounded-lg text-sm font-medium min-w-[140px] hover:bg-orange-50 disabled:opacity-50">
+                  ✗ Annuler la commande
+                </button>
+                <button
+                  onClick={() => { setConfirmDelete(modalDetail); setModalDetail(null) }}
+                  className="flex-1 border border-red-300 text-red-700 py-2 rounded-lg text-sm font-medium min-w-[140px] hover:bg-red-50">
+                  🗑 Supprimer
+                </button>
               </div>
             </div>
           </div>
@@ -850,11 +1080,17 @@ export default function CommandesPage() {
               <button onClick={() => setModalEncaiss(null)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
             </div>
             <div className="p-6 space-y-4">
+              {erreur && (
+                <div className="p-3 rounded-lg bg-red-50 border border-red-300 text-red-700 text-sm">⚠️ {erreur}</div>
+              )}
               <div className="bg-[#F0EBE0] rounded-xl p-4">
                 {modalEncaiss.nom_client && <div className="font-medium mb-1">{modalEncaiss.nom_client}</div>}
-                {modalEncaiss.lignes_commande?.map(l => (
+                {modalEncaiss.couverts && (
+                  <div className="text-xs text-[#555] mb-2">{modalEncaiss.couverts} couvert{modalEncaiss.couverts > 1 ? 's' : ''}</div>
+                )}
+                {(modalEncaiss.lignes_commande ?? []).map(l => (
                   <div key={l.id} className="flex justify-between text-sm">
-                    <span>{l.quantite}× {l.article_nom}</span>
+                    <span>{l.quantite}× {l.article_nom}{l.taille ? ` (${l.taille})` : ''}</span>
                     <span>{(l.prix_unitaire * l.quantite).toFixed(2)} €</span>
                   </div>
                 ))}
@@ -877,11 +1113,11 @@ export default function CommandesPage() {
 
               {modePaiement === 'especes' && (
                 <div>
-                  <label className="block text-sm text-[#555] mb-1">Montant reçu</label>
-                  <input type="number" min="0" value={montantRecu} onChange={e => setMontantRecu(e.target.value)}
+                  <label className="block text-sm text-[#555] mb-1">Montant reçu (€)</label>
+                  <input type="number" min="0" step="0.01" value={montantRecu} onChange={e => setMontantRecu(e.target.value)}
                     className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm" />
                   {parseFloat(montantRecu) >= (modalEncaiss.total ?? 0) && (
-                    <div className="mt-1 text-green-700 font-bold text-sm">
+                    <div className="mt-2 text-green-700 font-bold text-sm bg-green-50 rounded p-2">
                       Monnaie à rendre : {(parseFloat(montantRecu) - (modalEncaiss.total ?? 0)).toFixed(2)} €
                     </div>
                   )}
@@ -889,14 +1125,38 @@ export default function CommandesPage() {
               )}
 
               {clientFidele && (
-                <div className="text-sm text-[#D4A843]">
-                  Points gagnés : +{Math.floor(modalEncaiss.total ?? 0)} points
+                <div className="text-sm text-[#D4A843] bg-yellow-50 rounded p-2">
+                  ⭐ Points gagnés : +{Math.floor(modalEncaiss.total ?? 0)} points
                 </div>
               )}
 
               <button onClick={validerPaiement} disabled={saving}
                 className="w-full bg-[#1B5E20] hover:bg-[#2E7D32] text-white py-3 rounded-xl font-bold text-lg disabled:opacity-50">
-                ✅ Valider le paiement
+                {saving ? 'Validation...' : '✅ Valider le paiement'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL CONFIRMATION SUPPRESSION ===== */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
+            <h2 className="text-lg font-bold text-red-700">⚠️ Supprimer la commande ?</h2>
+            <p className="text-sm text-[#555]">
+              Commande de <strong>{confirmDelete.nom_client}</strong>
+              {confirmDelete.table_numero ? ` — Table ${confirmDelete.table_numero}` : ''}<br />
+              Cette action est irréversible. Tous les articles seront supprimés.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 border border-[#E0D5C5] text-[#555] py-2 rounded-lg text-sm">
+                Annuler
+              </button>
+              <button onClick={() => supprimerCommande(confirmDelete)} disabled={saving}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-medium disabled:opacity-50">
+                {saving ? 'Suppression...' : '🗑 Supprimer'}
               </button>
             </div>
           </div>
@@ -906,39 +1166,79 @@ export default function CommandesPage() {
   )
 }
 
-function CommandeRow({ cmd, onEncaisser, onUpdate }: { cmd: CommandeActive; onEncaisser: () => void; onUpdate: () => void }) {
+function CommandeRow({
+  cmd,
+  onEncaisser,
+  onSupprimer,
+  onUpdate,
+}: {
+  cmd: CommandeActive
+  onEncaisser: () => void
+  onSupprimer: () => void
+  onUpdate: () => void
+}) {
   const s = STATUT_LABELS[cmd.statut] ?? STATUT_LABELS.brouillon
+  const [updatingStatut, setUpdatingStatut] = useState(false)
+  const [errLocal, setErrLocal] = useState<string | null>(null)
+
   const updateStatut = async (statut: StatutCmd) => {
-    try { await supabase.from('commandes').update({ statut }).eq('id', cmd.id); onUpdate() } catch { /* skip */ }
+    setUpdatingStatut(true)
+    setErrLocal(null)
+    try {
+      const { error } = await supabase.from('commandes').update({ statut }).eq('id', cmd.id)
+      if (error) throw new Error(error.message)
+      onUpdate()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setErrLocal(`Erreur mise à jour : ${msg}`)
+    } finally {
+      setUpdatingStatut(false)
+    }
   }
+
   const NEXT_STATUT: Partial<Record<StatutCmd, { statut: StatutCmd; label: string }>> = {
-    brouillon: { statut: 'en_cours', label: '→ En cuisine' },
+    brouillon: { statut: 'en_preparation', label: '→ En cuisine' },
     en_cours: { statut: 'pret_encaisser', label: '→ Prête' },
+    en_preparation: { statut: 'pret_encaisser', label: '→ Prête' },
   }
   const next = NEXT_STATUT[cmd.statut]
+
   return (
-    <div className="w-full rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white border border-[#E0D5C5] shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-        <div className="text-xl font-bold text-[#D4A843]">#{cmd.numero_commande}</div>
-        {cmd.nom_client && <div className="text-sm font-medium text-[#1A1A1A]">{cmd.nom_client}</div>}
-        {cmd.table_numero && <div className="text-sm text-[#555]">Table {cmd.table_numero}</div>}
-        <div className="text-sm text-[#555]">{new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
-        <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="font-medium text-[#1A1A1A]">{cmd.total?.toFixed(2)} €</div>
-        {next && (
-          <button onClick={() => updateStatut(next.statut)}
-            className="px-3 py-1 rounded text-xs font-medium bg-[#1B5E20]/10 text-[#1B5E20] border border-[#1B5E20]/20">
-            {next.label}
+    <div className="w-full rounded-xl p-4 flex flex-col gap-2 bg-white border border-[#E0D5C5] shadow-sm">
+      {errLocal && (
+        <div className="text-red-600 text-xs bg-red-50 px-2 py-1 rounded">{errLocal}</div>
+      )}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+          <div className="text-xl font-bold text-[#D4A843]">#{cmd.numero_commande}</div>
+          {cmd.nom_client && <div className="text-sm font-medium text-[#1A1A1A]">{cmd.nom_client}</div>}
+          {cmd.table_numero && <div className="text-sm text-[#555]">Table {cmd.table_numero}</div>}
+          {cmd.couverts && <div className="text-sm text-[#555]">{cmd.couverts} cvts</div>}
+          <div className="text-sm text-[#555]">{new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
+          <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="font-medium text-[#1A1A1A]">{cmd.total?.toFixed(2)} €</div>
+          {next && (
+            <button
+              onClick={() => updateStatut(next.statut)}
+              disabled={updatingStatut}
+              className="px-3 py-1 rounded text-xs font-medium bg-[#1B5E20]/10 text-[#1B5E20] border border-[#1B5E20]/20 disabled:opacity-50">
+              {next.label}
+            </button>
+          )}
+          {(STATUTS_ACTIFS as string[]).includes(cmd.statut) && (
+            <button onClick={onEncaisser}
+              className="px-3 py-1 rounded text-xs font-medium bg-[#B71C1C] text-white">
+              💳 Encaisser
+            </button>
+          )}
+          <button
+            onClick={onSupprimer}
+            className="px-3 py-1 rounded text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50">
+            🗑
           </button>
-        )}
-        {(cmd.statut === 'pret_encaisser' || cmd.statut === 'en_cours') && (
-          <button onClick={onEncaisser}
-            className="px-3 py-1 rounded text-xs font-medium bg-[#B71C1C] text-white">
-            💳 Encaisser
-          </button>
-        )}
+        </div>
       </div>
     </div>
   )
