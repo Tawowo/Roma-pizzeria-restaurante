@@ -26,7 +26,7 @@ interface LigneCmd {
   id: string; article_id?: string; article_nom: string; quantite: number; taille?: string
   commentaire?: string; statut?: LigneStatut; prix_unitaire: number; ajout_apres?: boolean; created_at?: string
 }
-interface Article { id: string; nom: string; prix: number; categorie_id: string }
+interface Article { id: string; nom: string; prix: number; categorie_id: string; pour_cuisine?: boolean }
 interface Categorie { id: string; nom: string }
 interface ClientFidele { id: string; nom: string; points: number; telephone: string }
 interface PanierItem { article: Article; quantite: number; taille: Taille; commentaire: string }
@@ -52,6 +52,9 @@ const STATUT_LABELS: Record<StatutCmd, { label: string; tw: string }> = {
 const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
 
 function estPourCuisine(p: PanierItem, categories: Categorie[]): boolean {
+  // Priorité : champ pour_cuisine sur l'article (configuré dans Menu)
+  if (typeof p.article.pour_cuisine === 'boolean') return p.article.pour_cuisine
+  // Fallback : heuristique par nom de catégorie
   const cat = categories.find(c => c.id === p.article.categorie_id)
   const nomCat = cat?.nom?.toLowerCase() ?? ''
   return !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
@@ -151,8 +154,15 @@ export default function CommandesPage() {
         const tv: TableVirtuelle[] = (tablesDB as TableResto[]).map(t => {
           const cmdActive = cmds.find(c => c.id === t.commande_id)
             ?? cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['payee', 'annulee'].includes(c.statut))
-          const statut = (t.statut ?? (cmdActive ? 'occupee' : 'libre')) as TableVirtuelle['statut']
-          return { num: t.numero, zone: t.zone, statut: cmdActive ? statut : 'libre', commande: cmdActive }
+          // Si commande active → toujours occupée (ignore le statut DB qui peut être en retard)
+          // Si prête (toutes lignes pret) → prete
+          let statut: TableVirtuelle['statut'] = 'libre'
+          if (cmdActive) {
+            statut = cmdActive.statut === 'prete' ? 'prete' : 'occupee'
+          } else if (t.statut === 'reservee') {
+            statut = 'reservee'
+          }
+          return { num: t.numero, zone: t.zone, statut, commande: cmdActive }
         })
         setTables(tv)
       } else {

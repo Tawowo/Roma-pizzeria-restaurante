@@ -20,6 +20,7 @@ interface Article {
   disponible: boolean
   categorie_id: string
   promotion?: number
+  pour_cuisine?: boolean
 }
 
 interface Formule {
@@ -119,6 +120,13 @@ export default function MenuPage() {
     } catch (err) { console.error(err) }
   }
 
+  const togglePourCuisine = async (id: string, pourCuisine: boolean) => {
+    try {
+      await supabase.from('articles').update({ pour_cuisine: !pourCuisine }).eq('id', id)
+      await fetchAll()
+    } catch (err) { console.error(err) }
+  }
+
   const saveArticle = async () => {
     if (!editArticle || role !== 'monica') return
     setSaving(true)
@@ -131,9 +139,10 @@ export default function MenuPage() {
           promotion: editArticle.promotion ?? 0,
           disponible: editArticle.disponible,
           categorie_id: editArticle.categorie_id,
+          pour_cuisine: editArticle.pour_cuisine ?? true,
         }).eq('id', editArticle.id)
       } else {
-        await supabase.from('articles').insert([editArticle])
+        await supabase.from('articles').insert([{ ...editArticle, pour_cuisine: editArticle.pour_cuisine ?? true }])
       }
       setEditArticle(null)
       await fetchAll()
@@ -281,6 +290,14 @@ export default function MenuPage() {
                       >
                         {art.disponible ? 'Dispo' : 'Indispo'}
                       </button>
+                      <button
+                        onClick={() => togglePourCuisine(art.id, art.pour_cuisine ?? true)}
+                        title="Envoyer en cuisine ?"
+                        className="px-3 py-1 rounded-full text-xs"
+                        style={{ background: (art.pour_cuisine ?? true) ? 'rgba(183,28,28,0.3)' : 'rgba(100,100,100,0.3)', color: (art.pour_cuisine ?? true) ? '#ef5350' : '#888' }}
+                      >
+                        {(art.pour_cuisine ?? true) ? '🍳 Cuisine' : '🚫 Pas cuisine'}
+                      </button>
                       {role === 'monica' && (
                         <>
                           <button onClick={() => setEditArticle(art)} className="px-3 py-1 rounded text-xs" style={{ background: '#333', color: '#888' }}>✏️</button>
@@ -367,6 +384,21 @@ export default function MenuPage() {
                   style={{ background: '#242424', color: '#F5F5F5' }}
                   placeholder="0 = pas de promotion"
                 />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Envoyer en cuisine</label>
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <div
+                    onClick={() => setEditArticle(prev => prev ? { ...prev, pour_cuisine: !(prev.pour_cuisine ?? true) } : null)}
+                    className="w-12 h-6 rounded-full relative transition-colors cursor-pointer"
+                    style={{ background: (editArticle.pour_cuisine ?? true) ? '#B71C1C' : '#444' }}>
+                    <div className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform"
+                      style={{ transform: (editArticle.pour_cuisine ?? true) ? 'translateX(26px)' : 'translateX(2px)' }} />
+                  </div>
+                  <span className="text-sm text-gray-300">
+                    {(editArticle.pour_cuisine ?? true) ? '🍳 Envoyé en cuisine' : '🚫 Non envoyé (boisson, etc.)'}
+                  </span>
+                </label>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Catégorie</label>
