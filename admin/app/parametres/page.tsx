@@ -5,7 +5,7 @@ import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 
-type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp' | 'utilisateurs'
+type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp' | 'utilisateurs' | 'migrations'
 
 interface ParamMap { [key: string]: string }
 interface TableResto { id: string; numero: number; nom?: string; zone: string; capacite: number; actif: boolean }
@@ -258,6 +258,7 @@ export default function ParametresPage() {
     { key: 'tables', label: 'Tables' },
     { key: 'mdp', label: 'Mots de passe' },
     { key: 'utilisateurs', label: '👥 Utilisateurs' },
+    { key: 'migrations', label: '🔧 Migrations SQL' },
   ]
 
   const renderForm = (keys: string[]) => (
@@ -564,6 +565,61 @@ export default function ParametresPage() {
                       {saving ? 'Mise à jour...' : 'Changer le mot de passe'}
                     </button>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {section === 'migrations' && (
+            <div className="space-y-4">
+              <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 text-sm text-yellow-800">
+                <strong>⚠️ À faire une seule fois dans Supabase</strong><br/>
+                Copiez le SQL ci-dessous, ouvrez l&apos;éditeur SQL de votre projet Supabase, collez et exécutez.
+              </div>
+              {[
+                {
+                  titre: '1. Table commandes — colonnes manquantes',
+                  sql: `ALTER TABLE commandes ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'a_emporter';
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'en_attente';
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS nom_client TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS telephone TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS table_numero INTEGER;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS zone TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS couverts INTEGER DEFAULT 2;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS total NUMERIC DEFAULT 0;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reduction_pct NUMERIC DEFAULT 0;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS reduction_montant NUMERIC DEFAULT 0;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS code_promo TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS offert BOOLEAN DEFAULT false;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS offert_motif TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS client_id UUID;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS mode_paiement TEXT;
+ALTER TABLE commandes ADD COLUMN IF NOT EXISTS notes TEXT;`
+                },
+                {
+                  titre: '2. Table lignes_commande — colonnes manquantes',
+                  sql: `ALTER TABLE lignes_commande ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'en_attente';
+ALTER TABLE lignes_commande ADD COLUMN IF NOT EXISTS pour_cuisine BOOLEAN DEFAULT true;
+ALTER TABLE lignes_commande ADD COLUMN IF NOT EXISTS categorie_nom TEXT;
+ALTER TABLE lignes_commande ADD COLUMN IF NOT EXISTS ajout_apres BOOLEAN DEFAULT false;
+ALTER TABLE lignes_commande ADD COLUMN IF NOT EXISTS taille TEXT;
+ALTER TABLE lignes_commande ADD COLUMN IF NOT EXISTS commentaire TEXT;`
+                },
+                {
+                  titre: '3. Table tables_restaurant — colonnes manquantes',
+                  sql: `ALTER TABLE tables_restaurant ADD COLUMN IF NOT EXISTS statut TEXT DEFAULT 'libre';
+ALTER TABLE tables_restaurant ADD COLUMN IF NOT EXISTS commande_id UUID;
+UPDATE tables_restaurant SET statut = 'libre' WHERE statut IS NULL;`
+                },
+              ].map(({ titre, sql }) => (
+                <div key={titre} className="border border-[#E0D5C5] rounded-xl overflow-hidden">
+                  <div className="bg-[#F0EBE0] px-4 py-2 text-sm font-semibold text-[#1A1A1A]">{titre}</div>
+                  <pre className="bg-[#1A1A1A] text-green-300 text-xs p-4 overflow-x-auto whitespace-pre-wrap">{sql}</pre>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(sql)}
+                    className="w-full py-2 bg-[#1B5E20] text-white text-sm font-medium hover:bg-[#2E7D32]">
+                    📋 Copier ce bloc SQL
+                  </button>
                 </div>
               ))}
             </div>

@@ -149,6 +149,7 @@ export default function CommandesPage() {
   })
   const [saving, setSaving] = useState(false)
   const [errNom, setErrNom] = useState('')
+  const [errSave, setErrSave] = useState('')
   const [panierEnvoiSelectionne, setPanierEnvoiSelectionne] = useState<Set<number>>(new Set())
   const [existingCmdId, setExistingCmdId] = useState<string | null>(null)
 
@@ -245,6 +246,7 @@ export default function CommandesPage() {
     setPanier([])
     setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
     setErrNom('')
+    setErrSave('')
     setPanierEnvoiSelectionne(new Set())
     setExistingCmdId(null)
   }
@@ -298,13 +300,13 @@ export default function CommandesPage() {
 
     if (panierEnvoi.length === 0) return
 
-    setSaving(true)
+    setSaving(true); setErrSave('')
     try {
       const total = calcTotal(panier, reduction)
 
-      // Adding articles to existing commande
+      // Ajout d'articles à une commande existante
       if (existingCmdId) {
-        await supabase.from('lignes_commande').insert(
+        const { error: e1 } = await supabase.from('lignes_commande').insert(
           panierEnvoi.map(p => ({
             commande_id: existingCmdId,
             article_id: p.article.id,
@@ -317,8 +319,9 @@ export default function CommandesPage() {
             ajout_apres: true
           }))
         )
+        if (e1) throw new Error(`Ajout lignes: ${e1.message}`)
         if (panierAttente.length > 0) {
-          await supabase.from('lignes_commande').insert(
+          const { error: e2 } = await supabase.from('lignes_commande').insert(
             panierAttente.map(p => ({
               commande_id: existingCmdId,
               article_id: p.article.id,
@@ -331,22 +334,25 @@ export default function CommandesPage() {
               ajout_apres: true
             }))
           )
+          if (e2) throw new Error(`Ajout lignes attente: ${e2.message}`)
         }
+        // Passer la commande en_preparation si elle était en_attente
+        await supabase.from('commandes').update({ statut: 'en_preparation' }).eq('id', existingCmdId).eq('statut', 'en_attente')
         setModalTable(null)
         setExistingCmdId(null)
         setPanierEnvoiSelectionne(new Set())
-        fetchTout()
+        await fetchTout()
         setSaving(false)
         return
       }
 
-      const { data: cmd } = await supabase.from('commandes').insert([{
+      const { data: cmd, error: errCmd } = await supabase.from('commandes').insert([{
         type: 'sur_place',
         statut: 'en_preparation',
         nom_client: nomClient.trim(),
-        telephone: telClient,
-        table_numero: modalTable?.num,
-        zone: modalTable?.zone,
+        telephone: telClient || null,
+        table_numero: modalTable?.num ?? null,
+        zone: modalTable?.zone ?? null,
         couverts,
         total,
         reduction_pct: parseFloat(reduction.pct) || 0,
@@ -357,78 +363,89 @@ export default function CommandesPage() {
         client_id: clientFidele?.id || null,
       }]).select().single()
 
-      if (cmd) {
-        const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
-        const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean) => {
-          const cat = categories.find(c => c.id === p.article.categorie_id)
-          const nomCat = cat?.nom?.toLowerCase() ?? ''
-          const pourCuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
-          return {
-            commande_id: cmd.id,
-            article_id: p.article.id,
-            article_nom: p.article.nom,
-            quantite: p.quantite,
-            taille: p.taille || null,
-            commentaire: p.commentaire || null,
-            prix_unitaire: p.article.prix,
-            categorie_nom: cat?.nom || null,
-            pour_cuisine: pourCuisine,
-            statut,
-            ajout_apres,
-          }
+      if (errCmd) throw new Error(`Création commande: ${errCmd.message}`)
+      if (!cmd) throw new Error('Commande non créée (réponse vide)')
+
+      const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
+      const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean) => {
+        const cat = categories.find(c => c.id === p.article.categorie_id)
+        const nomCat = cat?.nom?.toLowerCase() ?? ''
+        const pourCuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+        return {
+          commande_id: cmd.id,
+          article_id: p.article.id,
+          article_nom: p.article.nom,
+          quantite: p.quantite,
+          taille: p.taille || null,
+          commentaire: p.commentaire || null,
+          prix_unitaire: p.article.prix,
+          categorie_nom: cat?.nom || null,
+          pour_cuisine: pourCuisine,
+          statut,
+          ajout_apres,
         }
-        if (panierEnvoi.length > 0) {
-          await supabase.from('lignes_commande').insert(panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', false)))
-        }
-        if (panierAttente.length > 0) {
-          await supabase.from('lignes_commande').insert(panierAttente.map(p => makeLigne(p, 'en_attente', true)))
-        }
-        // ✅ Mettre la table en occupée
-        if (modalTable?.num) {
-          await supabase
-            .from('tables_restaurant')
-            .update({ statut: 'occupee', commande_id: cmd.id })
-            .eq('numero', modalTable.num)
-            .eq('zone', modalTable.zone)
-        }
+      }
+      if (panierEnvoi.length > 0) {
+        const { error: el1 } = await supabase.from('lignes_commande').insert(panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', false)))
+        if (el1) throw new Error(`Insertion lignes cuisine: ${el1.message}`)
+      }
+      if (panierAttente.length > 0) {
+        const { error: el2 } = await supabase.from('lignes_commande').insert(panierAttente.map(p => makeLigne(p, 'en_attente', true)))
+        if (el2) throw new Error(`Insertion lignes attente: ${el2.message}`)
+      }
+      // Mettre la table en occupée
+      if (modalTable?.num) {
+        await supabase
+          .from('tables_restaurant')
+          .update({ statut: 'occupee', commande_id: cmd.id })
+          .eq('numero', modalTable.num)
       }
 
       setModalTable(null)
       setPanierEnvoiSelectionne(new Set())
       await fetchTout()
-    } catch (err) { console.error(err) } finally { setSaving(false) }
+    } catch (err) {
+      console.error('envoyerEnCuisine error:', err)
+      setErrSave(err instanceof Error ? err.message : String(err))
+    } finally { setSaving(false) }
   }
 
   const sauvegarder = async () => {
     if (!nomClient.trim()) { setErrNom('Le nom est obligatoire'); return }
     if (panier.length === 0) return
-    setSaving(true)
+    setSaving(true); setErrSave('')
     try {
       const total = calcTotal(panier, reduction)
-      const { data: cmd } = await supabase.from('commandes').insert([{
-        type: 'sur_place', statut: 'en_attente', nom_client: nomClient.trim(), telephone: telClient,
-        table_numero: modalTable?.num, zone: modalTable?.zone, couverts, total, client_id: clientFidele?.id || null,
+      const { data: cmd, error: errCmd } = await supabase.from('commandes').insert([{
+        type: 'sur_place', statut: 'en_attente', nom_client: nomClient.trim(),
+        telephone: telClient || null, table_numero: modalTable?.num ?? null,
+        zone: modalTable?.zone ?? null, couverts, total, client_id: clientFidele?.id || null,
       }]).select().single()
-      if (cmd) {
-        const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
-        await supabase.from('lignes_commande').insert(
-          panier.map(p => {
-            const cat = categories.find(c => c.id === p.article.categorie_id)
-            const nomCat = cat?.nom?.toLowerCase() ?? ''
-            return { commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix, categorie_nom: cat?.nom || null, pour_cuisine: !CATS_PAS_CUISINE.some(c => nomCat.includes(c)), statut: 'en_attente' }
-          })
-        )
-        if (modalTable?.num) {
-          await supabase
-            .from('tables_restaurant')
-            .update({ statut: 'occupee', commande_id: cmd.id })
-            .eq('numero', modalTable.num)
-            .eq('zone', modalTable.zone)
-        }
+      if (errCmd) throw new Error(`Création commande: ${errCmd.message}`)
+      if (!cmd) throw new Error('Commande non créée (réponse vide)')
+
+      const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
+      const { error: elErr } = await supabase.from('lignes_commande').insert(
+        panier.map(p => {
+          const cat = categories.find(c => c.id === p.article.categorie_id)
+          const nomCat = cat?.nom?.toLowerCase() ?? ''
+          return { commande_id: cmd.id, article_id: p.article.id, article_nom: p.article.nom, quantite: p.quantite, taille: p.taille || null, commentaire: p.commentaire || null, prix_unitaire: p.article.prix, categorie_nom: cat?.nom || null, pour_cuisine: !CATS_PAS_CUISINE.some(c => nomCat.includes(c)), statut: 'en_attente' }
+        })
+      )
+      if (elErr) throw new Error(`Insertion lignes: ${elErr.message}`)
+
+      if (modalTable?.num) {
+        await supabase
+          .from('tables_restaurant')
+          .update({ statut: 'occupee', commande_id: cmd.id })
+          .eq('numero', modalTable.num)
       }
       setModalTable(null)
       await fetchTout()
-    } catch (err) { console.error(err) } finally { setSaving(false) }
+    } catch (err) {
+      console.error('sauvegarder error:', err)
+      setErrSave(err instanceof Error ? err.message : String(err))
+    } finally { setSaving(false) }
   }
 
   const validerPaiement = async () => {
@@ -750,6 +767,14 @@ export default function CommandesPage() {
                       <div className="font-bold text-[#B71C1C] text-lg">Total TTC : {totalFinal.toFixed(2)} €</div>
                     </div>
                   </div>
+                  {errSave && (
+                    <div className="bg-red-50 border border-red-300 rounded-lg px-4 py-3 text-sm text-red-700">
+                      <strong>Erreur :</strong> {errSave}
+                      <div className="text-xs mt-1 text-red-500">
+                        ⚠️ Des colonnes sont peut-être manquantes dans Supabase. Lancez les migrations SQL (voir README ou console admin).
+                      </div>
+                    </div>
+                  )}
                   <div className="flex gap-3">
                     <button onClick={() => setEtape(2)} className="flex-1 border border-[#E0D5C5] text-[#555] py-2 rounded-lg text-sm">← Retour</button>
                     <button onClick={sauvegarder} disabled={saving} className="flex-1 border border-[#1B5E20] text-[#1B5E20] py-2 rounded-lg text-sm font-medium">
