@@ -148,7 +148,8 @@ export default function CommandesPage() {
       setCommandes(cmds)
 
       const { data: tablesDB } = await supabase.from('tables_restaurant').select('*').eq('actif', true).order('numero')
-      console.log('tables DB:', tablesDB)
+      console.log('Tables depuis DB:', tablesDB)
+      console.log('Commandes depuis DB:', cmds)
 
       if (tablesDB && tablesDB.length > 0) {
         const tv: TableVirtuelle[] = (tablesDB as TableResto[]).map(t => {
@@ -267,14 +268,15 @@ export default function CommandesPage() {
   const upsertTable = async (num: number, cmdId: string, zone?: Zone) => {
     const z: Zone = zone ?? (num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse')
     // Try update first; if no row exists, insert
-    const { data: updRows } = await supabase.from('tables_restaurant')
+    const { data: updRows, error: updErr } = await supabase.from('tables_restaurant')
       .update({ statut: 'occupee', commande_id: cmdId })
       .eq('numero', num).select()
-    console.log('[upsertTable] table', num, 'update rows:', updRows?.length)
+    console.log('UPSERT table résultat:', updRows, updErr)
     if (!updRows || updRows.length === 0) {
-      const { error: insErr } = await supabase.from('tables_restaurant')
+      const { data: insData, error: insErr } = await supabase.from('tables_restaurant')
         .insert({ numero: num, zone: z, capacite: 4, actif: true, statut: 'occupee', commande_id: cmdId })
-      console.log('[upsertTable] insert error:', insErr)
+        .select()
+      console.log('INSERT table résultat:', insData, insErr)
     }
   }
 
@@ -318,6 +320,7 @@ export default function CommandesPage() {
         code_promo: reduction.codePromo || null, offert: reduction.offrir,
         offert_motif: reduction.offrirMotif || null, client_id: clientFidele?.id || null,
       }]).select().single()
+      console.log('INSERT résultat:', cmd, errCmd)
       if (errCmd) throw new Error(`Création commande: ${errCmd.message}`)
       if (!cmd) throw new Error('Commande non créée (réponse vide)')
 
