@@ -46,11 +46,11 @@ export default function AvisPage() {
         setTelChecked(true)
         setError('')
       } else {
-        setError('Numéro inconnu. Créez un compte sur /compte pour laisser un avis et gagner des points.')
+        setError(t('avis_err_inconnu'))
         setTelChecked(false)
       }
     } catch {
-      setError('Numéro inconnu. Créez un compte fidélité pour laisser un avis.')
+      setError(t('avis_err_inconnu'))
     } finally {
       setLoading(false)
     }
@@ -71,7 +71,7 @@ export default function AvisPage() {
       })
       setSuccess(true)
     } catch {
-      setError('Erreur lors de la soumission. Vous avez peut-être déjà laissé un avis.')
+      setError(t('avis_err_soumission'))
     } finally {
       setLoading(false)
     }
@@ -89,7 +89,7 @@ export default function AvisPage() {
         {avis.length > 0 && (
           <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center', background: 'rgba(255,255,255,0.1)', padding: '8px 20px', borderRadius: 20 }}>
             <span style={{ color: 'var(--rosso-l)', fontSize: 16 }}>{'⭐'.repeat(5)}</span>
-            <span style={{ fontFamily: 'Jost', fontSize: 14, color: 'white', fontWeight: 600 }}>{moyenne}/5 · {avis.length} avis</span>
+            <span style={{ fontFamily: 'Jost', fontSize: 14, color: 'white', fontWeight: 600 }}>{moyenne}/5 · {avis.length} {t('nav_avis').toLowerCase()}</span>
           </div>
         )}
       </div>
@@ -100,7 +100,7 @@ export default function AvisPage() {
           {[0,5,4,3].map(n => (
             <button key={n} onClick={() => setFilterNote(n)}
               style={{ padding: '8px 18px', borderRadius: 2, border: `1px solid ${filterNote===n?'var(--rosso)':'var(--grigio-l)'}`, background: filterNote===n?'var(--rosso)':'transparent', color: filterNote===n?'white':'var(--nero-m)', fontFamily: 'Jost', fontSize: 13, cursor: 'pointer' }}>
-              {n === 0 ? 'Tous' : `${'⭐'.repeat(n)} (${n}★)`}
+              {n === 0 ? t('avis_tous') : `${'⭐'.repeat(n)} (${n}★)`}
             </button>
           ))}
         </div>
@@ -124,7 +124,7 @@ export default function AvisPage() {
           ))}
           {filtered.length === 0 && (
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--grigio)', fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic' }}>
-              Aucun avis pour ce filtre
+              {t('avis_aucun')}
             </div>
           )}
         </div>
@@ -132,31 +132,31 @@ export default function AvisPage() {
         {/* Formulaire avis */}
         <div style={{ background: 'var(--verde-pale)', borderRadius: 4, padding: '40px', border: '1px solid rgba(27,94,32,0.2)' }}>
           <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--nero)', marginBottom: 8 }}>{t('avis_laisser')}</h2>
-          <p style={{ fontSize: 13, color: 'var(--verde-m)', fontFamily: 'Jost', marginBottom: 24 }}>Partagez votre expérience et gagnez <strong>+10 points fidélité</strong> 🎁</p>
+          <p style={{ fontSize: 13, color: 'var(--verde-m)', fontFamily: 'Jost', marginBottom: 24 }}>{t('avis_points_desc')} 🎁</p>
 
           {success ? (
             <div style={{ background: 'white', borderRadius: 3, padding: 28, textAlign: 'center', border: '1px solid var(--verde)' }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
               <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 22, color: 'var(--verde)', marginBottom: 8 }}>{t('avis_succes')}</h3>
-              <p style={{ fontSize: 14, color: 'var(--grigio)', fontFamily: 'Jost' }}>Votre avis sera publié après validation par notre équipe. +10 points crédités.</p>
+              <p style={{ fontSize: 14, color: 'var(--grigio)', fontFamily: 'Jost' }}>{t('avis_succes_desc')}</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ background: 'white', borderRadius: 4, padding: 28 }}>
               {!telChecked ? (
                 <>
-                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Votre téléphone (compte fidélité)</label>
+                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>{t('avis_telephone')}</label>
                   <div style={{ display: 'flex', gap: 12 }}>
                     <input type="tel" className="form-input" placeholder="06 XX XX XX XX" value={formTel} onChange={e => setFormTel(e.target.value)} style={{ flex: 1 }} />
                     <button type="button" onClick={checkTel} className="btn-verde" disabled={loading} style={{ flexShrink: 0, padding: '10px 20px' }}>
-                      {loading ? '...' : 'Valider'}
+                      {loading ? '...' : t('valider')}
                     </button>
                   </div>
-                  {error && <p style={{ fontSize: 13, color: 'var(--rosso)', marginTop: 10, fontFamily: 'Jost' }}>{error} <Link href="/compte" style={{ color: 'var(--verde)' }}>Créer un compte →</Link></p>}
+                  {error && <p style={{ fontSize: 13, color: 'var(--rosso)', marginTop: 10, fontFamily: 'Jost' }}>{error} <Link href="/compte" style={{ color: 'var(--verde)' }}>{t('avis_creer_compte')}</Link></p>}
                 </>
               ) : (
                 <>
                   <div style={{ background: 'var(--verde-pale)', padding: '12px 16px', borderRadius: 3, marginBottom: 20, fontSize: 14, color: 'var(--verde-m)', fontFamily: 'Jost' }}>
-                    ✅ Connecté en tant que <strong>{clientInfo?.nom}</strong> (+10 pts après validation)
+                    ✅ {t('avis_connecte')} <strong>{clientInfo?.nom}</strong> {t('avis_connecte_pts')}
                   </div>
                   <div style={{ marginBottom: 20 }}>
                     <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>{t('avis_note')}</label>
