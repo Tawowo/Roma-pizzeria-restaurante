@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase, Article, Categorie } from '@/lib/supabase'
 import { useLang } from '@/lib/LanguageContext'
@@ -12,12 +12,39 @@ type LignePanier = {
   id: string
 }
 
-const SLOTS_BASE = ['19:00','19:10','19:20','19:30','19:40','19:50','20:00','20:10','20:20','20:30','20:40','20:50','21:00','21:10','21:20','21:30']
-const SLOTS_MIDI = ['12:00','12:10','12:20','12:30','12:40','12:50','13:00','13:10','13:20','13:30','13:40','13:50']
+const CATS_PAS_CUISINE = [
+  'boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés',
+  'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin',
+  'bières', 'softs', 'eaux'
+]
+
+// Génère des créneaux toutes les 5 minutes entre fromH:fromM et toH:toM inclus
+function genSlots(fromH: number, fromM: number, toH: number, toM: number): string[] {
+  const slots: string[] = []
+  let h = fromH, m = fromM
+  while (h * 60 + m <= toH * 60 + toM) {
+    slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+    m += 5
+    if (m >= 60) { m -= 60; h++ }
+  }
+  return slots
+}
+
+const ALL_MIDI = genSlots(12, 0, 14, 30) // 12:00 → 14:30
+const ALL_SOIR = genSlots(19, 0, 22, 0)  // 19:00 → 22:00
+
+// 0=Dim 1=Lun 2=Mar 3=Mer 4=Jeu 5=Ven 6=Sam
+function getSlotsForDOW(dow: number): { midi: string[], soir: string[] } {
+  if (dow === 1) return { midi: [], soir: [] }               // Lundi : fermé
+  if (dow === 0 || dow === 2) return { midi: [], soir: ALL_SOIR } // Dim, Mar : soir
+  return { midi: ALL_MIDI, soir: ALL_SOIR }                  // Mer–Sam : midi + soir
+}
+
+const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
 
 export default function CommanderPage() {
   const { t } = useLang()
-  const [step, setStep] = useState<'menu'|'panier'|'infos'|'confirmation'>('menu')
+  const [step, setStep] = useState<'menu' | 'panier' | 'infos' | 'confirmation'>('menu')
   const [categories, setCategories] = useState<Categorie[]>([])
   const [articles, setArticles] = useState<Article[]>([])
   const [catActive, setCatActive] = useState('')
@@ -25,13 +52,74 @@ export default function CommanderPage() {
   const [nom, setNom] = useState('')
   const [tel, setTel] = useState('')
   const [dateRetrait, setDateRetrait] = useState('')
+  const [labelJour, setLabelJour] = useState('')
   const [heureRetrait, setHeureRetrait] = useState('')
   const [notes, setNotes] = useState('')
-  const [slotsDispos, setSlotsDispos] = useState<{slot:string,count:number,max:number}[]>([])
+  const [slotsMidi, setSlotsMidi] = useState<string[]>([])
+  const [slotsSoir, setSlotsSoir] = useState<string[]>([])
+  const [slotsCapacite, setSlotsCapacite] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false)
-  const [numCmd, setNumCmd] = useState<number|null>(null)
-  const [showCommentaire, setShowCommentaire] = useState<string|null>(null)
+  const [numCmd, setNumCmd] = useState<number | null>(null)
+  const [showCommentaire, setShowCommentaire] = useState<string | null>(null)
   const [err, setErr] = useState('')
+  const [ferme, setFerme] = useState(false)
+
+  const loadSlotsCapacite = useCallback(async (date: string) => {
+    try {
+      const { data } = await supabase
+        .from('commandes')
+        .select('heure_retrait')
+        .eq('date_retrait', date)
+        .neq('statut', 'annulee')
+      const counts: Record<string, number> = {}
+      if (data) {
+        data.forEach((c: { heure_retrait?: string }) => {
+          const h = (c.heure_retrait || '').slice(0, 5)
+          if (h) counts[h] = (counts[h] || 0) + 1
+        })
+      }
+      setSlotsCapacite(counts)
+    } catch { /* ignore */ }
+  }, [])
+
+  // Calcule le prochain jour/date disponible et met à jour les créneaux
+  const computeDate = useCallback(() => {
+    const now = new Date()
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(now)
+      d.setDate(d.getDate() + i)
+      const dow = d.getDay()
+      const { midi, soir } = getSlotsForDOW(dow)
+      if (dow === 1) continue  // Lundi fermé
+
+      // Pour aujourd'hui : exclure les créneaux déjà passés + 30 min de buffer
+      const nowMin = now.getHours() * 60 + now.getMinutes() + 30
+      const filterPast = (slots: string[]) => i > 0 ? slots : slots.filter(s => {
+        const [sh, sm] = s.split(':').map(Number)
+        return sh * 60 + sm > nowMin
+      })
+
+      const midiDispo = filterPast(midi)
+      const soirDispo = filterPast(soir)
+      if (midiDispo.length === 0 && soirDispo.length === 0) continue
+
+      const dateStr = d.toISOString().split('T')[0]
+      setDateRetrait(dateStr)
+      setSlotsMidi(midiDispo)
+      setSlotsSoir(soirDispo)
+      setFerme(false)
+
+      let label = ''
+      if (i === 0) label = `Aujourd'hui — ${JOURS_FR[dow]}`
+      else if (i === 1) label = `Demain — ${JOURS_FR[dow]}`
+      else label = `${JOURS_FR[dow]} ${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`
+      setLabelJour(label)
+      loadSlotsCapacite(dateStr)
+      return
+    }
+    // Aucun créneau dans les 8 prochains jours (cas extrême)
+    setFerme(true)
+  }, [loadSlotsCapacite])
 
   useEffect(() => {
     Promise.all([
@@ -41,39 +129,8 @@ export default function CommanderPage() {
       if (c.data) { setCategories(c.data); setCatActive(c.data[0]?.id || '') }
       if (a.data) setArticles(a.data)
     })
-    // Default date = today
-    setDateRetrait(new Date().toISOString().split('T')[0])
-  }, [])
-
-  useEffect(() => {
-    if (!dateRetrait) return
-    loadSlots(dateRetrait)
-  }, [dateRetrait])
-
-  const loadSlots = async (date: string) => {
-    const d = new Date(date + 'T12:00:00')
-    const day = d.getDay()
-    let baseSlots = SLOTS_BASE
-    if ([3,4,5,6].includes(day)) baseSlots = [...SLOTS_MIDI, ...SLOTS_BASE]
-    if (day === 1) { setSlotsDispos([]); return }
-
-    const { data } = await supabase.from('lignes_commande')
-      .select('commande_id, quantite, commandes!inner(date_retrait, heure_retrait, statut)')
-      .eq('commandes.date_retrait', date)
-      .neq('commandes.statut', 'annulee')
-
-    // Compte pizzas par tranche de 10min
-    const counts: Record<string, number> = {}
-    if (data) {
-      data.forEach((l: any) => {
-        const h = l.commandes?.heure_retrait?.slice(0,5) || ''
-        if (!counts[h]) counts[h] = 0
-        counts[h] += l.quantite
-      })
-    }
-
-    setSlotsDispos(baseSlots.map(s => ({ slot: s, count: counts[s] || 0, max: 8 })))
-  }
+    computeDate()
+  }, [computeDate])
 
   const artsByCat = articles.filter(a => a.categorie_id === catActive)
   const nbPanier = panier.reduce((s, l) => s + l.quantite, 0)
@@ -82,7 +139,7 @@ export default function CommanderPage() {
     return s + prix * l.quantite
   }, 0)
 
-  const addToPanier = (article: Article, taille: 'normal'|'pala' = 'normal') => {
+  const addToPanier = (article: Article, taille: 'normal' | 'pala' = 'normal') => {
     const id = `${article.id}-${taille}-${Date.now()}`
     setPanier(p => [...p, { article, quantite: 1, taille, commentaire: '', id }])
   }
@@ -95,19 +152,7 @@ export default function CommanderPage() {
     setPanier(p => p.map(l => l.id === id ? { ...l, commentaire: val } : l))
   }
 
-  const getPizzasForSlot = (slot: string) => {
-    const found = slotsDispos.find(s => s.slot === slot)
-    return found ? found.count : 0
-  }
-
-  const canBook = (slot: string) => {
-    const pizzasInPanier = panier.filter(l => {
-      const cat = categories.find(c => c.id === l.article.categorie_id)
-      return cat?.nom === 'Pizzas'
-    }).reduce((s, l) => s + l.quantite, 0)
-    const current = getPizzasForSlot(slot)
-    return current + pizzasInPanier <= 8
-  }
+  const isSlotFull = (slot: string) => (slotsCapacite[slot] || 0) >= 8
 
   const submitCommande = async () => {
     setErr('')
@@ -118,35 +163,69 @@ export default function CommanderPage() {
 
     setLoading(true)
     const { data: cmd, error } = await supabase.from('commandes').insert({
-      nom, telephone: tel,
       nom_client: nom,
+      telephone: tel,
       heure_retrait: heureRetrait,
       date_retrait: dateRetrait,
       type: 'a_emporter',
-      statut: 'en_cours',
+      statut: 'en_preparation',
       notes: notes || null,
       total,
     }).select().single()
 
     if (error || !cmd) { setErr('Erreur. Appelez le 06 68 36 62 98'); setLoading(false); return }
 
-    await supabase.from('lignes_commande').insert(
-      panier.map(l => ({
+    const lignes = panier.map(l => {
+      const cat = categories.find(c => c.id === l.article.categorie_id)
+      const nomCat = cat?.nom?.toLowerCase() ?? ''
+      const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+      return {
         commande_id: cmd.id,
         article_id: l.article.id,
         article_nom: l.article.nom,
         quantite: l.quantite,
-        taille: l.taille,
+        taille: l.taille === 'pala' ? 'Pala' : '33cm',
         prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
         commentaire: l.commentaire || null,
         statut: 'envoye_cuisine',
-        pour_cuisine: true,
-      }))
-    )
+        pour_cuisine,
+        categorie_nom: cat?.nom || null,
+      }
+    })
+
+    await supabase.from('lignes_commande').insert(lignes)
 
     setNumCmd(cmd.numero_commande)
     setStep('confirmation')
     setLoading(false)
+  }
+
+  const renderSlotBtn = (slot: string) => {
+    const full = isSlotFull(slot)
+    const selected = heureRetrait === slot
+    return (
+      <button
+        key={slot}
+        disabled={full}
+        onClick={() => setHeureRetrait(slot)}
+        style={{
+          padding: '7px 11px',
+          borderRadius: 6,
+          fontSize: 13,
+          fontWeight: selected ? 700 : 400,
+          fontFamily: 'Jost, sans-serif',
+          cursor: full ? 'not-allowed' : 'pointer',
+          border: `2px solid ${selected ? '#B71C1C' : full ? '#ddd' : 'rgba(196,30,58,0.25)'}`,
+          background: selected ? '#B71C1C' : full ? '#f5f5f5' : 'white',
+          color: selected ? 'white' : full ? '#bbb' : '#333',
+          transition: 'all 0.15s',
+          minWidth: 64,
+        }}
+        title={full ? 'Créneau complet' : ''}
+      >
+        {slot}
+      </button>
+    )
   }
 
   if (step === 'confirmation') return (
@@ -158,8 +237,9 @@ export default function CommanderPage() {
           N° {numCmd}
         </div>
         <p style={{ fontSize: 15, color: 'var(--textm)', lineHeight: 1.8, marginBottom: 12 }}>
-          {nom}, votre commande est bien reçue.<br/>
-          Retrait prévu à <strong>{heureRetrait}</strong>.
+          {nom}, votre commande est bien reçue.<br />
+          Retrait prévu à <strong>{heureRetrait}</strong><br />
+          <span style={{ fontSize: 13, color: 'var(--textl)' }}>{labelJour}</span>
         </p>
         <p style={{ fontSize: 13, color: 'var(--textl)', marginBottom: 28 }}>
           En cas de besoin, n'hésitez pas à nous appeler au{' '}
@@ -187,12 +267,12 @@ export default function CommanderPage() {
         </div>
       </header>
 
+      {/* ÉTAPE : menu */}
       {step === 'menu' && (
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
           <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, marginBottom: 8 }}>{t('emporter_titre')}</h1>
           <p style={{ fontSize: 14, color: 'var(--textl)', marginBottom: 28 }}>Choisissez vos articles, puis indiquez l'heure de retrait</p>
 
-          {/* Catégories */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
             {categories.map(cat => (
               <button key={cat.id} onClick={() => setCatActive(cat.id)} style={{
@@ -205,7 +285,6 @@ export default function CommanderPage() {
             ))}
           </div>
 
-          {/* Articles */}
           <div style={{ display: 'grid', gap: 10 }}>
             {artsByCat.map(a => (
               <div key={a.id} style={{ background: 'white', borderRadius: 6, padding: '16px 20px', border: '1px solid rgba(196,30,58,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16 }}>
@@ -239,6 +318,7 @@ export default function CommanderPage() {
         </div>
       )}
 
+      {/* ÉTAPE : panier */}
       {step === 'panier' && (
         <div style={{ maxWidth: 600, margin: '0 auto', padding: '32px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
@@ -291,6 +371,7 @@ export default function CommanderPage() {
         </div>
       )}
 
+      {/* ÉTAPE : infos + créneaux */}
       {step === 'infos' && (
         <div style={{ maxWidth: 600, margin: '0 auto', padding: '32px 20px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
@@ -298,45 +379,71 @@ export default function CommanderPage() {
             <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 28 }}>Vos <em style={{ color: 'var(--r)' }}>informations</em></h1>
           </div>
 
-          <div style={{ background: 'white', borderRadius: 8, padding: 32, border: '1px solid rgba(196,30,58,0.08)', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ background: 'white', borderRadius: 8, padding: 32, border: '1px solid rgba(196,30,58,0.08)', display: 'flex', flexDirection: 'column', gap: 20 }}>
+            {/* Nom */}
             <div>
               <label className="rf-label">{t('emporter_nom')} *</label>
-              <input className="rf-input" value={nom} onChange={e => setNom(e.target.value)} placeholder={t('emporter_nom')} />
+              <input className="rf-input" value={nom} onChange={e => setNom(e.target.value)} placeholder="Votre nom" />
             </div>
+
+            {/* Téléphone */}
             <div>
               <label className="rf-label">{t('emporter_tel')} *</label>
-              <input className="rf-input" value={tel} onChange={e => setTel(e.target.value)} placeholder={t('emporter_tel')} type="tel" />
+              <input className="rf-input" value={tel} onChange={e => setTel(e.target.value)} placeholder="06 XX XX XX XX" type="tel" />
             </div>
+
+            {/* Créneaux de retrait */}
             <div>
-              <label className="rf-label">Date de retrait *</label>
-              <input className="rf-input" value={dateRetrait} onChange={e => setDateRetrait(e.target.value)} type="date" min={new Date().toISOString().split('T')[0]} />
+              <label className="rf-label">Heure de retrait *</label>
+
+              {ferme ? (
+                <div style={{ padding: '12px 16px', background: '#FFF3CD', borderRadius: 6, border: '1px solid #FFEEBA', fontSize: 14, color: '#856404' }}>
+                  🔒 Aucun créneau disponible en ce moment. Appelez-nous au{' '}
+                  <a href="tel:0668366298" style={{ color: '#B71C1C' }}>06 68 36 62 98</a>
+                </div>
+              ) : (
+                <>
+                  {/* Bandeau jour */}
+                  <div style={{ marginBottom: 14, padding: '8px 12px', background: 'rgba(183,28,28,0.06)', borderRadius: 6, fontSize: 13, color: '#B71C1C', fontWeight: 600 }}>
+                    📅 {labelJour}
+                  </div>
+
+                  {/* Service Midi */}
+                  {slotsMidi.length > 0 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--textl)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>🌞 Midi</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {slotsMidi.map(s => renderSlotBtn(s))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Service Soir */}
+                  {slotsSoir.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--textl)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>🌙 Soir</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {slotsSoir.map(s => renderSlotBtn(s))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
-            <div>
-              <label className="rf-label">{t('emporter_heure')} *</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {slotsDispos.length === 0 && <div style={{ fontSize: 13, color: 'var(--textl)', fontStyle: 'italic' }}>Fermé ce jour-là</div>}
-                {slotsDispos.map(s => {
-                  const ok = canBook(s.slot)
-                  const full = s.count >= 8
-                  return (
-                    <button key={s.slot} disabled={full || !ok} onClick={() => setHeureRetrait(s.slot)} className={`slot ${heureRetrait === s.slot ? 'sel' : ''} ${full || !ok ? 'full' : ''}`}
-                      title={full ? 'Complet' : !ok ? 'Insuffisant pour votre commande' : ''}>
-                      {s.slot}
-                      {s.count > 0 && <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 4 }}>({8-s.count} dispo)</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+
+            {/* Notes */}
             <div>
               <label className="rf-label">Notes (optionnel)</label>
               <textarea className="rf-textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Sonnez à la porte rouge..." />
             </div>
+
             <p style={{ fontSize: 12, color: 'var(--textl)', lineHeight: 1.6, textAlign: 'center' }}>
-              En cas de besoin, n'hésitez pas à nous appeler au <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
+              En cas de besoin, appelez-nous au <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
             </p>
-            {err && <div style={{ color: 'var(--r)', fontSize: 13, textAlign: 'center' }}>{err}</div>}
-            <button className="btn-submit btn-submit-g" onClick={submitCommande} disabled={loading}>
+
+            {err && <div style={{ color: 'var(--r)', fontSize: 13, textAlign: 'center', fontWeight: 500 }}>{err}</div>}
+
+            <button className="btn-submit btn-submit-g" onClick={submitCommande} disabled={loading || ferme}>
               {loading ? t('chargement') : `✓ ${t('emporter_btn')}`}
             </button>
           </div>
