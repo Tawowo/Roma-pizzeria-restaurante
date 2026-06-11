@@ -808,8 +808,8 @@ export default function CommandesPage() {
             ))}
           </div>
 
-          {/* Grille tables */}
-          <div className="grid grid-cols-3 sm:grid-cols-4 xl:grid-cols-6 gap-3 mb-8">
+          {/* Tables : liste sur mobile, grille sur sm+ */}
+          <div className="grid grid-cols-1 sm:grid-cols-4 xl:grid-cols-6 gap-3 mb-8">
             {tablesByZone.map(t => (
               <div
                 key={t.num}
@@ -817,13 +817,16 @@ export default function CommandesPage() {
                   if (t.statut === 'libre') ouvrirModalNvCmd(t)
                   else if (t.commande) { setModalDetail(t.commande); setModePaiement('cb'); setMontantRecu('') }
                 }}
-                className={`rounded-xl p-4 flex flex-col items-center gap-1 border-2 transition-all ${tableCardClass(t.statut)}`}
+                className={`rounded-xl p-4 border-2 transition-all min-h-[48px] ${tableCardClass(t.statut)}`}
+                style={{ display: 'flex', alignItems: 'center', gap: 12 }}
               >
-                <div className={`text-2xl font-bold ${t.statut === 'libre' ? 'text-green-700' : (t.statut === 'pret_encaisser') ? 'text-orange-700' : 'text-red-700'}`}>T{t.num}</div>
-                <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : (t.statut === 'pret_encaisser') ? 'text-orange-600' : 'text-red-600'}`}>
-                  {t.statut === 'libre' ? '🟢 Libre' : t.statut === 'pret_encaisser' ? '🟠 À encaisser' : t.statut === 'reservee' ? '🔵 Réservée' : '🔴 Occupée'}
+                <div className={`text-xl font-bold shrink-0 sm:text-2xl ${t.statut === 'libre' ? 'text-green-700' : (t.statut === 'pret_encaisser') ? 'text-orange-700' : 'text-red-700'}`}>T{t.num}</div>
+                <div className="flex flex-col sm:items-center gap-0.5 flex-1">
+                  <div className={`text-xs font-medium ${t.statut === 'libre' ? 'text-green-600' : (t.statut === 'pret_encaisser') ? 'text-orange-600' : 'text-red-600'}`}>
+                    {t.statut === 'libre' ? '🟢 Libre' : t.statut === 'pret_encaisser' ? '🟠 À encaisser' : t.statut === 'reservee' ? '🔵 Réservée' : '🔴 Occupée'}
+                  </div>
+                  {t.commande?.nom_client && <div className="text-xs text-gray-500 truncate">{t.commande.nom_client}</div>}
                 </div>
-                {t.commande?.nom_client && <div className="text-xs text-gray-500 truncate w-full text-center">{t.commande.nom_client}</div>}
               </div>
             ))}
           </div>
@@ -925,8 +928,8 @@ export default function CommandesPage() {
 
       {/* ===== MODAL NOUVELLE COMMANDE / AJOUT ===== */}
       {modalTable && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-0 sm:p-4">
+          <div className="bg-white sm:rounded-2xl shadow-2xl w-full sm:max-w-4xl h-full sm:h-auto sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0D5C5]">
               <h2 className="text-lg font-bold">
                 {existingCmdId ? `Ajout articles — Table ${modalTable.num}` : `Nouvelle commande — Table ${modalTable.num}`}
@@ -991,14 +994,14 @@ export default function CommandesPage() {
                       placeholder="Rechercher un article..."
                       className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none" />
                     {categories.length > 0 && (
-                      <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+                      <div className="flex gap-2 mb-3 overflow-x-auto pb-1 snap-x snap-mandatory">
                         <button onClick={() => setCatActive('')}
-                          className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${!catActive ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
+                          className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap snap-start min-h-[36px] ${!catActive ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
                           Tout
                         </button>
                         {categories.map(c => (
                           <button key={c.id} onClick={() => setCatActive(c.id)}
-                            className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${catActive === c.id ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
+                            className={`px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap snap-start min-h-[36px] ${catActive === c.id ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
                             {c.nom}
                           </button>
                         ))}

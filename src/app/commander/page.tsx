@@ -162,7 +162,7 @@ export default function CommanderPage() {
     if (panier.length === 0) { setErr('Votre panier est vide'); return }
 
     setLoading(true)
-    const { data: cmd, error } = await supabase.from('commandes').insert({
+    const cmdPayload = {
       nom_client: nom,
       telephone: tel,
       heure_retrait: heureRetrait,
@@ -171,9 +171,17 @@ export default function CommanderPage() {
       statut: 'en_preparation',
       notes: notes || null,
       total,
-    }).select().single()
+    }
+    console.log('[vitrine] INSERT commande:', cmdPayload)
+    const { data: cmd, error } = await supabase.from('commandes').insert(cmdPayload).select().single()
 
-    if (error || !cmd) { setErr('Erreur. Appelez le 06 68 36 62 98'); setLoading(false); return }
+    if (error || !cmd) {
+      console.error('[vitrine] commande insert error:', error)
+      setErr(`Erreur création commande : ${error?.message ?? 'inconnue'}. Appelez le 06 68 36 62 98`)
+      setLoading(false)
+      return
+    }
+    console.log('[vitrine] commande créée:', cmd.id, 'statut:', cmd.statut)
 
     const lignes = panier.map(l => {
       const cat = categories.find(c => c.id === l.article.categorie_id)
@@ -192,8 +200,15 @@ export default function CommanderPage() {
         categorie_nom: cat?.nom || null,
       }
     })
-
-    await supabase.from('lignes_commande').insert(lignes)
+    console.log('[vitrine] INSERT lignes_commande:', lignes)
+    const { error: ligErr } = await supabase.from('lignes_commande').insert(lignes)
+    if (ligErr) {
+      console.error('[vitrine] lignes insert error:', ligErr)
+      setErr(`Erreur insertion articles : ${ligErr.message}. Appelez le 06 68 36 62 98`)
+      setLoading(false)
+      return
+    }
+    console.log('[vitrine] lignes insérées OK — commande visible en cuisine')
 
     setNumCmd(cmd.numero_commande)
     setStep('confirmation')
