@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 
 interface LigneCommande {
   id: string
+  commande_id: string
   article_nom: string
   quantite: number
   taille?: string
@@ -28,23 +29,6 @@ interface Commande {
   nom_client?: string
   notes?: string
   lignes_commande: LigneCommande[]
-}
-
-const CATEGORIES_PAS_CUISINE = [
-  'boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés',
-  'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin',
-  'bières', 'softs', 'eaux'
-]
-
-const BOISSONS_NOMS = ['coca', 'pepsi', 'eau', 'bière', 'sprite', 'fanta', 'jus', 'limonade', 'café', 'thé', 'prosecco', 'lambrusco', 'chianti', 'vermentino', 'chiaretto', 'montepulciano', 'limoncello', 'disarano', 'aperol', 'garonne']
-
-function isArticleCuisine(l: LigneCommande): boolean {
-  if ('pour_cuisine' in l && l.pour_cuisine === false) return false
-  const catNom = (l.categorie_nom ?? '').toLowerCase()
-  if (catNom && CATEGORIES_PAS_CUISINE.some(c => catNom.includes(c))) return false
-  const nomArt = l.article_nom.toLowerCase()
-  if (BOISSONS_NOMS.some(b => nomArt.includes(b))) return false
-  return true
 }
 
 function useTimer() {
@@ -112,24 +96,59 @@ export default function CuisinePage() {
     try {
       const session = getSession()
       if (!session) { router.replace('/login'); return }
+
+      // Requête directe sur lignes_commande : uniquement les lignes envoyées en cuisine,
+      // non encore traitées. On évite ainsi de ramener toutes les lignes d'une commande.
       const { data, error } = await supabase
-        .from('commandes')
-        .select('*, lignes_commande(*)')
-        .in('statut', ['en_cours', 'en_preparation'])
+        .from('lignes_commande')
+        .select('*, commandes(*)')
+        .eq('statut', 'envoye_cuisine')
+        .eq('pour_cuisine', true)
         .order('created_at')
+
       if (error) throw error
 
-      // Filtrer les lignes : exclure boissons/vins, garder uniquement envoye_cuisine (ou sans statut)
-      const commandesFiltrees = (data ?? []).map((cmd: Commande) => ({
-        ...cmd,
-        lignes_commande: cmd.lignes_commande.filter((l: LigneCommande) => {
-          if (!isArticleCuisine(l)) return false
-          if (l.statut && l.statut !== 'envoye_cuisine') return false
-          return true
-        })
-      })).filter((cmd: Commande) => cmd.lignes_commande.length > 0)
+      // Grouper les lignes par commande_id
+      const commandeMap = new Map<string, Commande>()
 
-      setCommandes(commandesFiltrees)
+      for (const ligne of (data ?? [])) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cmd = ligne.commandes as any
+        if (!cmd) continue
+        // Ne montrer que les commandes actives en cuisine
+        if (!['en_cours', 'en_preparation'].includes(cmd.statut)) continue
+
+        if (!commandeMap.has(cmd.id)) {
+          commandeMap.set(cmd.id, {
+            id: cmd.id,
+            numero_commande: cmd.numero_commande,
+            type: cmd.type,
+            statut: cmd.statut,
+            created_at: cmd.created_at,
+            table_numero: cmd.table_numero,
+            zone: cmd.zone,
+            nom_client: cmd.nom_client,
+            notes: cmd.notes,
+            lignes_commande: [],
+          })
+        }
+
+        commandeMap.get(cmd.id)!.lignes_commande.push({
+          id: ligne.id,
+          commande_id: ligne.commande_id,
+          article_nom: ligne.article_nom,
+          quantite: ligne.quantite,
+          taille: ligne.taille,
+          commentaire: ligne.commentaire,
+          statut: ligne.statut,
+          ajout_apres: ligne.ajout_apres,
+          created_at: ligne.created_at,
+          pour_cuisine: ligne.pour_cuisine,
+          categorie_nom: ligne.categorie_nom,
+        })
+      }
+
+      setCommandes(Array.from(commandeMap.values()))
     } catch (err) {
       console.error('Cuisine fetch error:', err)
     } finally {
@@ -144,11 +163,11 @@ export default function CuisinePage() {
   }, [router, fetchCommandes])
 
   useEffect(() => {
-    const channel = supabase.channel('cuisine-realtime-v3')
+    const channel = supabase.channel('cuisine-realtime-v4')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commandes' }, () => { fetchCommandes() })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commandes' }, () => { fetchCommandes() })
-      // Écouter les nouvelles lignes (ajout articles sur table occupée)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lignes_commande' }, () => { fetchCommandes() })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'lignes_commande' }, () => { fetchCommandes() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [fetchCommandes])
@@ -172,15 +191,14 @@ export default function CuisinePage() {
 
   const marquerPrete = async (cmd: Commande) => {
     try {
-      // Mark all cuisine lines as pret
-      const ligneIds = cmd.lignes_commande
-        .filter(l => isArticleCuisine(l))
-        .map(l => l.id)
+      // Marquer uniquement les lignes visibles (envoye_cuisine) comme prêtes
+      const ligneIds = cmd.lignes_commande.map(l => l.id)
       if (ligneIds.length > 0) {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
       }
+      // Mettre la commande en pret_encaisser
       await supabase.from('commandes').update({ statut: 'pret_encaisser' }).eq('id', cmd.id)
-      // Mettre la table en orange (pret_encaisser)
+      // Mettre la table en orange
       if (cmd.table_numero) {
         await supabase
           .from('tables_restaurant')
@@ -202,16 +220,7 @@ export default function CuisinePage() {
     })
   }
 
-  // Filtrer les commandes (exclure boissons/vins) et trier (urgents en premier)
-  // Lignes visibles: envoye_cuisine, ou pas de statut (rétrocompatibilité), exclure pret/servi
-  // Les lignes sont déjà filtrées dans fetchCommandes — on affiche tout ce qui est dans cmd.lignes_commande
-  const lignesCuisine = (cmd: Commande) => cmd.lignes_commande
-
-  const commandesFiltrees = commandes.filter(cmd =>
-    cmd.lignes_commande.length > 0
-  )
-
-  const commandesTri = [...commandesFiltrees].sort((a, b) => {
+  const commandesTri = [...commandes].sort((a, b) => {
     const aUrgent = urgents.has(a.id) ? 0 : 1
     const bUrgent = urgents.has(b.id) ? 0 : 1
     if (aUrgent !== bUrgent) return aUrgent - bUrgent
@@ -230,7 +239,6 @@ export default function CuisinePage() {
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', letterSpacing: 2, textTransform: 'uppercase' }}>Cuisine</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Toggle son */}
           <button
             onClick={() => setSoundOn(v => !v)}
             style={{ padding: '4px 10px', background: soundOn ? 'rgba(212,168,67,0.2)' : 'rgba(255,255,255,0.1)', border: `1px solid ${soundOn ? '#D4A843' : 'rgba(255,255,255,0.2)'}`, borderRadius: 6, color: soundOn ? '#D4A843' : 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 11 }}
@@ -297,24 +305,23 @@ export default function CuisinePage() {
                   </span>
                 </div>
 
-                {/* Articles (sans boissons/vins, envoye_cuisine seulement) */}
+                {/* Articles — uniquement les lignes envoye_cuisine pour_cuisine=true */}
                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, flex: 1 }}>
-                  {lignesCuisine(cmd)
-                    .map(l => (
-                      <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 18 }}>×{l.quantite}</span>
-                          <span style={{ fontSize: 18, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
-                          {l.taille && <span style={{ fontSize: 12, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{l.taille}</span>}
-                          {isAjoutApres(l, cmd.created_at) && (
-                            <span style={{ fontSize: 11, background: '#D4A843', color: '#000', fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>AJOUT</span>
-                          )}
-                        </div>
-                        {l.commentaire && (
-                          <div style={{ fontSize: 13, color: '#ef5350', marginTop: 2, paddingLeft: 32 }}>⚠ {l.commentaire}</div>
+                  {cmd.lignes_commande.map(l => (
+                    <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 18 }}>×{l.quantite}</span>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
+                        {l.taille && <span style={{ fontSize: 12, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{l.taille}</span>}
+                        {isAjoutApres(l, cmd.created_at) && (
+                          <span style={{ fontSize: 11, background: '#D4A843', color: '#000', fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>AJOUT</span>
                         )}
                       </div>
-                    ))}
+                      {l.commentaire && (
+                        <div style={{ fontSize: 13, color: '#ef5350', marginTop: 2, paddingLeft: 32 }}>⚠ {l.commentaire}</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
 
                 {/* Notes spéciales */}
