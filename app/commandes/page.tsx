@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
@@ -190,6 +190,7 @@ export default function CommandesPage() {
   const [errNom, setErrNom] = useState('')
   const [panierEnvoiSelectionne, setPanierEnvoiSelectionne] = useState<Set<number>>(new Set())
   const [existingCmdId, setExistingCmdId] = useState<string | null>(null)
+  const existingCmdIdRef = useRef<string | null>(null) // ref pour éviter les stale closures
 
   // Modal detail table occupée
   const [modalDetail, setModalDetail] = useState<CommandeActive | null>(null)
@@ -319,6 +320,7 @@ export default function CommandesPage() {
     setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
     setErrNom('')
     setPanierEnvoiSelectionne(new Set())
+    existingCmdIdRef.current = null
     setExistingCmdId(null)
     setErreur(null)
   }
@@ -392,18 +394,23 @@ export default function CommandesPage() {
 
     setSaving(true)
     setErreur(null)
+
+    // Lire depuis le ref pour garantir la valeur courante (évite les stale closures)
+    const cmdId = existingCmdIdRef.current
+
     try {
       // ─── CAS : ajout à une commande existante ───────────────────────────────
-      if (existingCmdId) {
-        console.log('[ajout] commande existante:', existingCmdId, 'nb lignes:', panierEnvoi.length)
+      if (cmdId) {
+        console.log('[ajout] commande existante:', cmdId, 'nb nouveaux articles:', panierEnvoi.length)
+        // Insérer UNIQUEMENT les nouveaux articles avec ajout_apres=true
         const { error: insEnvErr } = await supabase.from('lignes_commande').insert(
-          panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', true, existingCmdId))
+          panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', true, cmdId))
         )
         if (insEnvErr) throw new Error(`Erreur insertion lignes (ajout) : ${insEnvErr.message}`)
 
         if (panierAttente.length > 0) {
           const { error: insAttErr } = await supabase.from('lignes_commande').insert(
-            panierAttente.map(p => makeLigne(p, 'en_attente', true, existingCmdId))
+            panierAttente.map(p => makeLigne(p, 'en_attente', true, cmdId))
           )
           if (insAttErr) throw new Error(`Erreur insertion lignes attente : ${insAttErr.message}`)
         }
@@ -412,12 +419,13 @@ export default function CommandesPage() {
         const { error: resetErr } = await supabase
           .from('commandes')
           .update({ statut: 'en_preparation' })
-          .eq('id', existingCmdId)
+          .eq('id', cmdId)
           .in('statut', ['en_preparation', 'pret_encaisser', 'en_cours'])
         if (resetErr) console.error('[ajout] reset statut error:', resetErr)
 
-        setModalTable(null)
+        existingCmdIdRef.current = null
         setExistingCmdId(null)
+        setModalTable(null)
         setPanier([])
         setPanierEnvoiSelectionne(new Set())
         await fetchTout()
@@ -562,6 +570,7 @@ export default function CommandesPage() {
   }
 
   const supprimerCommande = async (cmd: CommandeActive) => {
+    alert('supprimer appelé')
     console.log('suppression déclenchée pour:', cmd.id)
     setSaving(true)
     setErreur(null)
@@ -623,6 +632,7 @@ export default function CommandesPage() {
     setPanier([])
     setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
     setPanierEnvoiSelectionne(new Set())
+    existingCmdIdRef.current = cmd.id
     setExistingCmdId(cmd.id)
     setErreur(null)
   }
@@ -1180,6 +1190,9 @@ export default function CommandesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4">
             <h2 className="text-lg font-bold text-red-700">⚠️ Supprimer la commande ?</h2>
+            {erreur && (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-300 text-red-700 text-sm">⚠️ {erreur}</div>
+            )}
             <p className="text-sm text-[#555]">
               Commande de <strong>{confirmDelete.nom_client}</strong>
               {confirmDelete.table_numero ? ` — Table ${confirmDelete.table_numero}` : ''}<br />
