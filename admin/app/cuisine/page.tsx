@@ -144,9 +144,11 @@ export default function CuisinePage() {
   }, [router, fetchCommandes])
 
   useEffect(() => {
-    const channel = supabase.channel('cuisine-realtime-v2')
+    const channel = supabase.channel('cuisine-realtime-v3')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'commandes' }, () => { fetchCommandes() })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'commandes' }, () => { fetchCommandes() })
+      // Écouter les nouvelles lignes (ajout articles sur table occupée)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'lignes_commande' }, () => { fetchCommandes() })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
   }, [fetchCommandes])

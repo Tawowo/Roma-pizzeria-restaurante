@@ -199,14 +199,17 @@ export default function CommandesPage() {
   const [montantRecu, setMontantRecu] = useState('')
   // Confirmation suppression
   const [confirmDelete, setConfirmDelete] = useState<CommandeActive | null>(null)
+  // Filtre date pour l'historique
+  const [dateFiltre, setDateFiltre] = useState(() => new Date().toISOString().split('T')[0])
 
-  const fetchTout = useCallback(async () => {
+  const fetchTout = useCallback(async (dateCible?: string) => {
+    const jour = dateCible ?? dateFiltre ?? new Date().toISOString().split('T')[0]
     try {
-      const today = new Date().toISOString().split('T')[0]
       const { data: cmdData, error: cmdErr } = await supabase
         .from('commandes')
         .select('*, lignes_commande(*)')
-        .gte('created_at', today + 'T00:00:00')
+        .gte('created_at', jour + 'T00:00:00')
+        .lte('created_at', jour + 'T23:59:59')
         .order('created_at', { ascending: false })
 
       if (cmdErr) {
@@ -263,7 +266,7 @@ export default function CommandesPage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [dateFiltre])
 
   useEffect(() => {
     const s = getSession()
@@ -275,8 +278,8 @@ export default function CommandesPage() {
 
   useEffect(() => {
     const ch = supabase.channel('commandes-rt3')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes' }, fetchTout)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'lignes_commande' }, fetchTout)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'commandes' }, () => { fetchTout() })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'lignes_commande' }, () => { fetchTout() })
       .subscribe()
     return () => { supabase.removeChannel(ch) }
   }, [fetchTout])
@@ -392,6 +395,7 @@ export default function CommandesPage() {
     try {
       // ─── CAS : ajout à une commande existante ───────────────────────────────
       if (existingCmdId) {
+        console.log('[ajout] commande existante:', existingCmdId, 'nb lignes:', panierEnvoi.length)
         const { error: insEnvErr } = await supabase.from('lignes_commande').insert(
           panierEnvoi.map(p => makeLigne(p, 'envoye_cuisine', true, existingCmdId))
         )
@@ -403,6 +407,15 @@ export default function CommandesPage() {
           )
           if (insAttErr) throw new Error(`Erreur insertion lignes attente : ${insAttErr.message}`)
         }
+
+        // Remettre la commande en_preparation pour que Roberto voie les nouveaux articles
+        const { error: resetErr } = await supabase
+          .from('commandes')
+          .update({ statut: 'en_preparation' })
+          .eq('id', existingCmdId)
+          .in('statut', ['en_preparation', 'pret_encaisser', 'en_cours'])
+        if (resetErr) console.error('[ajout] reset statut error:', resetErr)
+
         setModalTable(null)
         setExistingCmdId(null)
         setPanierEnvoiSelectionne(new Set())
@@ -467,45 +480,6 @@ export default function CommandesPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[envoyerEnCuisine] ERROR:', msg)
-      setErreur(msg)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const sauvegarder = async () => {
-    if (!nomClient.trim()) { setErrNom('Le nom est obligatoire'); return }
-    if (panier.length === 0) return
-    setSaving(true)
-    setErreur(null)
-    try {
-      const total = calcTotal(panier, reduction)
-      const { data: cmd, error: cmdErr } = await supabase
-        .from('commandes')
-        .insert([{
-          type: 'sur_place', statut: 'brouillon',
-          nom_client: nomClient.trim(), telephone: telClient || null,
-          table_numero: modalTable?.num, zone: modalTable?.zone,
-          couverts, total, client_id: clientFidele?.id || null,
-        }])
-        .select()
-        .single()
-
-      if (cmdErr || !cmd) throw new Error(cmdErr?.message ?? 'Erreur création brouillon')
-
-      const { error: ligErr } = await supabase.from('lignes_commande').insert(
-        panier.map(p => makeLigne(p, 'en_attente', false, cmd.id))
-      )
-      if (ligErr) throw new Error(`Erreur insertion articles : ${ligErr.message}`)
-
-      if (modalTable?.num) {
-        await upsertTable(modalTable.num, modalTable.zone, 'occupee', cmd.id)
-      }
-      setModalTable(null)
-      await fetchTout()
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      console.error('[sauvegarder] ERROR:', msg)
       setErreur(msg)
     } finally {
       setSaving(false)
@@ -586,29 +560,38 @@ export default function CommandesPage() {
   }
 
   const supprimerCommande = async (cmd: CommandeActive) => {
+    console.log('[supprimerCommande] called for:', cmd.id, 'table:', cmd.table_numero, 'statut:', cmd.statut)
     setSaving(true)
     setErreur(null)
     try {
-      const { error: delLigErr } = await supabase
-        .from('lignes_commande')
-        .delete()
-        .eq('commande_id', cmd.id)
-      if (delLigErr) throw new Error(`Erreur suppression articles : ${delLigErr.message}`)
-
-      const { error: delCmdErr } = await supabase
-        .from('commandes')
-        .delete()
-        .eq('id', cmd.id)
-      if (delCmdErr) throw new Error(`Erreur suppression commande : ${delCmdErr.message}`)
-
-      if (cmd.table_numero && (STATUTS_ACTIFS as string[]).includes(cmd.statut)) {
+      // 1. Libérer la table EN PREMIER (avant delete, pour éviter FK violation si commande_id est une FK)
+      if (cmd.table_numero) {
         let q = supabase
           .from('tables_restaurant')
           .update({ statut: 'libre', commande_id: null })
           .eq('numero', cmd.table_numero)
         if (cmd.zone) q = q.eq('zone', cmd.zone)
-        await q
+        const { error: tabErr } = await q
+        if (tabErr) console.error('[supprimerCommande] table release error:', tabErr)
+        else console.log('[supprimerCommande] table libérée')
       }
+
+      // 2. Supprimer les lignes
+      const { error: delLigErr } = await supabase
+        .from('lignes_commande')
+        .delete()
+        .eq('commande_id', cmd.id)
+      if (delLigErr) throw new Error(`Erreur suppression articles : ${delLigErr.message}`)
+      console.log('[supprimerCommande] lignes supprimées')
+
+      // 3. Supprimer la commande
+      const { error: delCmdErr } = await supabase
+        .from('commandes')
+        .delete()
+        .eq('id', cmd.id)
+      if (delCmdErr) throw new Error(`Erreur suppression commande : ${delCmdErr.message}`)
+      console.log('[supprimerCommande] commande supprimée')
+
       setConfirmDelete(null)
       setModalDetail(null)
       await fetchTout()
@@ -717,10 +700,37 @@ export default function CommandesPage() {
             ))}
           </div>
 
+          {/* Sélecteur de date — historique */}
+          <div className="flex items-center gap-3 mb-4">
+            <label className="text-sm text-[#555] font-medium">Jour :</label>
+            <input
+              type="date"
+              value={dateFiltre}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={e => {
+                setDateFiltre(e.target.value)
+                fetchTout(e.target.value)
+              }}
+              className="border border-[#E0D5C5] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
+            />
+            {dateFiltre !== new Date().toISOString().split('T')[0] && (
+              <button
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0]
+                  setDateFiltre(today)
+                  fetchTout(today)
+                }}
+                className="text-xs text-[#B71C1C] underline"
+              >
+                ← Revenir à aujourd&apos;hui
+              </button>
+            )}
+          </div>
+
           {/* Liste commandes sur place */}
           <div className="space-y-2">
             {commandes
-              .filter(c => c.type === 'sur_place' && !['encaissee', 'annulee'].includes(c.statut))
+              .filter(c => c.type === 'sur_place')
               .map(cmd => (
                 <CommandeRow
                   key={cmd.id}
@@ -730,12 +740,41 @@ export default function CommandesPage() {
                   onUpdate={fetchTout}
                 />
               ))}
+            {commandes.filter(c => c.type === 'sur_place').length === 0 && (
+              <div className="text-[#555] text-sm py-4">Aucune commande ce jour-là.</div>
+            )}
           </div>
         </>
       ) : (
         <div className="space-y-3">
+          {/* Sélecteur de date — historique */}
+          <div className="flex items-center gap-3 mb-4">
+            <label className="text-sm text-[#555] font-medium">Jour :</label>
+            <input
+              type="date"
+              value={dateFiltre}
+              max={new Date().toISOString().split('T')[0]}
+              onChange={e => {
+                setDateFiltre(e.target.value)
+                fetchTout(e.target.value)
+              }}
+              className="border border-[#E0D5C5] rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
+            />
+            {dateFiltre !== new Date().toISOString().split('T')[0] && (
+              <button
+                onClick={() => {
+                  const today = new Date().toISOString().split('T')[0]
+                  setDateFiltre(today)
+                  fetchTout(today)
+                }}
+                className="text-xs text-[#B71C1C] underline"
+              >
+                ← Revenir à aujourd&apos;hui
+              </button>
+            )}
+          </div>
           {commandesEmporter.length === 0
-            ? <div className="text-[#555]">Aucune commande à emporter.</div>
+            ? <div className="text-[#555] text-sm py-4">Aucune commande à emporter ce jour-là.</div>
             : commandesEmporter.map(cmd => (
               <CommandeRow
                 key={cmd.id}
@@ -968,11 +1007,6 @@ export default function CommandesPage() {
                   </div>
                   <div className="flex gap-3">
                     <button onClick={() => setEtape(2)} className="flex-1 border border-[#E0D5C5] text-[#555] py-2 rounded-lg text-sm">← Retour</button>
-                    {!existingCmdId && (
-                      <button onClick={sauvegarder} disabled={saving} className="flex-1 border border-[#1B5E20] text-[#1B5E20] py-2 rounded-lg text-sm font-medium">
-                        💾 Sauvegarder
-                      </button>
-                    )}
                   </div>
                   <button onClick={envoyerEnCuisine} disabled={saving}
                     className="w-full bg-[#B71C1C] hover:bg-[#C62828] text-white py-3 rounded-lg font-medium disabled:opacity-50">
