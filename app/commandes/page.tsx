@@ -30,7 +30,7 @@ interface TableVirtuelle {
 
 interface CommandeActive {
   id: string
-  numero: string
+  numero_commande?: number
   type: TypeCmd
   statut: StatutCmd
   total: number
@@ -38,7 +38,7 @@ interface CommandeActive {
   table_numero?: number
   zone?: Zone
   nom_client?: string
-  lignes?: LigneCmd[]
+  lignes_commande?: LigneCmd[]
 }
 
 interface LigneCmd {
@@ -180,8 +180,10 @@ export default function CommandesPage() {
         const tv: TableVirtuelle[] = (tablesDB as TableResto[]).map(t => {
           const cmdActive = cmds.find(c => c.id === t.commande_id)
             ?? cmds.find(c => c.type === 'sur_place' && c.table_numero === t.numero && !['encaissee', 'annulee'].includes(c.statut))
-          const statut = (t.statut ?? (cmdActive ? 'occupee' : 'libre')) as TableVirtuelle['statut']
-          return { num: t.numero, zone: t.zone, statut: cmdActive ? statut : 'libre', commande: cmdActive }
+          const tableStatut: TableVirtuelle['statut'] = cmdActive
+            ? (cmdActive.statut === 'pret_encaisser' ? 'pret_encaisser' : 'occupee')
+            : 'libre'
+          return { num: t.numero, zone: t.zone, statut: tableStatut, commande: cmdActive }
         })
         setTables(tv)
       } else {
@@ -189,7 +191,10 @@ export default function CommandesPage() {
           const num = i + 1
           const z: Zone = num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse'
           const cmdActive = cmds.find(c => c.type === 'sur_place' && c.table_numero === num && !['encaissee', 'annulee'].includes(c.statut))
-          return { num, zone: z, statut: cmdActive ? 'occupee' : 'libre', commande: cmdActive }
+          const tableStatut: TableVirtuelle['statut'] = cmdActive
+            ? (cmdActive.statut === 'pret_encaisser' ? 'pret_encaisser' : 'occupee')
+            : 'libre'
+          return { num, zone: z, statut: tableStatut, commande: cmdActive }
         })
         setTables(staticTables)
       }
@@ -301,6 +306,8 @@ export default function CommandesPage() {
     setSaving(true)
     try {
       const total = calcTotal(panier, reduction)
+      console.log('[envoyerEnCuisine] table:', modalTable?.num, 'zone:', modalTable?.zone, 'existingCmdId:', existingCmdId)
+      console.log('[envoyerEnCuisine] panierEnvoi:', panierEnvoi.length, 'articles, total:', total)
 
       // Adding articles to existing commande
       if (existingCmdId) {
@@ -340,7 +347,7 @@ export default function CommandesPage() {
         return
       }
 
-      const { data: cmd } = await supabase.from('commandes').insert([{
+      const { data: cmd, error: insertError } = await supabase.from('commandes').insert([{
         type: 'sur_place',
         statut: 'en_cours',
         nom_client: nomClient.trim(),
@@ -357,6 +364,7 @@ export default function CommandesPage() {
         client_id: clientFidele?.id || null,
       }]).select().single()
 
+      console.log('[envoyerEnCuisine] insert commande result:', { cmd, insertError })
       if (cmd) {
         const CATS_PAS_CUISINE = ['boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés', 'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin', 'bières', 'softs', 'eaux']
         const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean) => {
@@ -385,18 +393,19 @@ export default function CommandesPage() {
         }
         // ✅ Mettre la table en occupée
         if (modalTable?.num) {
-          await supabase
+          const { error: tableErr } = await supabase
             .from('tables_restaurant')
             .update({ statut: 'occupee', commande_id: cmd.id })
             .eq('numero', modalTable.num)
             .eq('zone', modalTable.zone)
+          console.log('[envoyerEnCuisine] update table:', { tableErr })
         }
       }
 
       setModalTable(null)
       setPanierEnvoiSelectionne(new Set())
       await fetchTout()
-    } catch (err) { console.error(err) } finally { setSaving(false) }
+    } catch (err) { console.error('[envoyerEnCuisine] ERROR:', err) } finally { setSaving(false) }
   }
 
   const sauvegarder = async () => {
@@ -445,7 +454,7 @@ export default function CommandesPage() {
       }
       if (clientFidele && modalEncaiss.total > 0) {
         const pts = Math.floor(modalEncaiss.total)
-        await supabase.from('mouvements_fidelite').insert([{ client_id: clientFidele.id, points: pts, motif: `Commande #${modalEncaiss.numero}` }])
+        await supabase.from('mouvements_fidelite').insert([{ client_id: clientFidele.id, points: pts, motif: `Commande #${modalEncaiss.numero_commande}` }])
         await supabase.from('clients').update({ points: clientFidele.points + pts }).eq('id', clientFidele.id)
       }
       setModalEncaiss(null)
@@ -777,11 +786,11 @@ export default function CommandesPage() {
             </div>
             <div className="p-6 space-y-4">
               {/* Articles envoyés en cuisine */}
-              {(modalDetail.lignes ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').length > 0 && (
+              {(modalDetail.lignes_commande ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').length > 0 && (
                 <div>
                   <h4 className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-2">En cuisine / Prêts</h4>
                   <div className="space-y-1">
-                    {(modalDetail.lignes ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').map(l => (
+                    {(modalDetail.lignes_commande ?? []).filter(l => !l.statut || l.statut === 'envoye_cuisine' || l.statut === 'pret').map(l => (
                       <div key={l.id} className="flex justify-between text-sm py-1 border-b border-[#F0EBE0]">
                         <span className={l.statut === 'pret' ? 'line-through text-gray-400' : ''}>
                           {l.quantite}× {l.article_nom}{l.taille ? ` (${l.taille})` : ''}
@@ -797,11 +806,11 @@ export default function CommandesPage() {
                 </div>
               )}
               {/* Articles en attente (pas encore envoyés) */}
-              {(modalDetail.lignes ?? []).filter(l => l.statut === 'en_attente').length > 0 && (
+              {(modalDetail.lignes_commande ?? []).filter(l => l.statut === 'en_attente').length > 0 && (
                 <div>
                   <h4 className="text-xs font-semibold text-yellow-700 uppercase tracking-wider mb-2">En attente d&apos;envoi</h4>
                   <div className="space-y-1">
-                    {(modalDetail.lignes ?? []).filter(l => l.statut === 'en_attente').map(l => (
+                    {(modalDetail.lignes_commande ?? []).filter(l => l.statut === 'en_attente').map(l => (
                       <div key={l.id} className="flex justify-between text-sm py-1 border-b border-[#F0EBE0]">
                         <span className="text-yellow-700">{l.quantite}× {l.article_nom}{l.taille ? ` (${l.taille})` : ''}</span>
                         <span className="text-[#555]">{(l.prix_unitaire * l.quantite).toFixed(2)} €</span>
@@ -837,13 +846,13 @@ export default function CommandesPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#E0D5C5]">
-              <h2 className="text-lg font-bold">Encaissement #{modalEncaiss.numero}</h2>
+              <h2 className="text-lg font-bold">Encaissement #{modalEncaiss.numero_commande}</h2>
               <button onClick={() => setModalEncaiss(null)} className="text-gray-400 hover:text-gray-700 text-xl">✕</button>
             </div>
             <div className="p-6 space-y-4">
               <div className="bg-[#F0EBE0] rounded-xl p-4">
                 {modalEncaiss.nom_client && <div className="font-medium mb-1">{modalEncaiss.nom_client}</div>}
-                {modalEncaiss.lignes?.map(l => (
+                {modalEncaiss.lignes_commande?.map(l => (
                   <div key={l.id} className="flex justify-between text-sm">
                     <span>{l.quantite}× {l.article_nom}</span>
                     <span>{(l.prix_unitaire * l.quantite).toFixed(2)} €</span>
@@ -910,7 +919,7 @@ function CommandeRow({ cmd, onEncaisser, onUpdate }: { cmd: CommandeActive; onEn
   return (
     <div className="w-full rounded-xl p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 bg-white border border-[#E0D5C5] shadow-sm">
       <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-        <div className="text-xl font-bold text-[#D4A843]">#{cmd.numero}</div>
+        <div className="text-xl font-bold text-[#D4A843]">#{cmd.numero_commande}</div>
         {cmd.nom_client && <div className="text-sm font-medium text-[#1A1A1A]">{cmd.nom_client}</div>}
         {cmd.table_numero && <div className="text-sm text-[#555]">Table {cmd.table_numero}</div>}
         <div className="text-sm text-[#555]">{new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>

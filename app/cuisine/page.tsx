@@ -19,7 +19,7 @@ interface LigneCommande {
 
 interface Commande {
   id: string
-  numero: string
+  numero_commande?: number
   type: 'sur_place' | 'a_emporter'
   statut: string
   created_at: string
@@ -178,6 +178,13 @@ export default function CuisinePage() {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
       }
       await supabase.from('commandes').update({ statut: 'pret_encaisser' }).eq('id', cmd.id)
+      // Mettre la table en orange (pret_encaisser)
+      if (cmd.table_numero) {
+        await supabase
+          .from('tables_restaurant')
+          .update({ statut: 'pret_encaisser' })
+          .eq('numero', cmd.table_numero)
+      }
       await fetchCommandes()
     } catch (err) {
       console.error('Update error:', err)
@@ -258,7 +265,7 @@ export default function CuisinePage() {
 
                 {/* Numéro + Type */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>#{cmd.numero}</div>
+                  <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>#{cmd.numero_commande}</div>
                   <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
                       {cmd.type === 'sur_place'
