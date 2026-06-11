@@ -121,7 +121,8 @@ export default function CommanderPage() {
       nom, telephone: tel,
       heure_retrait: heureRetrait,
       date_retrait: dateRetrait,
-      statut: 'en_attente',
+      type: 'a_emporter',
+      statut: 'en_preparation',
       notes: notes || null,
       total,
     }).select().single()
@@ -137,6 +138,7 @@ export default function CommanderPage() {
         taille: l.taille,
         prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
         commentaire: l.commentaire || null,
+        statut: 'envoye_cuisine',
       }))
     )
 

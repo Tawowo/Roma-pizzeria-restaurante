@@ -256,11 +256,16 @@ export default function CommandesPage() {
 
   const upsertTable = async (num: number, cmdId: string, zone?: Zone) => {
     const z: Zone = zone ?? (num <= 4 ? 'rdc' : num <= 8 ? 'etage' : 'terrasse')
-    const { error: upsErr } = await supabase.from('tables_restaurant').upsert(
-      { numero: num, zone: z, capacite: 4, actif: true, statut: 'occupee', commande_id: cmdId },
-      { onConflict: 'numero,zone' }
-    )
-    console.log('[upsertTable] table', num, 'upsert error:', upsErr)
+    // Try update first; if no row exists, insert
+    const { data: updRows } = await supabase.from('tables_restaurant')
+      .update({ statut: 'occupee', commande_id: cmdId })
+      .eq('numero', num).select()
+    console.log('[upsertTable] table', num, 'update rows:', updRows?.length)
+    if (!updRows || updRows.length === 0) {
+      const { error: insErr } = await supabase.from('tables_restaurant')
+        .insert({ numero: num, zone: z, capacite: 4, actif: true, statut: 'occupee', commande_id: cmdId })
+      console.log('[upsertTable] insert error:', insErr)
+    }
   }
 
   const makeLigneInsert = (p: PanierItem, cmdId: string, statut: string, ajout_apres: boolean) => {
