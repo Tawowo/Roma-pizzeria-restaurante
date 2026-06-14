@@ -89,6 +89,7 @@ export default function CommanderPage() {
   // Fidélité
   const [clientFidele, setClientFidele] = useState<ClientFidele | null>(null)
   const [clientTrouve, setClientTrouve] = useState<boolean | null>(null)
+  const [verifErr, setVerifErr] = useState<string | null>(null)
   const [prenomNvClient, setPrenomNvClient] = useState('')
   const [pointsGagnes, setPointsGagnes] = useState(0)
   const [totalPointsApres, setTotalPointsApres] = useState(0)
@@ -160,6 +161,7 @@ export default function CommanderPage() {
 
   const rechercherClient = useCallback(async (telVal: string) => {
     console.log('vérifier appelé:', telVal)
+    setVerifErr(null)
     const clean = telVal.replace(/\s/g, '')
     if (clean.length < 8) {
       console.log('vérifier: numéro trop court (<8 chiffres), abandon')
@@ -177,17 +179,20 @@ export default function CommanderPage() {
         setClientFidele(data as ClientFidele)
         setClientTrouve(true)
       } else {
-        // PGRST116 = "no rows" = client non trouvé (normal)
         if (error && error.code !== 'PGRST116') {
-          console.error('vérifier erreur Supabase (inattendue):', error.code, error.message)
+          const msg = `Erreur Supabase [${error.code}] : ${error.message}`
+          console.error('vérifier erreur Supabase (inattendue):', msg)
+          setVerifErr(msg)
         }
         setClientFidele(null)
-        setClientTrouve(false)
+        setClientTrouve(error?.code === 'PGRST116' ? false : null)
       }
-    } catch (err) {
-      console.error('vérifier exception:', err)
+    } catch (caughtErr) {
+      const msg = caughtErr instanceof Error ? caughtErr.message : String(caughtErr)
+      console.error('vérifier exception:', msg)
+      setVerifErr(`Erreur réseau : ${msg}`)
       setClientFidele(null)
-      setClientTrouve(false)
+      setClientTrouve(null)
     }
   }, [])
 
@@ -531,7 +536,7 @@ export default function CommanderPage() {
                 <input
                   className="rf-input"
                   value={tel}
-                  onChange={e => { setTel(e.target.value); setClientTrouve(null); setClientFidele(null) }}
+                  onChange={e => { setTel(e.target.value); setClientTrouve(null); setClientFidele(null); setVerifErr(null) }}
                   onBlur={() => rechercherClient(tel)}
                   placeholder="06 XX XX XX XX"
                   type="tel"
@@ -545,6 +550,13 @@ export default function CommanderPage() {
                   Vérifier
                 </button>
               </div>
+
+              {/* Erreur vérification */}
+              {verifErr && (
+                <div style={{ marginTop: 8, padding: '10px 14px', background: '#FFEBEE', border: '1px solid #EF9A9A', borderRadius: 6, fontSize: 12, color: '#B71C1C', fontWeight: 500 }}>
+                  ⚠️ {verifErr}
+                </div>
+              )}
 
               {/* Client fidèle trouvé */}
               {clientTrouve === true && clientFidele && (() => {
