@@ -85,6 +85,7 @@ export default function CommanderPage() {
   const [showCommentaire, setShowCommentaire] = useState<string | null>(null)
   const [err, setErr] = useState('')
   const [ferme, setFerme] = useState(false)
+  // v2.1
 
   // Fidélité
   const [clientFidele, setClientFidele] = useState<ClientFidele | null>(null)
