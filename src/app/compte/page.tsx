@@ -96,14 +96,14 @@ export default function ComptePage() {
     e.preventDefault()
     setLoading(true); setError('')
     try {
-      const { data } = await supabase.from('clients').select('*').eq('Téléphone', phone.trim()).single()
+      const { data } = await supabase.from('clients').select('*').eq('telephone', phone.trim()).single()
       if (data) {
         const c = data as Client
         setClient(c)
         localStorage.setItem('roma_client_id', c.id)
-        localStorage.setItem('roma_client_tel', (c as unknown as Record<string, string>)['Téléphone'] ?? c.telephone)
+        localStorage.setItem('roma_client_tel', c.telephone)
         localStorage.setItem('roma_client_nom', c.nom)
-        await loadDashboard(c.id, (c as unknown as Record<string, string>)['Téléphone'] ?? c.telephone)
+        await loadDashboard(c.id, c.telephone)
         setScreen('dashboard')
       } else {
         setError('Numéro inconnu. Souhaitez-vous créer un compte ?')
@@ -122,7 +122,7 @@ export default function ComptePage() {
     try {
       const nomComplet = (prenom.trim() + ' ' + nom.trim()).trim()
       const { data, error: err } = await supabase.from('clients')
-        .insert({ nom: nomComplet, 'Téléphone': phone.trim(), email: email.trim() || null })
+        .insert({ nom: nomComplet, telephone: phone.trim(), email: email.trim() || null })
         .select('*').single()
       if (err) throw err
       const c = data as Client
@@ -160,7 +160,7 @@ export default function ComptePage() {
   }
 
   const handleUtiliserRecompense = (r: typeof RECOMPENSES[0]) => {
-    if (!client || client.points_fidelite < r.points) return
+    if (!client || client.points < r.points) return
     const code = 'ROMA-' + Math.random().toString(36).substring(2, 8).toUpperCase()
     setBonCode(`${code} — ${r.label}`)
   }
@@ -168,7 +168,7 @@ export default function ComptePage() {
   const visites = client?.nb_visites ?? reservations.filter(r => r.statut === 'honoree').length
   const niveau = getNiveau(visites)
   const nextNiveau = NIVEAUX.find(n => n.min > visites)
-  const nextRecompense = RECOMPENSES.find(r => r.points > (client?.points_fidelite ?? 0))
+  const nextRecompense = RECOMPENSES.find(r => r.points > (client?.points ?? 0))
   const maxPoints = nextRecompense?.points ?? RECOMPENSES[RECOMPENSES.length - 1].points
 
   return (
@@ -299,14 +299,14 @@ export default function ComptePage() {
                 <div style={{ position: 'absolute', top: -24, right: -24, width: 120, height: 120, borderRadius: '50%', background: 'rgba(27,94,32,0.12)' }} />
                 <div style={{ fontFamily: 'Jost', fontSize: 10, letterSpacing: 3, textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)', marginBottom: 8 }}>Mes points</div>
                 <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 52, fontWeight: 600, color: 'var(--rosso)', lineHeight: 1, marginBottom: 16 }}>
-                  {client.points_fidelite}
+                  {client.points}
                   <span style={{ fontFamily: 'Jost', fontSize: 15, fontWeight: 300, color: 'rgba(255,255,255,0.35)', marginLeft: 8 }}>pts</span>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 2, height: 6, overflow: 'hidden', marginBottom: 8 }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, Math.round((client.points_fidelite / maxPoints) * 100))}%`, background: 'linear-gradient(90deg, var(--verde), var(--rosso))', transition: 'width 0.8s ease', borderRadius: 2 }} />
+                  <div style={{ height: '100%', width: `${Math.min(100, Math.round((client.points / maxPoints) * 100))}%`, background: 'linear-gradient(90deg, var(--verde), var(--rosso))', transition: 'width 0.8s ease', borderRadius: 2 }} />
                 </div>
                 <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-                  {client.points_fidelite} / {maxPoints} pts — {nextRecompense ? `Prochaine : ${nextRecompense.icon} ${nextRecompense.label} (encore ${nextRecompense.points - client.points_fidelite} pts)` : 'Toutes débloquées 🎉'}
+                  {client.points} / {maxPoints} pts — {nextRecompense ? `Prochaine : ${nextRecompense.icon} ${nextRecompense.label} (encore ${nextRecompense.points - client.points} pts)` : 'Toutes débloquées 🎉'}
                 </p>
                 {nextNiveau && (
                   <p style={{ fontFamily: 'Jost', fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
@@ -321,8 +321,8 @@ export default function ComptePage() {
                 <p style={{ fontSize: 13, color: 'var(--grigio)', fontFamily: 'Jost', marginBottom: 20 }}>Utilisez vos points pour obtenir des cadeaux à présenter au restaurant</p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
                   {RECOMPENSES.map(r => {
-                    const unlocked = client.points_fidelite >= r.points
-                    const pct = Math.min(100, Math.round((client.points_fidelite / r.points) * 100))
+                    const unlocked = client.points >= r.points
+                    const pct = Math.min(100, Math.round((client.points / r.points) * 100))
                     return (
                       <div key={r.label} style={{ background: 'white', border: `1px solid ${unlocked ? 'var(--verde)' : 'var(--grigio-l)'}`, borderRadius: 3, padding: 16, opacity: unlocked ? 1 : 0.75 }}>
                         <div style={{ fontSize: 28, marginBottom: 8 }}>{r.icon}</div>
@@ -337,7 +337,7 @@ export default function ComptePage() {
                           </button>
                         ) : (
                           <div style={{ fontSize: 11, color: 'var(--grigio)', fontFamily: 'Jost' }}>
-                            Encore {r.points - client.points_fidelite} pts
+                            Encore {r.points - client.points} pts
                           </div>
                         )}
                       </div>

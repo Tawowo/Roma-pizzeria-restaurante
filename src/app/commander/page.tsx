@@ -15,7 +15,7 @@ type LignePanier = {
 type ClientFidele = {
   id: string
   nom: string
-  points_fidelite: number
+  points: number
   nb_visites: number
 }
 
@@ -168,11 +168,11 @@ export default function CommanderPage() {
       setClientFidele(null); setClientTrouve(null); return
     }
     try {
-      console.log('vérifier: requête Supabase clients WHERE Téléphone =', telVal.trim())
+      console.log('vérifier: requête Supabase clients WHERE telephone =', telVal.trim())
       const { data, error } = await supabase
         .from('clients')
-        .select('id, nom, points_fidelite, nb_visites')
-        .eq('Téléphone', telVal.trim())
+        .select('id, nom, points, nb_visites')
+        .eq('telephone', telVal.trim())
         .single()
       console.log('vérifier résultat Supabase:', { data, error })
       if (data) {
@@ -227,11 +227,11 @@ export default function CommanderPage() {
 
     setLoading(true)
     const cmdPayload = {
-      'Nom': nom,
+      nom: nom,
       telephone: tel,
       heure_retrait: heureRetrait,
       date_retrait: dateRetrait,
-      'Type': 'a_emporter',
+      type: 'a_emporter',
       statut: 'en_preparation',
       notes: notes || null,
       total,
@@ -248,23 +248,14 @@ export default function CommanderPage() {
     }
     console.log('[vitrine] commande créée OK — id:', cmd.id, 'statut:', cmd.statut, 'numéro:', cmd.numero_commande)
 
-    const lignes = panier.map(l => {
-      const cat = categories.find(c => c.id === l.article.categorie_id)
-      const nomCat = cat?.nom?.toLowerCase() ?? ''
-      const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
-      return {
-        commande_id: cmd.id,
-        article_id: l.article.id,
-        article_nom: l.article.nom,
-        quantite: l.quantite,
-        taille: l.taille === 'pala' ? 'Pala' : '33cm',
-        prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
-        commentaire: l.commentaire || null,
-        statut: 'envoye_cuisine',
-        pour_cuisine,
-        categorie_nom: cat?.nom || null,
-      }
-    })
+    const lignes = panier.map(l => ({
+      commande_id: cmd.id,
+      article_id: l.article.id,
+      article_nom: l.article.nom,
+      quantite: l.quantite,
+      taille: l.taille === 'pala' ? 'Pala' : '33cm',
+      prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
+    }))
     console.log('[vitrine] INSERT lignes_commande payload:', lignes)
     const { data: ligData, error: ligErr } = await supabase.from('lignes_commande').insert(lignes).select()
     console.log('insert lignes résultat:', ligData, ligErr)
@@ -284,11 +275,11 @@ export default function CommanderPage() {
       const pts = Math.floor(total * ptsParEuro)
 
       let clientId: string | null = clientFidele?.id ?? null
-      let newTotal = (clientFidele?.points_fidelite ?? 0) + pts
+      let newTotal = (clientFidele?.points ?? 0) + pts
 
       if (clientFidele) {
         await supabase.from('clients').update({
-          points_fidelite: newTotal,
+          points: newTotal,
           nb_visites: (clientFidele.nb_visites ?? 0) + 1,
         }).eq('id', clientFidele.id)
         console.log('[vitrine] client fidèle mis à jour:', clientFidele.id, '+', pts, 'pts')
@@ -297,13 +288,13 @@ export default function CommanderPage() {
         const nomComplet = (prenomNvClient.trim() + ' ' + nom.trim()).trim()
         const { data: nvCli } = await supabase.from('clients').insert({
           nom: nomComplet,
-          'Téléphone': tel.trim(),
-          points_fidelite: pts,
+          telephone: tel.trim(),
+          points: pts,
           nb_visites: 1,
-        }).select('id, points_fidelite').single()
+        }).select('id, points').single()
         if (nvCli) {
           clientId = nvCli.id
-          newTotal = nvCli.points_fidelite ?? pts
+          newTotal = (nvCli as unknown as Record<string, number>).points ?? pts
           console.log('[vitrine] nouveau client créé:', nvCli.id)
         }
       }
@@ -561,7 +552,7 @@ export default function CommanderPage() {
               {/* Client fidèle trouvé */}
               {clientTrouve === true && clientFidele && (() => {
                 const niv = getNiveau(clientFidele.nb_visites ?? 0)
-                const prochaineRecomp = RECOMPENSES_VITRINE.find(r => r.points > clientFidele.points_fidelite)
+                const prochaineRecomp = RECOMPENSES_VITRINE.find(r => r.points > clientFidele.points)
                 return (
                   <div style={{ marginTop: 10, padding: '14px 16px', background: niv.bg, border: `1px solid ${niv.color}40`, borderRadius: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -573,14 +564,14 @@ export default function CommanderPage() {
                         <div style={{ fontSize: 12, color: '#555' }}>Membre {niv.label} · {clientFidele.nb_visites ?? 0} visite{(clientFidele.nb_visites ?? 0) > 1 ? 's' : ''}</div>
                       </div>
                       <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                        <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: niv.color }}>{clientFidele.points_fidelite}</div>
+                        <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: niv.color }}>{clientFidele.points}</div>
                         <div style={{ fontSize: 11, color: '#888' }}>points</div>
                       </div>
                     </div>
                     {prochaineRecomp && (
                       <div style={{ fontSize: 12, color: '#555' }}>
                         Prochaine récompense : {prochaineRecomp.icon} {prochaineRecomp.label} dans{' '}
-                        <strong>{prochaineRecomp.points - clientFidele.points_fidelite} pts</strong>
+                        <strong>{prochaineRecomp.points - clientFidele.points} pts</strong>
                       </div>
                     )}
                     <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 4, fontWeight: 600 }}>
