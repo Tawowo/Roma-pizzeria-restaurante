@@ -159,22 +159,33 @@ export default function CommanderPage() {
   }, [computeDate])
 
   const rechercherClient = useCallback(async (telVal: string) => {
+    console.log('vérifier appelé:', telVal)
     const clean = telVal.replace(/\s/g, '')
-    if (clean.length < 8) { setClientFidele(null); setClientTrouve(null); return }
+    if (clean.length < 8) {
+      console.log('vérifier: numéro trop court (<8 chiffres), abandon')
+      setClientFidele(null); setClientTrouve(null); return
+    }
     try {
-      const { data } = await supabase
+      console.log('vérifier: requête Supabase clients WHERE telephone =', telVal.trim())
+      const { data, error } = await supabase
         .from('clients')
         .select('id, nom, points_fidelite, nb_visites')
         .eq('telephone', telVal.trim())
         .single()
+      console.log('vérifier résultat Supabase:', { data, error })
       if (data) {
         setClientFidele(data as ClientFidele)
         setClientTrouve(true)
       } else {
+        // PGRST116 = "no rows" = client non trouvé (normal)
+        if (error && error.code !== 'PGRST116') {
+          console.error('vérifier erreur Supabase (inattendue):', error.code, error.message)
+        }
         setClientFidele(null)
         setClientTrouve(false)
       }
-    } catch {
+    } catch (err) {
+      console.error('vérifier exception:', err)
       setClientFidele(null)
       setClientTrouve(false)
     }
@@ -220,16 +231,17 @@ export default function CommanderPage() {
       notes: notes || null,
       total,
     }
-    console.log('[vitrine] INSERT commande:', cmdPayload)
+    console.log('[vitrine] INSERT commande payload:', cmdPayload)
     const { data: cmd, error } = await supabase.from('commandes').insert(cmdPayload).select().single()
+    console.log('insert commande résultat:', cmd, error)
 
     if (error || !cmd) {
-      console.error('[vitrine] commande insert error:', error)
+      console.error('[vitrine] commande insert ERREUR:', error?.code, error?.message, error?.details)
       setErr(`Erreur création commande : ${error?.message ?? 'inconnue'}. Appelez le 06 68 36 62 98`)
       setLoading(false)
       return
     }
-    console.log('[vitrine] commande créée:', cmd.id, 'statut:', cmd.statut)
+    console.log('[vitrine] commande créée OK — id:', cmd.id, 'statut:', cmd.statut, 'numéro:', cmd.numero_commande)
 
     const lignes = panier.map(l => {
       const cat = categories.find(c => c.id === l.article.categorie_id)
@@ -248,15 +260,16 @@ export default function CommanderPage() {
         categorie_nom: cat?.nom || null,
       }
     })
-    console.log('[vitrine] INSERT lignes_commande:', lignes)
-    const { error: ligErr } = await supabase.from('lignes_commande').insert(lignes)
+    console.log('[vitrine] INSERT lignes_commande payload:', lignes)
+    const { data: ligData, error: ligErr } = await supabase.from('lignes_commande').insert(lignes).select()
+    console.log('insert lignes résultat:', ligData, ligErr)
     if (ligErr) {
-      console.error('[vitrine] lignes insert error:', ligErr)
+      console.error('[vitrine] lignes insert ERREUR:', ligErr.code, ligErr.message, ligErr.details)
       setErr(`Erreur insertion articles : ${ligErr.message}. Appelez le 06 68 36 62 98`)
       setLoading(false)
       return
     }
-    console.log('[vitrine] lignes insérées OK — commande visible en cuisine')
+    console.log('[vitrine] lignes insérées OK (', ligData?.length, 'lignes) — commande visible en cuisine')
 
     // ── Points fidélité (non bloquant) ─────────────────────────
     try {
@@ -514,14 +527,24 @@ export default function CommanderPage() {
             {/* Téléphone + fidélité */}
             <div>
               <label className="rf-label">{t('emporter_tel')} * <span style={{ fontSize: 11, color: '#1B5E20', fontWeight: 400 }}>— compte fidélité</span></label>
-              <input
-                className="rf-input"
-                value={tel}
-                onChange={e => { setTel(e.target.value); setClientTrouve(null); setClientFidele(null) }}
-                onBlur={() => rechercherClient(tel)}
-                placeholder="06 XX XX XX XX"
-                type="tel"
-              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  className="rf-input"
+                  value={tel}
+                  onChange={e => { setTel(e.target.value); setClientTrouve(null); setClientFidele(null) }}
+                  onBlur={() => rechercherClient(tel)}
+                  placeholder="06 XX XX XX XX"
+                  type="tel"
+                  style={{ flex: 1 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => rechercherClient(tel)}
+                  style={{ padding: '10px 14px', background: '#1B5E20', color: 'white', border: 'none', borderRadius: 6, fontSize: 12, fontFamily: 'Jost,sans-serif', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                >
+                  Vérifier
+                </button>
+              </div>
 
               {/* Client fidèle trouvé */}
               {clientTrouve === true && clientFidele && (() => {
