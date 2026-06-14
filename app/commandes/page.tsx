@@ -412,22 +412,14 @@ export default function CommandesPage() {
     } catch { setReduction(r => ({ ...r, bonFideliteMsg: 'Bon invalide', bonFideliteValeur: 0 })) }
   }
 
-  const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean, commande_id: string) => {
-    const cat = categories.find(c => c.id === p.article.categorie_id)
-    const nomCat = cat?.nom?.toLowerCase() ?? ''
-    const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+  const makeLigne = (p: PanierItem, _statut: string, _ajout_apres: boolean, commande_id: string) => {
     return {
       commande_id,
       article_id: p.article.id,
       article_nom: p.article.nom,
       quantite: p.quantite,
       taille: p.taille || null,
-      commentaire: p.commentaire || null,
       prix_unitaire: p.article.prix,
-      categorie_nom: cat?.nom || null,
-      pour_cuisine,
-      statut,
-      ajout_apres,
     }
   }
 
@@ -723,24 +715,14 @@ export default function CommandesPage() {
       }).select().single()
       if (cmdErr || !cmd) throw new Error(cmdErr?.message ?? 'Erreur création commande')
 
-      const lignes = empPanier.map(p => {
-        const cat = categories.find(c => c.id === p.article.categorie_id)
-        const nomCat = cat?.nom?.toLowerCase() ?? ''
-        const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
-        return {
-          commande_id: cmd.id,
-          article_id: p.article.id,
-          article_nom: p.article.nom,
-          quantite: p.quantite,
-          prix_unitaire: p.article.prix,
-          taille: p.taille || null,
-          commentaire: p.commentaire || null,
-          categorie_nom: cat?.nom || null,
-          pour_cuisine,
-          statut: 'envoye_cuisine',
-          ajout_apres: false,
-        }
-      })
+      const lignes = empPanier.map(p => ({
+        commande_id: cmd.id,
+        article_id: p.article.id,
+        article_nom: p.article.nom,
+        quantite: p.quantite,
+        prix_unitaire: p.article.prix,
+        taille: p.taille || null,
+      }))
       const { error: ligErr } = await supabase.from('lignes_commande').insert(lignes)
       if (ligErr) throw new Error(`Erreur insertion articles : ${ligErr.message}`)
 
