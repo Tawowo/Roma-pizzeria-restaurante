@@ -99,60 +99,49 @@ export default function CuisinePage() {
       const session = getSession()
       if (!session) { router.replace('/login'); return }
 
-      // Requête directe sur lignes_commande : uniquement les lignes envoyées en cuisine,
-      // non encore traitées. On évite ainsi de ramener toutes les lignes d'une commande.
+      // Récupérer toutes les commandes actives avec leurs lignes
       const { data, error } = await supabase
-        .from('lignes_commande')
-        .select('*, commandes(*)')
-        .eq('statut', 'envoye_cuisine')
-        .eq('pour_cuisine', true)
+        .from('commandes')
+        .select('*, lignes_commande(*)')
+        .in('statut', ['en_cours', 'en_preparation'])
         .order('created_at')
 
       if (error) throw error
 
-      // Grouper les lignes par commande_id
-      const commandeMap = new Map<string, Commande>()
+      const result: Commande[] = []
 
-      for (const ligne of (data ?? [])) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const cmd = ligne.commandes as any
-        if (!cmd) continue
-        // Ne montrer que les commandes actives en cuisine
-        if (!['en_cours', 'en_preparation'].includes(cmd.statut)) continue
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const cmd of (data ?? []) as any[]) {
+        const allLignes: LigneCommande[] = (cmd.lignes_commande ?? [])
 
-        if (!commandeMap.has(cmd.id)) {
-          commandeMap.set(cmd.id, {
-            id: cmd.id,
-            numero_commande: cmd.numero_commande,
-            type: cmd.type,
-            statut: cmd.statut,
-            created_at: cmd.created_at,
-            table_numero: cmd.table_numero,
-            zone: cmd.zone,
-            nom_client: cmd.nom_client,
-            notes: cmd.notes,
-            heure_retrait: cmd.heure_retrait,
-            telephone: cmd.telephone,
-            lignes_commande: [],
-          })
+        let lignes: LigneCommande[]
+        if (cmd.type === 'a_emporter') {
+          // Commandes vitrine : toutes les lignes sont à afficher
+          lignes = allLignes
+        } else {
+          // Commandes admin sur place : uniquement lignes cuisine
+          lignes = allLignes.filter(l => l.statut === 'envoye_cuisine' && l.pour_cuisine === true)
         }
 
-        commandeMap.get(cmd.id)!.lignes_commande.push({
-          id: ligne.id,
-          commande_id: ligne.commande_id,
-          article_nom: ligne.article_nom,
-          quantite: ligne.quantite,
-          taille: ligne.taille,
-          commentaire: ligne.commentaire,
-          statut: ligne.statut,
-          ajout_apres: ligne.ajout_apres,
-          created_at: ligne.created_at,
-          pour_cuisine: ligne.pour_cuisine,
-          categorie_nom: ligne.categorie_nom,
+        if (lignes.length === 0) continue
+
+        result.push({
+          id: cmd.id,
+          numero_commande: cmd.numero_commande,
+          type: cmd.type,
+          statut: cmd.statut,
+          created_at: cmd.created_at,
+          table_numero: cmd.table_numero,
+          zone: cmd.zone,
+          nom_client: cmd.nom_client ?? cmd.nom,
+          notes: cmd.notes,
+          heure_retrait: cmd.heure_retrait,
+          telephone: cmd.telephone,
+          lignes_commande: lignes,
         })
       }
 
-      setCommandes(Array.from(commandeMap.values()))
+      setCommandes(result)
     } catch (err) {
       console.error('Cuisine fetch error:', err)
     } finally {
