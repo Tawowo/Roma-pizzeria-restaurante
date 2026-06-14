@@ -168,11 +168,11 @@ export default function CommanderPage() {
       setClientFidele(null); setClientTrouve(null); return
     }
     try {
-      console.log('vérifier: requête Supabase clients WHERE telephone =', telVal.trim())
+      console.log('vérifier: requête Supabase clients WHERE Téléphone =', telVal.trim())
       const { data, error } = await supabase
         .from('clients')
         .select('id, nom, points_fidelite, nb_visites')
-        .eq('telephone', telVal.trim())
+        .eq('Téléphone', telVal.trim())
         .single()
       console.log('vérifier résultat Supabase:', { data, error })
       if (data) {
@@ -297,7 +297,7 @@ export default function CommanderPage() {
         const nomComplet = (prenomNvClient.trim() + ' ' + nom.trim()).trim()
         const { data: nvCli } = await supabase.from('clients').insert({
           nom: nomComplet,
-          telephone: tel.trim(),
+          'Téléphone': tel.trim(),
           points_fidelite: pts,
           nb_visites: 1,
         }).select('id, points_fidelite').single()

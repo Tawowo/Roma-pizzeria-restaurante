@@ -96,14 +96,14 @@ export default function ComptePage() {
     e.preventDefault()
     setLoading(true); setError('')
     try {
-      const { data } = await supabase.from('clients').select('*').eq('telephone', phone.trim()).single()
+      const { data } = await supabase.from('clients').select('*').eq('Téléphone', phone.trim()).single()
       if (data) {
         const c = data as Client
         setClient(c)
         localStorage.setItem('roma_client_id', c.id)
-        localStorage.setItem('roma_client_tel', c.telephone)
+        localStorage.setItem('roma_client_tel', (c as unknown as Record<string, string>)['Téléphone'] ?? c.telephone)
         localStorage.setItem('roma_client_nom', c.nom)
-        await loadDashboard(c.id, c.telephone)
+        await loadDashboard(c.id, (c as unknown as Record<string, string>)['Téléphone'] ?? c.telephone)
         setScreen('dashboard')
       } else {
         setError('Numéro inconnu. Souhaitez-vous créer un compte ?')
@@ -122,13 +122,13 @@ export default function ComptePage() {
     try {
       const nomComplet = (prenom.trim() + ' ' + nom.trim()).trim()
       const { data, error: err } = await supabase.from('clients')
-        .insert({ nom: nomComplet, telephone: phone.trim(), email: email.trim() || null })
+        .insert({ nom: nomComplet, 'Téléphone': phone.trim(), email: email.trim() || null })
         .select('*').single()
       if (err) throw err
       const c = data as Client
       setClient(c)
       localStorage.setItem('roma_client_id', c.id)
-      localStorage.setItem('roma_client_tel', c.telephone)
+      localStorage.setItem('roma_client_tel', phone.trim())
       localStorage.setItem('roma_client_nom', c.nom)
       setReservations([]); setMouvements([]); setCommandes([])
       setScreen('dashboard')
