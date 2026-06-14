@@ -227,7 +227,7 @@ export default function CommanderPage() {
 
     setLoading(true)
     const cmdPayload = {
-      nom_client: nom,
+      nom: nom,
       telephone: tel,
       heure_retrait: heureRetrait,
       date_retrait: dateRetrait,
