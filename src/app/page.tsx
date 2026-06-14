@@ -203,7 +203,7 @@ export default function HomePage() {
       } else {
         const { data: nc } = await supabase
           .from('clients')
-          .insert({ nom: resaForm.nom, telephone: resaForm.telephone, points_fidelite: 0 })
+          .insert({ nom: resaForm.nom, telephone: resaForm.telephone, points: 0, nb_visites: 0 })
           .select('id').single()
         clientId = nc?.id
       }
@@ -767,11 +767,11 @@ export default function HomePage() {
                             <button type="button" onClick={async () => {
                               if (!cmdForm.telephone.trim()) return
                               setCmdTelSearch(true)
-                              const { data } = await supabase.from('clients').select('id,nom,points_fidelite').eq('telephone', cmdForm.telephone.trim()).single()
+                              const { data } = await supabase.from('clients').select('id,nom,points,nb_visites').eq('telephone', cmdForm.telephone.trim()).single()
                               setCmdTelSearch(false)
                               if (data) {
                                 const estPoints = Math.round(cmdItems.reduce((s, i) => s + i.qty * (i.taille==='pala'?i.prixPala:i.prix33), 0))
-                                setCmdClientDetecte({ nom: (data as {nom:string;points_fidelite:number}).nom, pts: estPoints || 0 })
+                                setCmdClientDetecte({ nom: (data as {nom:string;points:number}).nom, pts: estPoints || 0 })
                               }
                             }} className="btn-verde" disabled={cmdTelSearch} style={{ flexShrink: 0, padding: '10px 16px', fontSize: 12 }}>
                               {cmdTelSearch ? '...' : 'Vérifier'}

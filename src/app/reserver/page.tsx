@@ -31,7 +31,7 @@ export default function ReserverPage() {
         .from('client').select('id').eq('telephone', form.telephone).single()
       if (existing) { clientId = existing.id } else {
         const { data: nc } = await supabase
-          .from('client').insert({ nom: form.nom, telephone: form.telephone, points_fidelite: 0 })
+          .from('clients').insert({ nom: form.nom, telephone: form.telephone, points: 0, nb_visites: 0 })
           .select('id').single()
         clientId = nc?.id
       }
