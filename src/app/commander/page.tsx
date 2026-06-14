@@ -12,13 +12,36 @@ type LignePanier = {
   id: string
 }
 
+type ClientFidele = {
+  id: string
+  nom: string
+  points_fidelite: number
+  nb_visites: number
+}
+
 const CATS_PAS_CUISINE = [
   'boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés',
   'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin',
   'bières', 'softs', 'eaux'
 ]
 
-// Génère des créneaux toutes les 5 minutes entre fromH:fromM et toH:toM inclus
+const NIVEAUX_FIDELITE = [
+  { min: 0, max: 5, label: 'Bronze', icon: '🥉', color: '#8D6E63', bg: '#EFEBE9' },
+  { min: 6, max: 15, label: 'Argent', icon: '🥈', color: '#757575', bg: '#F0F0F0' },
+  { min: 16, max: Infinity, label: 'Or', icon: '🏆', color: '#1B5E20', bg: '#E8F5E9' },
+]
+
+const RECOMPENSES_VITRINE = [
+  { points: 8, label: 'Boisson offerte', icon: '🥤' },
+  { points: 16, label: 'Salade offerte', icon: '🥗' },
+  { points: 22, label: 'Dessert offert', icon: '🍮' },
+  { points: 32, label: 'Pizza Margherita offerte', icon: '🍕' },
+]
+
+function getNiveau(visites: number) {
+  return NIVEAUX_FIDELITE.find(n => visites >= n.min && visites <= n.max) ?? NIVEAUX_FIDELITE[0]
+}
+
 function genSlots(fromH: number, fromM: number, toH: number, toM: number): string[] {
   const slots: string[] = []
   let h = fromH, m = fromM
@@ -30,14 +53,13 @@ function genSlots(fromH: number, fromM: number, toH: number, toM: number): strin
   return slots
 }
 
-const ALL_MIDI = genSlots(12, 0, 14, 30) // 12:00 → 14:30
-const ALL_SOIR = genSlots(19, 0, 22, 0)  // 19:00 → 22:00
+const ALL_MIDI = genSlots(12, 0, 14, 30)
+const ALL_SOIR = genSlots(19, 0, 22, 0)
 
-// 0=Dim 1=Lun 2=Mar 3=Mer 4=Jeu 5=Ven 6=Sam
 function getSlotsForDOW(dow: number): { midi: string[], soir: string[] } {
-  if (dow === 1) return { midi: [], soir: [] }               // Lundi : fermé
-  if (dow === 0 || dow === 2) return { midi: [], soir: ALL_SOIR } // Dim, Mar : soir
-  return { midi: ALL_MIDI, soir: ALL_SOIR }                  // Mer–Sam : midi + soir
+  if (dow === 1) return { midi: [], soir: [] }
+  if (dow === 0 || dow === 2) return { midi: [], soir: ALL_SOIR }
+  return { midi: ALL_MIDI, soir: ALL_SOIR }
 }
 
 const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi']
@@ -64,6 +86,13 @@ export default function CommanderPage() {
   const [err, setErr] = useState('')
   const [ferme, setFerme] = useState(false)
 
+  // Fidélité
+  const [clientFidele, setClientFidele] = useState<ClientFidele | null>(null)
+  const [clientTrouve, setClientTrouve] = useState<boolean | null>(null)
+  const [prenomNvClient, setPrenomNvClient] = useState('')
+  const [pointsGagnes, setPointsGagnes] = useState(0)
+  const [totalPointsApres, setTotalPointsApres] = useState(0)
+
   const loadSlotsCapacite = useCallback(async (date: string) => {
     try {
       const { data } = await supabase
@@ -82,7 +111,6 @@ export default function CommanderPage() {
     } catch { /* ignore */ }
   }, [])
 
-  // Calcule le prochain jour/date disponible et met à jour les créneaux
   const computeDate = useCallback(() => {
     const now = new Date()
     for (let i = 0; i < 8; i++) {
@@ -90,9 +118,8 @@ export default function CommanderPage() {
       d.setDate(d.getDate() + i)
       const dow = d.getDay()
       const { midi, soir } = getSlotsForDOW(dow)
-      if (dow === 1) continue  // Lundi fermé
+      if (dow === 1) continue
 
-      // Pour aujourd'hui : exclure les créneaux déjà passés + 30 min de buffer
       const nowMin = now.getHours() * 60 + now.getMinutes() + 30
       const filterPast = (slots: string[]) => i > 0 ? slots : slots.filter(s => {
         const [sh, sm] = s.split(':').map(Number)
@@ -117,7 +144,6 @@ export default function CommanderPage() {
       loadSlotsCapacite(dateStr)
       return
     }
-    // Aucun créneau dans les 8 prochains jours (cas extrême)
     setFerme(true)
   }, [loadSlotsCapacite])
 
@@ -131,6 +157,28 @@ export default function CommanderPage() {
     })
     computeDate()
   }, [computeDate])
+
+  const rechercherClient = useCallback(async (telVal: string) => {
+    const clean = telVal.replace(/\s/g, '')
+    if (clean.length < 8) { setClientFidele(null); setClientTrouve(null); return }
+    try {
+      const { data } = await supabase
+        .from('clients')
+        .select('id, nom, points_fidelite, nb_visites')
+        .eq('telephone', telVal.trim())
+        .single()
+      if (data) {
+        setClientFidele(data as ClientFidele)
+        setClientTrouve(true)
+      } else {
+        setClientFidele(null)
+        setClientTrouve(false)
+      }
+    } catch {
+      setClientFidele(null)
+      setClientTrouve(false)
+    }
+  }, [])
 
   const artsByCat = articles.filter(a => a.categorie_id === catActive)
   const nbPanier = panier.reduce((s, l) => s + l.quantite, 0)
@@ -210,6 +258,52 @@ export default function CommanderPage() {
     }
     console.log('[vitrine] lignes insérées OK — commande visible en cuisine')
 
+    // ── Points fidélité (non bloquant) ─────────────────────────
+    try {
+      const { data: param } = await supabase
+        .from('parametres').select('valeur').eq('cle', 'points_par_euro').single()
+      const ptsParEuro = parseFloat(param?.valeur ?? '1') || 1
+      const pts = Math.floor(total * ptsParEuro)
+
+      let clientId: string | null = clientFidele?.id ?? null
+      let newTotal = (clientFidele?.points_fidelite ?? 0) + pts
+
+      if (clientFidele) {
+        await supabase.from('clients').update({
+          points_fidelite: newTotal,
+          nb_visites: (clientFidele.nb_visites ?? 0) + 1,
+        }).eq('id', clientFidele.id)
+        console.log('[vitrine] client fidèle mis à jour:', clientFidele.id, '+', pts, 'pts')
+      } else if (clientTrouve === false && prenomNvClient.trim()) {
+        newTotal = pts
+        const nomComplet = (prenomNvClient.trim() + ' ' + nom.trim()).trim()
+        const { data: nvCli } = await supabase.from('clients').insert({
+          nom: nomComplet,
+          telephone: tel.trim(),
+          points_fidelite: pts,
+          nb_visites: 1,
+        }).select('id, points_fidelite').single()
+        if (nvCli) {
+          clientId = nvCli.id
+          newTotal = nvCli.points_fidelite ?? pts
+          console.log('[vitrine] nouveau client créé:', nvCli.id)
+        }
+      }
+
+      if (clientId && pts > 0) {
+        await supabase.from('mouvements_fidelite').insert({
+          client_id: clientId,
+          points: pts,
+          motif: `Commande à emporter #${cmd.numero_commande}`,
+        })
+        await supabase.from('commandes').update({ points_gagnes: pts }).eq('id', cmd.id)
+      }
+
+      if (pts > 0) { setPointsGagnes(pts); setTotalPointsApres(newTotal) }
+    } catch (fidelErr) {
+      console.error('[vitrine] fidelité error (non bloquant):', fidelErr)
+    }
+
     setNumCmd(cmd.numero_commande)
     setStep('confirmation')
     setLoading(false)
@@ -224,17 +318,13 @@ export default function CommanderPage() {
         disabled={full}
         onClick={() => setHeureRetrait(slot)}
         style={{
-          padding: '7px 11px',
-          borderRadius: 6,
-          fontSize: 13,
-          fontWeight: selected ? 700 : 400,
-          fontFamily: 'Jost, sans-serif',
+          padding: '7px 11px', borderRadius: 6, fontSize: 13,
+          fontWeight: selected ? 700 : 400, fontFamily: 'Jost, sans-serif',
           cursor: full ? 'not-allowed' : 'pointer',
           border: `2px solid ${selected ? '#B71C1C' : full ? '#ddd' : 'rgba(196,30,58,0.25)'}`,
           background: selected ? '#B71C1C' : full ? '#f5f5f5' : 'white',
           color: selected ? 'white' : full ? '#bbb' : '#333',
-          transition: 'all 0.15s',
-          minWidth: 64,
+          transition: 'all 0.15s', minWidth: 64,
         }}
         title={full ? 'Créneau complet' : ''}
       >
@@ -243,6 +333,7 @@ export default function CommanderPage() {
     )
   }
 
+  // ── Page confirmation ──────────────────────────────────────────
   if (step === 'confirmation') return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ textAlign: 'center', maxWidth: 420 }}>
@@ -251,16 +342,32 @@ export default function CommanderPage() {
         <div style={{ background: 'var(--r)', color: 'white', borderRadius: 4, padding: '8px 24px', display: 'inline-block', fontFamily: "'Playfair Display',serif", fontSize: 28, marginBottom: 20 }}>
           N° {numCmd}
         </div>
-        <p style={{ fontSize: 15, color: 'var(--textm)', lineHeight: 1.8, marginBottom: 12 }}>
+        <p style={{ fontSize: 15, color: 'var(--textm)', lineHeight: 1.8, marginBottom: 16 }}>
           {nom}, votre commande est bien reçue.<br />
           Retrait prévu à <strong>{heureRetrait}</strong><br />
           <span style={{ fontSize: 13, color: 'var(--textl)' }}>{labelJour}</span>
         </p>
+
+        {pointsGagnes > 0 && (
+          <div style={{ background: 'rgba(27,94,32,0.07)', border: '1px solid rgba(27,94,32,0.2)', borderRadius: 8, padding: '16px 20px', marginBottom: 20 }}>
+            <div style={{ fontSize: 26, marginBottom: 4 }}>⭐</div>
+            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, color: '#1B5E20', fontWeight: 700, marginBottom: 4 }}>
+              +{pointsGagnes} points gagnés !
+            </div>
+            <div style={{ fontSize: 13, color: '#555' }}>
+              Total fidélité : <strong>{totalPointsApres} points</strong>
+            </div>
+            <Link href="/compte" style={{ display: 'inline-block', marginTop: 10, fontSize: 12, color: '#B71C1C', textDecoration: 'underline' }}>
+              Voir mon compte fidélité →
+            </Link>
+          </div>
+        )}
+
         <p style={{ fontSize: 13, color: 'var(--textl)', marginBottom: 28 }}>
-          En cas de besoin, n'hésitez pas à nous appeler au{' '}
+          En cas de besoin, n&apos;hésitez pas à nous appeler au{' '}
           <a href="tel:0668366298" style={{ color: 'var(--r)' }}>06 68 36 62 98</a>
         </p>
-        <Link href="/" className="bp" style={{ textDecoration: 'none', display: 'inline-block' }}>← Retour à l'accueil</Link>
+        <Link href="/" className="bp" style={{ textDecoration: 'none', display: 'inline-block' }}>← Retour à l&apos;accueil</Link>
       </div>
     </div>
   )
@@ -286,7 +393,7 @@ export default function CommanderPage() {
       {step === 'menu' && (
         <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
           <h1 style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, marginBottom: 8 }}>{t('emporter_titre')}</h1>
-          <p style={{ fontSize: 14, color: 'var(--textl)', marginBottom: 28 }}>Choisissez vos articles, puis indiquez l'heure de retrait</p>
+          <p style={{ fontSize: 14, color: 'var(--textl)', marginBottom: 28 }}>Choisissez vos articles, puis indiquez l&apos;heure de retrait</p>
 
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 28 }}>
             {categories.map(cat => (
@@ -377,6 +484,9 @@ export default function CommanderPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700 }}>
               <span>Total</span><span style={{ color: 'var(--r)' }}>{total.toFixed(2)} €</span>
             </div>
+            <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 6 }}>
+              ⭐ Vous gagnerez environ {Math.floor(total)} points fidélité
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
@@ -401,10 +511,69 @@ export default function CommanderPage() {
               <input className="rf-input" value={nom} onChange={e => setNom(e.target.value)} placeholder="Votre nom" />
             </div>
 
-            {/* Téléphone */}
+            {/* Téléphone + fidélité */}
             <div>
-              <label className="rf-label">{t('emporter_tel')} *</label>
-              <input className="rf-input" value={tel} onChange={e => setTel(e.target.value)} placeholder="06 XX XX XX XX" type="tel" />
+              <label className="rf-label">{t('emporter_tel')} * <span style={{ fontSize: 11, color: '#1B5E20', fontWeight: 400 }}>— compte fidélité</span></label>
+              <input
+                className="rf-input"
+                value={tel}
+                onChange={e => { setTel(e.target.value); setClientTrouve(null); setClientFidele(null) }}
+                onBlur={() => rechercherClient(tel)}
+                placeholder="06 XX XX XX XX"
+                type="tel"
+              />
+
+              {/* Client fidèle trouvé */}
+              {clientTrouve === true && clientFidele && (() => {
+                const niv = getNiveau(clientFidele.nb_visites ?? 0)
+                const prochaineRecomp = RECOMPENSES_VITRINE.find(r => r.points > clientFidele.points_fidelite)
+                return (
+                  <div style={{ marginTop: 10, padding: '14px 16px', background: niv.bg, border: `1px solid ${niv.color}40`, borderRadius: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: niv.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
+                        {niv.icon}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: niv.color }}>Bonjour {clientFidele.nom.split(' ')[0]} !</div>
+                        <div style={{ fontSize: 12, color: '#555' }}>Membre {niv.label} · {clientFidele.nb_visites ?? 0} visite{(clientFidele.nb_visites ?? 0) > 1 ? 's' : ''}</div>
+                      </div>
+                      <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                        <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: niv.color }}>{clientFidele.points_fidelite}</div>
+                        <div style={{ fontSize: 11, color: '#888' }}>points</div>
+                      </div>
+                    </div>
+                    {prochaineRecomp && (
+                      <div style={{ fontSize: 12, color: '#555' }}>
+                        Prochaine récompense : {prochaineRecomp.icon} {prochaineRecomp.label} dans{' '}
+                        <strong>{prochaineRecomp.points - clientFidele.points_fidelite} pts</strong>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 4, fontWeight: 600 }}>
+                      +{Math.floor(total)} points avec cette commande
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Client non trouvé — proposer création */}
+              {clientTrouve === false && (
+                <div style={{ marginTop: 10, padding: '14px 16px', background: '#FFF8E1', border: '1px solid #F9A825', borderRadius: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#795548', marginBottom: 8 }}>
+                    🎁 Nouveau ? Créez votre compte fidélité !
+                  </div>
+                  <div style={{ fontSize: 12, color: '#795548', marginBottom: 10 }}>
+                    Gagnez {Math.floor(total)} points dès cette commande — 1 point = 1 euro dépensé
+                  </div>
+                  <label style={{ display: 'block', fontSize: 12, color: '#555', marginBottom: 4 }}>Votre prénom (pour créer le compte)</label>
+                  <input
+                    value={prenomNvClient}
+                    onChange={e => setPrenomNvClient(e.target.value)}
+                    placeholder="Ex: Sophie"
+                    style={{ width: '100%', padding: '8px 12px', border: '1px solid #F9A825', borderRadius: 6, fontSize: 13, fontFamily: 'Jost,sans-serif', boxSizing: 'border-box' }}
+                  />
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Laissez vide pour commander sans créer de compte</div>
+                </div>
+              )}
             </div>
 
             {/* Créneaux de retrait */}
@@ -418,12 +587,10 @@ export default function CommanderPage() {
                 </div>
               ) : (
                 <>
-                  {/* Bandeau jour */}
                   <div style={{ marginBottom: 14, padding: '8px 12px', background: 'rgba(183,28,28,0.06)', borderRadius: 6, fontSize: 13, color: '#B71C1C', fontWeight: 600 }}>
                     📅 {labelJour}
                   </div>
 
-                  {/* Service Midi */}
                   {slotsMidi.length > 0 && (
                     <div style={{ marginBottom: 16 }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--textl)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>🌞 Midi</div>
@@ -433,7 +600,6 @@ export default function CommanderPage() {
                     </div>
                   )}
 
-                  {/* Service Soir */}
                   {slotsSoir.length > 0 && (
                     <div>
                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--textl)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>🌙 Soir</div>

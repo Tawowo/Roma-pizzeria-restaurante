@@ -8,6 +8,16 @@ import { useLang } from '@/lib/LanguageContext'
 
 type Screen = 'home' | 'login' | 'create' | 'dashboard'
 
+type CommandeEmporter = {
+  id: string
+  numero_commande: number
+  created_at: string
+  statut: string
+  total: number
+  heure_retrait?: string
+  points_gagnes?: number
+}
+
 const NIVEAUX = [
   { min: 0, max: 5, label: 'Bronze', icon: '🥉', color: '#8D6E63', bg: '#EFEBE9' },
   { min: 6, max: 15, label: 'Argent', icon: '🥈', color: '#757575', bg: '#F5F5F5' },
@@ -48,6 +58,7 @@ export default function ComptePage() {
   const [client, setClient] = useState<Client | null>(null)
   const [reservations, setReservations] = useState<Reservation[]>([])
   const [mouvements, setMouvements] = useState<MouvementFidelite[]>([])
+  const [commandes, setCommandes] = useState<CommandeEmporter[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -61,20 +72,24 @@ export default function ComptePage() {
       supabase.from('clients').select('*').eq('id', storedId).single().then(({ data }) => {
         if (data) {
           setClient(data as Client)
-          loadDashboard(data.id)
+          loadDashboard(data.id, data.telephone)
           setScreen('dashboard')
         }
       })
     }
   }, [])
 
-  const loadDashboard = async (id: string) => {
-    const [{ data: res }, { data: mvts }] = await Promise.all([
+  const loadDashboard = async (id: string, telephone: string) => {
+    const [{ data: res }, { data: mvts }, { data: cmds }] = await Promise.all([
       supabase.from('reservations').select('*').eq('client_id', id).order('date_reservation', { ascending: false }).limit(5),
-      supabase.from('mouvements_fidelite').select('*').eq('client_id', id).order('created_at', { ascending: false }).limit(10),
+      supabase.from('mouvements_fidelite').select('*').eq('client_id', id).order('created_at', { ascending: false }).limit(20),
+      supabase.from('commandes').select('id, numero_commande, created_at, statut, total, heure_retrait, points_gagnes')
+        .eq('telephone', telephone).eq('type', 'a_emporter')
+        .order('created_at', { ascending: false }).limit(10),
     ])
     setReservations(res ?? [])
     setMouvements(mvts ?? [])
+    setCommandes(cmds ?? [])
   }
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -88,7 +103,7 @@ export default function ComptePage() {
         localStorage.setItem('roma_client_id', c.id)
         localStorage.setItem('roma_client_tel', c.telephone)
         localStorage.setItem('roma_client_nom', c.nom)
-        await loadDashboard(c.id)
+        await loadDashboard(c.id, c.telephone)
         setScreen('dashboard')
       } else {
         setError('Numéro inconnu. Souhaitez-vous créer un compte ?')
@@ -115,7 +130,7 @@ export default function ComptePage() {
       localStorage.setItem('roma_client_id', c.id)
       localStorage.setItem('roma_client_tel', c.telephone)
       localStorage.setItem('roma_client_nom', c.nom)
-      setReservations([]); setMouvements([])
+      setReservations([]); setMouvements([]); setCommandes([])
       setScreen('dashboard')
     } catch {
       setError("Une erreur est survenue. Vérifiez que ce numéro n'est pas déjà enregistré.")
@@ -150,9 +165,11 @@ export default function ComptePage() {
     setBonCode(`${code} — ${r.label}`)
   }
 
-  const visites = reservations.filter(r => r.statut === 'honoree').length
+  const visites = client?.nb_visites ?? reservations.filter(r => r.statut === 'honoree').length
   const niveau = getNiveau(visites)
-  const maxPoints = 60
+  const nextNiveau = NIVEAUX.find(n => n.min > visites)
+  const nextRecompense = RECOMPENSES.find(r => r.points > (client?.points_fidelite ?? 0))
+  const maxPoints = nextRecompense?.points ?? RECOMPENSES[RECOMPENSES.length - 1].points
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bianco-w)', display: 'flex', flexDirection: 'column' }}>
@@ -289,8 +306,13 @@ export default function ComptePage() {
                   <div style={{ height: '100%', width: `${Math.min(100, Math.round((client.points_fidelite / maxPoints) * 100))}%`, background: 'linear-gradient(90deg, var(--verde), var(--rosso))', transition: 'width 0.8s ease', borderRadius: 2 }} />
                 </div>
                 <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>
-                  {client.points_fidelite} / {maxPoints} pts — Prochaine récompense : {RECOMPENSES.find(r => r.points > client.points_fidelite)?.label ?? 'Toutes débloquées 🎉'}
+                  {client.points_fidelite} / {maxPoints} pts — {nextRecompense ? `Prochaine : ${nextRecompense.icon} ${nextRecompense.label} (encore ${nextRecompense.points - client.points_fidelite} pts)` : 'Toutes débloquées 🎉'}
                 </p>
+                {nextNiveau && (
+                  <p style={{ fontFamily: 'Jost', fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 }}>
+                    Niveau {nextNiveau.label} dans {nextNiveau.min - visites} visite{nextNiveau.min - visites > 1 ? 's' : ''}
+                  </p>
+                )}
               </div>
 
               {/* Catalogue récompenses */}
@@ -381,6 +403,43 @@ export default function ComptePage() {
                   </div>
                 )}
               </div>
+
+              {/* Historique commandes à emporter */}
+              {commandes.length > 0 && (
+                <div style={{ marginBottom: 32 }}>
+                  <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, color: 'var(--nero)', marginBottom: 16 }}>🍕 Mes commandes à emporter</h2>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {commandes.map(cmd => {
+                      const statutLabel: Record<string, string> = {
+                        en_preparation: 'En préparation', pret_encaisser: 'Prête', encaissee: 'Récupérée', annulee: 'Annulée', en_cours: 'En cours', brouillon: 'En cours'
+                      }
+                      const statutColor: Record<string, string> = {
+                        en_preparation: '#1B5E20', pret_encaisser: '#E65100', encaissee: '#555', annulee: '#B71C1C', en_cours: '#1B5E20', brouillon: '#888'
+                      }
+                      return (
+                        <div key={cmd.id} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                          <div>
+                            <p style={{ fontFamily: 'Playfair Display, serif', fontSize: 15, color: 'var(--nero)', marginBottom: 2 }}>
+                              Commande #{cmd.numero_commande}
+                              {cmd.heure_retrait && <span style={{ fontSize: 13, color: 'var(--grigio)', marginLeft: 8 }}>à {cmd.heure_retrait}</span>}
+                            </p>
+                            <p style={{ fontFamily: 'Jost', fontSize: 12, color: 'var(--grigio)' }}>
+                              {new Date(cmd.created_at).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long' })}
+                              {cmd.points_gagnes ? <span style={{ color: '#1B5E20', marginLeft: 8 }}>+{cmd.points_gagnes} pts</span> : null}
+                            </p>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, fontWeight: 700, color: 'var(--nero)', marginBottom: 4 }}>{cmd.total?.toFixed(2)} €</div>
+                            <span style={{ fontFamily: 'Jost', fontSize: 11, color: statutColor[cmd.statut] ?? '#555', fontWeight: 600 }}>
+                              {statutLabel[cmd.statut] ?? cmd.statut}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Historique points */}
               {mouvements.length > 0 && (

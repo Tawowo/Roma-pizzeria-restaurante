@@ -28,6 +28,7 @@ export type Formule = {
 export type Client = {
   id: string; nom: string; telephone: string; email?: string
   points_fidelite: number
+  nb_visites?: number
   created_at: string
 }
 export type MouvementFidelite = {
