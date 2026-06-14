@@ -227,11 +227,11 @@ export default function CommanderPage() {
 
     setLoading(true)
     const cmdPayload = {
-      nom: nom,
+      'Nom': nom,
       telephone: tel,
       heure_retrait: heureRetrait,
       date_retrait: dateRetrait,
-      type: 'a_emporter',
+      'Type': 'a_emporter',
       statut: 'en_preparation',
       notes: notes || null,
       total,
