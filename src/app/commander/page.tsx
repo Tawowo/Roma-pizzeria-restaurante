@@ -25,29 +25,12 @@ const CATS_PAS_CUISINE = [
   'bières', 'softs', 'eaux'
 ]
 
-const NIVEAUX_FIDELITE = [
-  { min: 0, max: 5, label: 'Bronze', icon: '🥉', color: '#8D6E63', bg: '#EFEBE9' },
-  { min: 6, max: 15, label: 'Argent', icon: '🥈', color: '#757575', bg: '#F0F0F0' },
-  { min: 16, max: Infinity, label: 'Or', icon: '🏆', color: '#1B5E20', bg: '#E8F5E9' },
-]
-
-const RECOMPENSES_VITRINE = [
-  { points: 8, label: 'Boisson offerte', icon: '🥤' },
-  { points: 16, label: 'Salade offerte', icon: '🥗' },
-  { points: 22, label: 'Dessert offert', icon: '🍮' },
-  { points: 32, label: 'Pizza Margherita offerte', icon: '🍕' },
-]
-
-function getNiveau(visites: number) {
-  return NIVEAUX_FIDELITE.find(n => visites >= n.min && visites <= n.max) ?? NIVEAUX_FIDELITE[0]
-}
-
 function genSlots(fromH: number, fromM: number, toH: number, toM: number): string[] {
   const slots: string[] = []
   let h = fromH, m = fromM
   while (h * 60 + m <= toH * 60 + toM) {
     slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
-    m += 5
+    m += 10
     if (m >= 60) { m -= 60; h++ }
   }
   return slots
@@ -73,7 +56,7 @@ export default function CommanderPage() {
   const [panier, setPanier] = useState<LignePanier[]>([])
   const [nom, setNom] = useState('')
   const [tel, setTel] = useState('')
-  const [dateRetrait, setDateRetrait] = useState('')
+  const [dateRetrait, setDateRetrait] = useState(() => new Date().toISOString().split('T')[0])
   const [labelJour, setLabelJour] = useState('')
   const [heureRetrait, setHeureRetrait] = useState('')
   const [notes, setNotes] = useState('')
@@ -99,14 +82,17 @@ export default function CommanderPage() {
     try {
       const { data } = await supabase
         .from('commandes')
-        .select('heure_retrait')
+        .select('heure_retrait, lignes_commande(quantite)')
         .eq('date_retrait', date)
         .neq('statut', 'annulee')
       const counts: Record<string, number> = {}
       if (data) {
-        data.forEach((c: { heure_retrait?: string }) => {
+        data.forEach((c: { heure_retrait?: string; lignes_commande?: { quantite: number }[] }) => {
           const h = (c.heure_retrait || '').slice(0, 5)
-          if (h) counts[h] = (counts[h] || 0) + 1
+          if (h) {
+            const total = (c.lignes_commande || []).reduce((s, l) => s + (l.quantite || 0), 0)
+            counts[h] = (counts[h] || 0) + total
+          }
         })
       }
       setSlotsCapacite(counts)
@@ -179,6 +165,7 @@ export default function CommanderPage() {
       if (data) {
         setClientFidele(data as ClientFidele)
         setClientTrouve(true)
+        setNom(data.nom)
       } else {
         if (error && error.code !== 'PGRST116') {
           const msg = `Erreur Supabase [${error.code}] : ${error.message}`
@@ -338,7 +325,7 @@ export default function CommanderPage() {
         }}
         title={full ? 'Créneau complet' : ''}
       >
-        {slot}
+        {full ? `${slot} (Complet)` : slot}
       </button>
     )
   }
@@ -551,36 +538,11 @@ export default function CommanderPage() {
               )}
 
               {/* Client fidèle trouvé */}
-              {clientTrouve === true && clientFidele && (() => {
-                const niv = getNiveau(clientFidele.nb_visites ?? 0)
-                const prochaineRecomp = RECOMPENSES_VITRINE.find(r => r.points > clientFidele.points)
-                return (
-                  <div style={{ marginTop: 10, padding: '14px 16px', background: niv.bg, border: `1px solid ${niv.color}40`, borderRadius: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: niv.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                        {niv.icon}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 700, fontSize: 14, color: niv.color }}>Bonjour {clientFidele.nom.split(' ')[0]} !</div>
-                        <div style={{ fontSize: 12, color: '#555' }}>Membre {niv.label} · {clientFidele.nb_visites ?? 0} visite{(clientFidele.nb_visites ?? 0) > 1 ? 's' : ''}</div>
-                      </div>
-                      <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                        <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, fontWeight: 700, color: niv.color }}>{clientFidele.points}</div>
-                        <div style={{ fontSize: 11, color: '#888' }}>points</div>
-                      </div>
-                    </div>
-                    {prochaineRecomp && (
-                      <div style={{ fontSize: 12, color: '#555' }}>
-                        Prochaine récompense : {prochaineRecomp.icon} {prochaineRecomp.label} dans{' '}
-                        <strong>{prochaineRecomp.points - clientFidele.points} pts</strong>
-                      </div>
-                    )}
-                    <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 4, fontWeight: 600 }}>
-                      +{Math.floor(total)} points avec cette commande
-                    </div>
-                  </div>
-                )
-              })()}
+              {clientTrouve === true && clientFidele && (
+                <div style={{ marginTop: 10, padding: '12px 16px', background: '#E8F5E9', border: '1px solid #A5D6A7', borderRadius: 8, fontSize: 14, color: '#1B5E20', fontWeight: 600 }}>
+                  🎁 Bonjour {clientFidele.nom.split(' ')[0]} ! Bienvenue.
+                </div>
+              )}
 
               {/* Client non trouvé — proposer création */}
               {clientTrouve === false && (
