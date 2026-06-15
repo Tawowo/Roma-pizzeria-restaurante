@@ -412,7 +412,10 @@ export default function CommandesPage() {
     } catch { setReduction(r => ({ ...r, bonFideliteMsg: 'Bon invalide', bonFideliteValeur: 0 })) }
   }
 
-  const makeLigne = (p: PanierItem, _statut: string, _ajout_apres: boolean, commande_id: string) => {
+  const makeLigne = (p: PanierItem, statut: string, ajout_apres: boolean, commande_id: string) => {
+    const cat = categories.find(c => c.id === p.article.categorie_id)
+    const nomCat = (cat?.nom ?? '').toLowerCase()
+    const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
     return {
       commande_id,
       article_id: p.article.id,
@@ -420,6 +423,10 @@ export default function CommandesPage() {
       quantite: p.quantite,
       taille: p.taille || null,
       prix_unitaire: p.article.prix,
+      statut,
+      ajout_apres,
+      pour_cuisine,
+      categorie_nom: cat?.nom ?? null,
     }
   }
 
@@ -613,7 +620,6 @@ export default function CommandesPage() {
   }
 
   const supprimerCommande = async (cmd: CommandeActive) => {
-    alert('supprimer appelé')
     console.log('suppression déclenchée pour:', cmd.id)
     setSaving(true)
     setErreur(null)

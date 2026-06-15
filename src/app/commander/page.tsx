@@ -236,14 +236,21 @@ export default function CommanderPage() {
     }
     console.log('[vitrine] commande créée OK — id:', cmd.id, 'statut:', cmd.statut, 'numéro:', cmd.numero_commande)
 
-    const lignes = panier.map(l => ({
-      commande_id: cmd.id,
-      article_id: l.article.id,
-      article_nom: l.article.nom,
-      quantite: l.quantite,
-      taille: l.taille === 'pala' ? 'Pala' : '33cm',
-      prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
-    }))
+    const lignes = panier.map(l => {
+      const cat = categories.find(c => c.id === l.article.categorie_id)
+      const nomCat = (cat?.nom ?? '').toLowerCase()
+      const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+      return {
+        commande_id: cmd.id,
+        article_id: l.article.id,
+        article_nom: l.article.nom,
+        quantite: l.quantite,
+        taille: l.taille === 'pala' ? 'Pala' : '33cm',
+        prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
+        categorie_nom: cat?.nom ?? null,
+        pour_cuisine,
+      }
+    })
     console.log('[vitrine] INSERT lignes_commande payload:', lignes)
     const { data: ligData, error: ligErr } = await supabase.from('lignes_commande').insert(lignes).select()
     console.log('insert lignes résultat:', ligData, ligErr)

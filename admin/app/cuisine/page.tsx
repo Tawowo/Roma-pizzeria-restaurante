@@ -85,6 +85,12 @@ function cardStyle(cmd: Commande, urgents: Set<string>): React.CSSProperties {
   return { background: cardBg(cmd.created_at), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }
 }
 
+const CATS_PAS_CUISINE = [
+  'boissons', 'vins', 'vins blancs', 'vins rouges', 'vins rosés',
+  'pétillants', 'apéritifs', 'digestifs', 'boisson', 'vin',
+  'bières', 'softs', 'eaux'
+]
+
 export default function CuisinePage() {
   const router = useRouter()
   const [commandes, setCommandes] = useState<Commande[]>([])
@@ -116,10 +122,15 @@ export default function CuisinePage() {
 
         let lignes: LigneCommande[]
         if (cmd.type === 'a_emporter') {
-          // Commandes vitrine : toutes les lignes sont à afficher
-          lignes = allLignes
+          // Commandes à emporter : exclure boissons/vins
+          lignes = allLignes.filter(l => {
+            const nomCat = (l.categorie_nom ?? '').toLowerCase()
+            if (nomCat) return !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+            // Si pas de categorie_nom (anciens tickets), afficher si pour_cuisine=true ou non défini
+            return l.pour_cuisine !== false
+          })
         } else {
-          // Commandes admin sur place : uniquement lignes cuisine
+          // Commandes sur place : uniquement lignes cuisine envoyées
           lignes = allLignes.filter(l => l.statut === 'envoye_cuisine' && l.pour_cuisine === true)
         }
 
