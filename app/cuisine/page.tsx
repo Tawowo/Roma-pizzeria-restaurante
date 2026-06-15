@@ -133,11 +133,12 @@ export default function CuisinePage() {
 
         let lignes: LigneCommande[]
         if (cmd.type === 'a_emporter') {
-          // Commandes à emporter : exclure boissons/vins
+          // Commandes à emporter : exclure boissons/vins uniquement si categorie_nom est renseigné
+          // Si pas de categorie_nom → afficher toutes les lignes (pas d'info pour filtrer)
           lignes = allLignes.filter(l => {
             const nomCat = (l.categorie_nom ?? '').toLowerCase()
-            if (nomCat) return !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
-            return l.pour_cuisine !== false
+            if (!nomCat) return true
+            return !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
           })
         } else {
           // Commandes sur place
