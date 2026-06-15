@@ -290,7 +290,6 @@ export default function CuisinePage() {
         <input
           type="date"
           value={dateFiltre}
-          max={todayStr}
           onChange={e => {
             const d = e.target.value
             setDateFiltre(d)
