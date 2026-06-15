@@ -97,21 +97,32 @@ export default function CuisinePage() {
   const [loading, setLoading] = useState(true)
   const [urgents, setUrgents] = useState<Set<string>>(new Set())
   const [soundOn, setSoundOn] = useState(true)
+  const [dateFiltre, setDateFiltre] = useState(() => new Date().toISOString().split('T')[0])
   const prevCountRef = useRef(0)
   const tick = useTimer()
 
-  const fetchCommandes = useCallback(async () => {
+  const todayStr = new Date().toISOString().split('T')[0]
+
+  const fetchCommandes = useCallback(async (date?: string) => {
+    const jour = date ?? dateFiltre
+    const isAujourdhui = jour === todayStr
     try {
       const session = getSession()
       if (!session) { router.replace('/login'); return }
 
-      // Récupérer toutes les commandes actives avec leurs lignes
-      const { data, error } = await supabase
+      let query = supabase
         .from('commandes')
         .select('*, lignes_commande(*)')
-        .in('statut', ['en_cours', 'en_preparation'])
+        .gte('created_at', jour + 'T00:00:00')
+        .lte('created_at', jour + 'T23:59:59')
         .order('created_at')
 
+      // Aujourd'hui : seulement commandes actives. Autre jour : tout afficher.
+      if (isAujourdhui) {
+        query = query.in('statut', ['en_cours', 'en_preparation'])
+      }
+
+      const { data, error } = await query
       if (error) throw error
 
       const result: Commande[] = []
@@ -126,12 +137,17 @@ export default function CuisinePage() {
           lignes = allLignes.filter(l => {
             const nomCat = (l.categorie_nom ?? '').toLowerCase()
             if (nomCat) return !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
-            // Si pas de categorie_nom (anciens tickets), afficher si pour_cuisine=true ou non défini
             return l.pour_cuisine !== false
           })
         } else {
-          // Commandes sur place : uniquement lignes cuisine envoyées
-          lignes = allLignes.filter(l => l.statut === 'envoye_cuisine' && l.pour_cuisine === true)
+          // Commandes sur place
+          if (isAujourdhui) {
+            // Vue active : uniquement lignes envoyées en cuisine
+            lignes = allLignes.filter(l => l.statut === 'envoye_cuisine' && l.pour_cuisine === true)
+          } else {
+            // Vue historique : toutes les lignes cuisine
+            lignes = allLignes.filter(l => l.pour_cuisine !== false)
+          }
         }
 
         if (lignes.length === 0) continue
@@ -158,7 +174,7 @@ export default function CuisinePage() {
     } finally {
       setLoading(false)
     }
-  }, [router])
+  }, [router, dateFiltre, todayStr])
 
   useEffect(() => {
     const session = getSession()
@@ -268,13 +284,51 @@ export default function CuisinePage() {
         </div>
       </div>
 
+      {/* Sélecteur de date */}
+      <div style={{ background: '#111', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', letterSpacing: 1, textTransform: 'uppercase' }}>📅 Jour :</span>
+        <input
+          type="date"
+          value={dateFiltre}
+          max={todayStr}
+          onChange={e => {
+            const d = e.target.value
+            setDateFiltre(d)
+            setLoading(true)
+            fetchCommandes(d)
+          }}
+          style={{
+            background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6,
+            color: '#F5F5F5', padding: '5px 10px', fontSize: 13, cursor: 'pointer',
+            colorScheme: 'dark',
+          }}
+        />
+        {dateFiltre !== todayStr && (
+          <button
+            onClick={() => {
+              setDateFiltre(todayStr)
+              setLoading(true)
+              fetchCommandes(todayStr)
+            }}
+            style={{ fontSize: 12, color: '#4caf50', background: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+          >
+            ← Aujourd&apos;hui
+          </button>
+        )}
+        {dateFiltre !== todayStr && (
+          <span style={{ fontSize: 11, color: '#D4A843', background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)', borderRadius: 4, padding: '3px 8px' }}>
+            📋 Vue historique
+          </span>
+        )}
+      </div>
+
       <div style={{ padding: '24px' }}>
         {loading ? (
           <div style={{ color: '#555' }}>Chargement...</div>
         ) : commandesTri.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 80, color: '#555', fontSize: 20 }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-            <div>Aucune commande en préparation</div>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>{dateFiltre === todayStr ? '✅' : '📋'}</div>
+            <div>{dateFiltre === todayStr ? 'Aucune commande en préparation' : 'Aucune commande ce jour-là'}</div>
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
