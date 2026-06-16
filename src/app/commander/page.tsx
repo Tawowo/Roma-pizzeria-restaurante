@@ -214,103 +214,117 @@ export default function CommanderPage() {
     if (panier.length === 0) { setErr('Votre panier est vide'); return }
 
     setLoading(true)
-    const cmdPayload = {
-      nom: nom,
-      telephone: tel,
-      heure_retrait: heureRetrait,
-      date_retrait: dateRetrait,
-      type: 'a_emporter',
-      statut: 'en_preparation',
-      notes: notes || null,
-      total,
-    }
-    console.log('[vitrine] INSERT commande payload:', cmdPayload)
-    const { data: cmd, error } = await supabase.from('commandes').insert(cmdPayload).select().single()
-    console.log('insert commande résultat:', cmd, error)
-
-    if (error || !cmd) {
-      console.error('[vitrine] commande insert ERREUR:', error?.code, error?.message, error?.details)
-      setErr(`Erreur création commande : ${error?.message ?? 'inconnue'}. Appelez le 06 68 36 62 98`)
-      setLoading(false)
-      return
-    }
-    console.log('[vitrine] commande créée OK — id:', cmd.id, 'statut:', cmd.statut, 'numéro:', cmd.numero_commande)
-
-    const lignes = panier.map(l => {
-      const cat = categories.find(c => c.id === l.article.categorie_id)
-      const nomCat = (cat?.nom ?? '').toLowerCase()
-      const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
-      return {
-        commande_id: cmd.id,
-        article_id: l.article.id,
-        article_nom: l.article.nom,
-        quantite: l.quantite,
-        taille: l.taille === 'pala' ? 'Pala' : '33cm',
-        prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
-        categorie_nom: cat?.nom ?? null,
-        pour_cuisine,
-      }
-    })
-    console.log('[vitrine] INSERT lignes_commande payload:', lignes)
-    const { data: ligData, error: ligErr } = await supabase.from('lignes_commande').insert(lignes).select()
-    console.log('insert lignes résultat:', ligData, ligErr)
-    if (ligErr) {
-      console.error('[vitrine] lignes insert ERREUR:', ligErr.code, ligErr.message, ligErr.details)
-      setErr(`Erreur insertion articles : ${ligErr.message}. Appelez le 06 68 36 62 98`)
-      setLoading(false)
-      return
-    }
-    console.log('[vitrine] lignes insérées OK (', ligData?.length, 'lignes) — commande visible en cuisine')
-
-    // ── Points fidélité (non bloquant) ─────────────────────────
     try {
-      const { data: param } = await supabase
-        .from('parametres').select('valeur').eq('cle', 'points_par_euro').single()
-      const ptsParEuro = parseFloat(param?.valeur ?? '1') || 1
-      const pts = Math.floor(total * ptsParEuro)
+      // Forcer format HH:MM:SS pour le type PostgreSQL "time without time zone"
+      const heureFormatee = heureRetrait.length === 5 ? heureRetrait + ':00' : heureRetrait
 
-      let clientId: string | null = clientFidele?.id ?? null
-      let newTotal = (clientFidele?.points ?? 0) + pts
+      const cmdPayload = {
+        nom: nom.trim(),
+        telephone: tel.trim(),
+        heure_retrait: heureFormatee,
+        date_retrait: dateRetrait,
+        type: 'a_emporter',
+        statut: 'en_preparation',
+        notes: notes.trim() || null,
+        total,
+      }
+      console.log('[vitrine] INSERT commande payload:', cmdPayload)
+      const { data: cmd, error } = await supabase.from('commandes').insert(cmdPayload).select('*').single()
+      console.log('[vitrine] insert commande résultat:', { data: cmd, error })
 
-      if (clientFidele) {
-        await supabase.from('clients').update({
-          points: newTotal,
-          nb_visites: (clientFidele.nb_visites ?? 0) + 1,
-        }).eq('id', clientFidele.id)
-        console.log('[vitrine] client fidèle mis à jour:', clientFidele.id, '+', pts, 'pts')
-      } else if (clientTrouve === false && prenomNvClient.trim()) {
-        newTotal = pts
-        const nomComplet = (prenomNvClient.trim() + ' ' + nom.trim()).trim()
-        const { data: nvCli } = await supabase.from('clients').insert({
-          nom: nomComplet,
-          telephone: tel.trim(),
-          points: pts,
-          nb_visites: 1,
-        }).select('id, points').single()
-        if (nvCli) {
-          clientId = nvCli.id
-          newTotal = (nvCli as unknown as Record<string, number>).points ?? pts
-          console.log('[vitrine] nouveau client créé:', nvCli.id)
+      if (error) {
+        console.error('[vitrine] commande insert ERREUR:', error.code, error.message, error.details, error.hint)
+        setErr(`Erreur création commande [${error.code}] : ${error.message}${error.details ? ' — ' + error.details : ''}. Appelez le 06 68 36 62 98`)
+        setLoading(false)
+        return
+      }
+      if (!cmd) {
+        setErr('Commande non créée (aucune donnée retournée). Appelez le 06 68 36 62 98')
+        setLoading(false)
+        return
+      }
+      console.log('[vitrine] commande créée OK — id:', cmd.id, 'statut:', cmd.statut, 'numéro:', cmd.numero_commande)
+
+      const lignes = panier.map(l => {
+        const cat = categories.find(c => c.id === l.article.categorie_id)
+        const nomCat = (cat?.nom ?? '').toLowerCase()
+        const pour_cuisine = !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
+        return {
+          commande_id: cmd.id,
+          article_id: l.article.id,
+          article_nom: l.article.nom,
+          quantite: l.quantite,
+          taille: l.taille === 'pala' ? 'Pala' : '33cm',
+          prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : (l.article.prix_reduction || l.article.prix),
+          categorie_nom: cat?.nom ?? null,
+          pour_cuisine,
         }
+      })
+      console.log('[vitrine] INSERT lignes_commande payload:', lignes)
+      const { data: ligData, error: ligErr } = await supabase.from('lignes_commande').insert(lignes).select('*')
+      console.log('[vitrine] insert lignes résultat:', { data: ligData, error: ligErr })
+      if (ligErr) {
+        console.error('[vitrine] lignes insert ERREUR:', ligErr.code, ligErr.message, ligErr.details)
+        setErr(`Erreur insertion articles [${ligErr.code}] : ${ligErr.message}. Appelez le 06 68 36 62 98`)
+        setLoading(false)
+        return
+      }
+      console.log('[vitrine] lignes insérées OK (', ligData?.length, 'lignes) — commande visible en cuisine')
+
+      // ── Points fidélité (non bloquant) ─────────────────────────
+      try {
+        const { data: param } = await supabase
+          .from('parametres').select('valeur').eq('cle', 'points_par_euro').single()
+        const ptsParEuro = parseFloat(param?.valeur ?? '1') || 1
+        const pts = Math.floor(total * ptsParEuro)
+
+        let clientId: string | null = clientFidele?.id ?? null
+        let newTotal = (clientFidele?.points ?? 0) + pts
+
+        if (clientFidele) {
+          await supabase.from('clients').update({
+            points: newTotal,
+            nb_visites: (clientFidele.nb_visites ?? 0) + 1,
+          }).eq('id', clientFidele.id)
+        } else if (clientTrouve === false && prenomNvClient.trim()) {
+          newTotal = pts
+          const nomComplet = (prenomNvClient.trim() + ' ' + nom.trim()).trim()
+          const { data: nvCli } = await supabase.from('clients').insert({
+            nom: nomComplet,
+            telephone: tel.trim(),
+            points: pts,
+            nb_visites: 1,
+          }).select('id, points').single()
+          if (nvCli) {
+            clientId = nvCli.id
+            newTotal = (nvCli as unknown as Record<string, number>).points ?? pts
+          }
+        }
+
+        if (clientId && pts > 0) {
+          await supabase.from('mouvements_fidelite').insert({
+            client_id: clientId,
+            points: pts,
+            motif: `Commande à emporter #${cmd.numero_commande}`,
+          })
+          await supabase.from('commandes').update({ points_gagnes: pts }).eq('id', cmd.id)
+        }
+
+        if (pts > 0) { setPointsGagnes(pts); setTotalPointsApres(newTotal) }
+      } catch (fidelErr) {
+        console.error('[vitrine] fidelité error (non bloquant):', fidelErr)
       }
 
-      if (clientId && pts > 0) {
-        await supabase.from('mouvements_fidelite').insert({
-          client_id: clientId,
-          points: pts,
-          motif: `Commande à emporter #${cmd.numero_commande}`,
-        })
-        await supabase.from('commandes').update({ points_gagnes: pts }).eq('id', cmd.id)
-      }
-
-      if (pts > 0) { setPointsGagnes(pts); setTotalPointsApres(newTotal) }
-    } catch (fidelErr) {
-      console.error('[vitrine] fidelité error (non bloquant):', fidelErr)
+      // ✅ Seulement ici, après tous les inserts réussis
+      setNumCmd(cmd.numero_commande)
+      setStep('confirmation')
+    } catch (unexpectedErr) {
+      const msg = unexpectedErr instanceof Error ? unexpectedErr.message : String(unexpectedErr)
+      console.error('[vitrine] erreur inattendue submitCommande:', msg)
+      setErr(`Erreur inattendue : ${msg}. Appelez le 06 68 36 62 98`)
+    } finally {
+      setLoading(false)
     }
-
-    setNumCmd(cmd.numero_commande)
-    setStep('confirmation')
-    setLoading(false)
   }
 
   const renderSlotBtn = (slot: string) => {
