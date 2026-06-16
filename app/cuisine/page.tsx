@@ -42,28 +42,36 @@ function useTimer() {
   return tick
 }
 
-function elapsed(createdAt: string): number {
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000)
+function formatHeure(h: string): string {
+  const time = h.includes('T') ? h.split('T')[1] : h
+  const [hh, mm] = time.substring(0, 5).split(':')
+  return `${hh}h${mm}`
 }
 
-function formatElapsed(createdAt: string): string {
-  const totalSeconds = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000)
-  const m = Math.floor(totalSeconds / 60)
-  const s = totalSeconds % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
+// Retourne les secondes restantes avant heure_retrait (négatif si dépassé)
+function secondesRestantes(heureRetrait: string): number {
+  const now = new Date()
+  const time = heureRetrait.includes('T') ? heureRetrait.split('T')[1] : heureRetrait
+  const [hh, mm, ss] = time.substring(0, 8).split(':')
+  const retrait = new Date(now)
+  retrait.setHours(Number(hh), Number(mm), Number(ss ?? 0), 0)
+  return Math.floor((retrait.getTime() - now.getTime()) / 1000)
 }
 
-function cardBg(createdAt: string): string {
-  const min = elapsed(createdAt)
-  if (min < 10) return '#1a3a1a'
-  if (min < 20) return '#3a2a0a'
-  return '#3a0a0a'
+function formatComptaRebours(heureRetrait: string): string {
+  const secs = secondesRestantes(heureRetrait)
+  const absSecs = Math.abs(secs)
+  const m = Math.floor(absSecs / 60)
+  const s = absSecs % 60
+  const str = `${m}:${s.toString().padStart(2, '0')}`
+  return secs < 0 ? `-${str}` : str
 }
 
-function timerColor(createdAt: string): string {
-  const min = elapsed(createdAt)
-  if (min < 10) return '#4caf50'
-  if (min < 20) return '#D4A843'
+function timerColorRetrait(heureRetrait: string): string {
+  const secs = secondesRestantes(heureRetrait)
+  const mins = secs / 60
+  if (mins > 15) return '#4caf50'
+  if (mins > 5) return '#D4A843'
   return '#ef5350'
 }
 
@@ -82,7 +90,13 @@ function cardStyle(cmd: Commande, urgents: Set<string>): React.CSSProperties {
 
   if (isUrgent) return { background: '#2a1500', border: '2px solid #D4A843', borderRadius: 16, padding: 24 }
   if (isEmporter) return { background: '#1a1500', border: '1px solid #F57F17', borderRadius: 16, padding: 24 }
-  return { background: cardBg(cmd.created_at), border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }
+
+  // Sur place : couleur selon ancienneté
+  const min = Math.floor((Date.now() - new Date(cmd.created_at).getTime()) / 60000)
+  let bg = '#1a3a1a'
+  if (min >= 10 && min < 20) bg = '#3a2a0a'
+  else if (min >= 20) bg = '#3a0a0a'
+  return { background: bg, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }
 }
 
 const CATS_PAS_CUISINE = [
@@ -117,7 +131,6 @@ export default function CuisinePage() {
         .lte('created_at', jour + 'T23:59:59')
         .order('created_at')
 
-      // Aujourd'hui : seulement commandes actives. Autre jour : tout afficher.
       if (isAujourdhui) {
         query = query.in('statut', ['en_cours', 'en_preparation'])
       }
@@ -133,20 +146,15 @@ export default function CuisinePage() {
 
         let lignes: LigneCommande[]
         if (cmd.type === 'a_emporter') {
-          // Commandes à emporter : exclure boissons/vins uniquement si categorie_nom est renseigné
-          // Si pas de categorie_nom → afficher toutes les lignes (pas d'info pour filtrer)
           lignes = allLignes.filter(l => {
             const nomCat = (l.categorie_nom ?? '').toLowerCase()
             if (!nomCat) return true
             return !CATS_PAS_CUISINE.some(c => nomCat.includes(c))
           })
         } else {
-          // Commandes sur place
           if (isAujourdhui) {
-            // Vue active : uniquement lignes envoyées en cuisine
             lignes = allLignes.filter(l => l.statut === 'envoye_cuisine' && l.pour_cuisine === true)
           } else {
-            // Vue historique : toutes les lignes cuisine
             lignes = allLignes.filter(l => l.pour_cuisine !== false)
           }
         }
@@ -169,7 +177,19 @@ export default function CuisinePage() {
         })
       }
 
-      setCommandes(result)
+      // Tri : à emporter par heure_retrait, sur place par created_at
+      const aEmporter = result
+        .filter(c => c.type === 'a_emporter')
+        .sort((a, b) => {
+          const hA = (a.heure_retrait ?? '').includes('T') ? (a.heure_retrait ?? '').split('T')[1] : (a.heure_retrait ?? '')
+          const hB = (b.heure_retrait ?? '').includes('T') ? (b.heure_retrait ?? '').split('T')[1] : (b.heure_retrait ?? '')
+          return hA.localeCompare(hB)
+        })
+      const surPlace = result
+        .filter(c => c.type === 'sur_place')
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+
+      setCommandes([...aEmporter, ...surPlace])
     } catch (err) {
       console.error('Cuisine fetch error:', err)
     } finally {
@@ -193,7 +213,6 @@ export default function CuisinePage() {
     return () => { supabase.removeChannel(channel) }
   }, [fetchCommandes])
 
-  // Bip à chaque nouveau ticket
   useEffect(() => {
     if (soundOn && commandes.length > prevCountRef.current) {
       try {
@@ -212,14 +231,11 @@ export default function CuisinePage() {
 
   const marquerPrete = async (cmd: Commande) => {
     try {
-      // Marquer uniquement les lignes visibles (envoye_cuisine) comme prêtes
       const ligneIds = cmd.lignes_commande.map(l => l.id)
       if (ligneIds.length > 0) {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
       }
-      // Mettre la commande en pret_encaisser
       await supabase.from('commandes').update({ statut: 'pret_encaisser' }).eq('id', cmd.id)
-      // Mettre la table en orange
       if (cmd.table_numero) {
         await supabase
           .from('tables_restaurant')
@@ -241,18 +257,13 @@ export default function CuisinePage() {
     })
   }
 
+  // Tri final : urgents en premier, puis ordre tel que fetchCommandes a déjà trié
   const commandesTri = [...commandes].sort((a, b) => {
     const aUrgent = urgents.has(a.id) ? 0 : 1
     const bUrgent = urgents.has(b.id) ? 0 : 1
-    if (aUrgent !== bUrgent) return aUrgent - bUrgent
-    // Emporter : trier par heure de retrait croissante
-    if (a.type === 'a_emporter' && b.type === 'a_emporter') {
-      return (a.heure_retrait || '99:99').localeCompare(b.heure_retrait || '99:99')
-    }
-    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    return aUrgent - bUrgent
   })
 
-  // tick used to force re-render for timers
   void tick
 
   return (
@@ -332,99 +343,107 @@ export default function CuisinePage() {
           </div>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-            {commandesTri.map(cmd => (
-              <div key={cmd.id} style={{ ...cardStyle(cmd, urgents), display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {commandesTri.map(cmd => {
+              const displayNum = cmd.type === 'a_emporter'
+                ? `E${cmd.numero_commande}`
+                : `${cmd.numero_commande}`
 
-                {/* Numéro + Type */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                  <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>#{cmd.numero_commande}</div>
-                  <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
-                      {cmd.type === 'sur_place'
-                        ? `TABLE ${cmd.table_numero ?? ''} — ${(cmd.zone ?? 'RDC').toUpperCase()}`
-                        : `À EMPORTER${cmd.nom_client ? ' — ' + cmd.nom_client.toUpperCase() : ''}`}
-                    </div>
-                    {cmd.type === 'a_emporter' && (
-                      <span style={{ background: '#F57F17', color: '#000', fontWeight: 700, fontSize: 11, padding: '3px 8px', borderRadius: 4 }}>
-                        📦 EMPORTER
-                      </span>
-                    )}
-                  </div>
-                </div>
+              return (
+                <div key={cmd.id} style={{ ...cardStyle(cmd, urgents), display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-                {/* Nom client + heure retrait pour emporter */}
-                {cmd.nom_client && (
-                  <div style={{ fontSize: 20, color: '#F5F5F5', fontWeight: 600 }}>{cmd.nom_client}</div>
-                )}
-                {cmd.type === 'a_emporter' && cmd.heure_retrait && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: 28, fontWeight: 900, color: '#F57F17', fontFamily: 'monospace', letterSpacing: 2 }}>
-                      ⏰ {cmd.heure_retrait}
-                    </span>
-                    {cmd.telephone && (
-                      <span style={{ fontSize: 13, color: '#aaa' }}>📞 {cmd.telephone}</span>
-                    )}
-                  </div>
-                )}
-
-                {/* Heure + Timer */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <span style={{ fontSize: 12, color: '#666' }}>
-                    {new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  <span style={{ fontSize: 24, fontFamily: 'monospace', color: timerColor(cmd.created_at), fontWeight: 700 }}>
-                    ⏱ {formatElapsed(cmd.created_at)}
-                  </span>
-                </div>
-
-                {/* Articles — uniquement les lignes envoye_cuisine pour_cuisine=true */}
-                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, flex: 1 }}>
-                  {cmd.lignes_commande.map(l => (
-                    <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 18 }}>×{l.quantite}</span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
-                        {l.taille && <span style={{ fontSize: 12, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{l.taille}</span>}
-                        {isAjoutApres(l, cmd.created_at) && (
-                          <span style={{ fontSize: 11, background: '#D4A843', color: '#000', fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>AJOUT</span>
-                        )}
+                  {/* Numéro + Type */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>#{displayNum}</div>
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
+                        {cmd.type === 'sur_place'
+                          ? `TABLE ${cmd.table_numero ?? ''} — ${(cmd.zone ?? 'RDC').toUpperCase()}`
+                          : `À EMPORTER${cmd.nom_client ? ' — ' + cmd.nom_client.toUpperCase() : ''}`}
                       </div>
-                      {l.commentaire && (
-                        <div style={{ fontSize: 13, color: '#ef5350', marginTop: 2, paddingLeft: 32 }}>⚠ {l.commentaire}</div>
+                      {cmd.type === 'a_emporter' && (
+                        <span style={{ background: '#F57F17', color: '#000', fontWeight: 700, fontSize: 11, padding: '3px 8px', borderRadius: 4 }}>
+                          📦 EMPORTER
+                        </span>
                       )}
                     </div>
-                  ))}
-                </div>
-
-                {/* Notes spéciales */}
-                {cmd.notes && (
-                  <div style={{ background: 'rgba(183,28,28,0.3)', border: '1px solid rgba(183,28,28,0.5)', borderRadius: 8, padding: 10, fontSize: 13, color: '#ef9090' }}>
-                    ⚠️ {cmd.notes}
                   </div>
-                )}
 
-                {/* Boutons URGENT + PRÊTE */}
-                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                  <button
-                    onClick={() => toggleUrgent(cmd.id)}
-                    style={{
-                      flex: 1, padding: '0 10px', minHeight: 56, borderRadius: 8,
-                      background: urgents.has(cmd.id) ? '#D4A843' : 'rgba(212,168,67,0.2)',
-                      border: '1px solid #D4A843', color: urgents.has(cmd.id) ? '#000' : '#D4A843',
-                      cursor: 'pointer', fontWeight: 700, fontSize: 14
-                    }}
-                  >
-                    {urgents.has(cmd.id) ? '⚠️ URGENT ✓' : '⚠️ URGENT'}
-                  </button>
-                  <button
-                    onClick={() => marquerPrete(cmd)}
-                    style={{ flex: 1, padding: '0 10px', minHeight: 56, background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
-                  >
-                    ✅ PRÊTE
-                  </button>
+                  {/* Nom client */}
+                  {cmd.nom_client && (
+                    <div style={{ fontSize: 20, color: '#F5F5F5', fontWeight: 600 }}>{cmd.nom_client}</div>
+                  )}
+
+                  {/* Heure retrait + chrono compte à rebours (à emporter uniquement) */}
+                  {cmd.type === 'a_emporter' && cmd.heure_retrait && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 28, fontWeight: 900, color: '#F57F17', fontFamily: 'monospace', letterSpacing: 2 }}>
+                        ⏰ {formatHeure(cmd.heure_retrait)}
+                      </span>
+                      <span style={{ fontSize: 24, fontFamily: 'monospace', fontWeight: 700, color: timerColorRetrait(cmd.heure_retrait) }}>
+                        {formatComptaRebours(cmd.heure_retrait)}
+                      </span>
+                      {cmd.telephone && (
+                        <span style={{ fontSize: 13, color: '#aaa' }}>📞 {cmd.telephone}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Heure de commande (sur place uniquement, pas de chrono) */}
+                  {cmd.type === 'sur_place' && (
+                    <div style={{ fontSize: 12, color: '#666' }}>
+                      {new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                  )}
+
+                  {/* Articles */}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, flex: 1 }}>
+                    {cmd.lignes_commande.map(l => (
+                      <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 18 }}>×{l.quantite}</span>
+                          <span style={{ fontSize: 18, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
+                          {l.taille && <span style={{ fontSize: 12, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{l.taille}</span>}
+                          {isAjoutApres(l, cmd.created_at) && (
+                            <span style={{ fontSize: 11, background: '#D4A843', color: '#000', fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>AJOUT</span>
+                          )}
+                        </div>
+                        {l.commentaire && (
+                          <div style={{ fontSize: 13, color: '#ef5350', marginTop: 2, paddingLeft: 32 }}>⚠ {l.commentaire}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Notes spéciales */}
+                  {cmd.notes && (
+                    <div style={{ background: 'rgba(183,28,28,0.3)', border: '1px solid rgba(183,28,28,0.5)', borderRadius: 8, padding: 10, fontSize: 13, color: '#ef9090' }}>
+                      ⚠️ {cmd.notes}
+                    </div>
+                  )}
+
+                  {/* Boutons URGENT + PRÊTE */}
+                  <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                    <button
+                      onClick={() => toggleUrgent(cmd.id)}
+                      style={{
+                        flex: 1, padding: '0 10px', minHeight: 56, borderRadius: 8,
+                        background: urgents.has(cmd.id) ? '#D4A843' : 'rgba(212,168,67,0.2)',
+                        border: '1px solid #D4A843', color: urgents.has(cmd.id) ? '#000' : '#D4A843',
+                        cursor: 'pointer', fontWeight: 700, fontSize: 14
+                      }}
+                    >
+                      {urgents.has(cmd.id) ? '⚠️ URGENT ✓' : '⚠️ URGENT'}
+                    </button>
+                    <button
+                      onClick={() => marquerPrete(cmd)}
+                      style={{ flex: 1, padding: '0 10px', minHeight: 56, background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      ✅ PRÊTE
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
