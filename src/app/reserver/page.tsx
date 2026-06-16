@@ -1,10 +1,52 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useLang } from '@/lib/LanguageContext'
 import type { Lang } from '@/lib/translations'
+
+// Horaires d'ouverture par jour JS (0=dim, 1=lun, 2=mar, 3=mer, 4=jeu, 5=ven, 6=sam)
+function getHoraires(day: number): { debut: string; fin: string }[] {
+  if (day === 1) return []
+  if (day === 2 || day === 0) return [{ debut: '19:00', fin: '21:30' }]
+  if (day >= 3 && day <= 5) return [{ debut: '12:00', fin: '14:30' }, { debut: '19:00', fin: '21:30' }]
+  if (day === 6) return [{ debut: '12:00', fin: '14:30' }, { debut: '19:00', fin: '22:00' }]
+  return []
+}
+
+function toMins(h: string): number {
+  const [hh, mm] = h.substring(0, 5).split(':').map(Number)
+  return hh * 60 + mm
+}
+
+function fromMins(mins: number): string {
+  return `${Math.floor(mins / 60).toString().padStart(2, '0')}:${(mins % 60).toString().padStart(2, '0')}`
+}
+
+function isHeureDansHoraires(day: number, heure: string): boolean {
+  const mins = toMins(heure)
+  return getHoraires(day).some(h => mins >= toMins(h.debut) && mins <= toMins(h.fin))
+}
+
+function horairesLabel(day: number): string {
+  const h = getHoraires(day)
+  if (h.length === 0) return 'Fermé'
+  return h.map(s => `${s.debut}–${s.fin}`).join(' · ')
+}
+
+const ZONE_LABELS: Record<string, string> = { rdc: 'RDC', etage: 'Étage', terrasse: 'Terrasse' }
+const ZONES = ['rdc', 'etage', 'terrasse']
+
+interface Dispo {
+  ok: boolean
+  tablesDispo: number
+  zone: string
+  heure: string
+  couverts: number
+  suggestionHeure?: string
+  zonesDispo?: string[]
+}
 
 export default function ReserverPage() {
   const { lang, setLang, t } = useLang()
@@ -13,12 +55,86 @@ export default function ReserverPage() {
   })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
-  const [error, setError]     = useState('')
+  const [error, setError] = useState('')
+  const [dispo, setDispo] = useState<Dispo | null>(null)
+  const [checkingDispo, setCheckingDispo] = useState(false)
+
+  const checkDispo = useCallback(async (date: string, heure: string, zone: string, couverts: string) => {
+    setDispo(null)
+    if (!date || !heure || !zone || !couverts) return
+    const day = new Date(date + 'T12:00:00').getDay()
+    if (day === 1 || !isHeureDansHoraires(day, heure)) return
+
+    setCheckingDispo(true)
+    try {
+      const nCouverts = parseInt(couverts)
+      const heureMins = toMins(heure)
+
+      const countDispo = async (z: string, targetMins: number): Promise<number> => {
+        const { data: tables } = await supabase
+          .from('tables_restaurant').select('capacite').eq('zone', z).eq('actif', true)
+        const { data: resas } = await supabase
+          .from('reservations').select('heure_reservation')
+          .eq('date_reservation', date).eq('zone_preference', z).neq('statut', 'annulee')
+        const capables = (tables ?? []).filter((t: { capacite: number }) => t.capacite >= nCouverts).length
+        const conflits = (resas ?? []).filter((r: { heure_reservation: string }) => {
+          const rm = toMins(r.heure_reservation)
+          return targetMins < rm + 75 && targetMins + 75 > rm
+        }).length
+        return Math.max(0, capables - conflits)
+      }
+
+      const tablesDispo = await countDispo(zone, heureMins)
+
+      if (tablesDispo > 0) {
+        setDispo({ ok: true, tablesDispo, zone, heure, couverts: nCouverts })
+        return
+      }
+
+      // Chercher prochain créneau dans la même zone
+      let suggestionHeure: string | undefined
+      const day2 = new Date(date + 'T12:00:00').getDay()
+      for (let delta = 15; delta <= 120; delta += 15) {
+        const newMins = heureMins + delta
+        const newHeure = fromMins(newMins)
+        if (!isHeureDansHoraires(day2, newHeure)) continue
+        const d = await countDispo(zone, newMins)
+        if (d > 0) { suggestionHeure = newHeure; break }
+      }
+
+      // Chercher autres zones disponibles au même créneau
+      const zonesDispo: string[] = []
+      for (const z of ZONES.filter(z => z !== zone)) {
+        const d = await countDispo(z, heureMins)
+        if (d > 0) zonesDispo.push(z)
+      }
+
+      setDispo({ ok: false, tablesDispo: 0, zone, heure, couverts: nCouverts, suggestionHeure, zonesDispo })
+    } catch (err) {
+      console.error('checkDispo', err)
+    } finally {
+      setCheckingDispo(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const { date, heure, zone, couverts } = form
+    if (date && heure && zone) {
+      const t = setTimeout(() => checkDispo(date, heure, zone, couverts), 400)
+      return () => clearTimeout(t)
+    } else {
+      setDispo(null)
+    }
+  }, [form.date, form.heure, form.zone, form.couverts, checkDispo])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const day = new Date(form.date + 'T12:00:00').getDay()
     if (day === 1) { setError(t('reserver_lundi')); return }
+    if (form.heure && !isHeureDansHoraires(day, form.heure)) {
+      setError(`Cet horaire est en dehors de nos heures d'ouverture (${horairesLabel(day)}).`)
+      return
+    }
     setLoading(true); setError('')
     try {
       let clientId: string | undefined
@@ -30,12 +146,13 @@ export default function ReserverPage() {
           .select('id').single()
         clientId = nc?.id
       }
+      const heureFormatee = form.heure.length === 5 ? form.heure + ':00' : form.heure
       const { error: resaErr } = await supabase.from('reservations').insert({
         client_id: clientId ?? null,
         nom: form.nom,
         telephone: form.telephone,
         date_reservation: form.date,
-        heure_reservation: form.heure,
+        heure_reservation: heureFormatee,
         nombre_couverts: parseInt(form.couverts),
         zone_preference: form.zone || null,
         notes: form.notes || null,
@@ -79,30 +196,55 @@ export default function ReserverPage() {
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
               <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '24px' }}>{t('reserver_succes')}</p>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => { setSuccess(false); setForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }) }} className="btn-secondary">{t('reserver_titre')}</button>
+                <button onClick={() => { setSuccess(false); setForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }); setDispo(null) }} className="btn-secondary">{t('reserver_titre')}</button>
                 <Link href="/" className="btn-primary">{t('retour')}</Link>
               </div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.15)', borderRadius: '2px', padding: 'clamp(24px,5vw,40px)' }}>
+              {/* Nom + Téléphone */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div><label className="rf-label">{t('reserver_nom')}</label><input type="text" className="rf-input" placeholder={t('reserver_nom')} value={form.nom} onChange={e => setForm(p=>({...p,nom:e.target.value}))} required /></div>
-                <div><label className="rf-label">{t('reserver_tel')}</label><input type="tel" className="rf-input" placeholder={t('reserver_tel')} value={form.telephone} onChange={e => setForm(p=>({...p,telephone:e.target.value}))} required /></div>
+                <div>
+                  <label className="rf-label">{t('reserver_nom')}</label>
+                  <input type="text" className="rf-input" placeholder={t('reserver_nom')} value={form.nom} onChange={e => setForm(p=>({...p,nom:e.target.value}))} required />
+                </div>
+                <div>
+                  <label className="rf-label">{t('reserver_tel')}</label>
+                  <input type="tel" className="rf-input" placeholder={t('reserver_tel')} value={form.telephone} onChange={e => setForm(p=>({...p,telephone:e.target.value}))} required />
+                </div>
               </div>
+
+              {/* Date + Heure */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                 <div>
                   <label className="rf-label">{t('reserver_date')}</label>
                   <input type="date" className="rf-input" value={form.date}
-                    onChange={e => { setError(new Date(e.target.value+'T12:00:00').getDay()===1?t('reserver_lundi'):''); setForm(p=>({...p,date:e.target.value})) }} required />
+                    onChange={e => {
+                      const d = e.target.value
+                      const day = new Date(d + 'T12:00:00').getDay()
+                      setError(day === 1 ? t('reserver_lundi') : '')
+                      setForm(p=>({...p, date: d}))
+                    }} required />
+                  {form.date && (() => {
+                    const day = new Date(form.date + 'T12:00:00').getDay()
+                    if (day === 1) return null
+                    const label = horairesLabel(day)
+                    return <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--text-l)', marginTop: '4px' }}>Horaires : {label}</p>
+                  })()}
                 </div>
                 <div>
                   <label className="rf-label">{t('reserver_heure')}</label>
-                  <select className="rf-select" value={form.heure} onChange={e => setForm(p=>({...p,heure:e.target.value}))} required>
-                    <option value="">--:--</option>
-                    {['12:00','12:30','13:00','13:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00'].map(h => <option key={h} value={h}>{h}</option>)}
-                  </select>
+                  <input
+                    type="time"
+                    className="rf-input"
+                    value={form.heure}
+                    onChange={e => setForm(p=>({...p, heure: e.target.value}))}
+                    required
+                  />
                 </div>
               </div>
+
+              {/* Couverts + Zone */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                 <div>
                   <label className="rf-label">{t('reserver_couverts')}</label>
@@ -112,7 +254,7 @@ export default function ReserverPage() {
                 </div>
                 <div>
                   <label className="rf-label">{t('reserver_zone')}</label>
-                  <select className="rf-select" value={form.zone} onChange={e => setForm(p=>({...p,zone:e.target.value}))}>
+                  <select className="rf-select" value={form.zone} onChange={e => setForm(p=>({...p,zone:e.target.value}))} required>
                     <option value="">{t('reserver_zone_indifferent')}</option>
                     <option value="rdc">{t('reserver_zone_rdc')}</option>
                     <option value="etage">{t('reserver_zone_etage')}</option>
@@ -120,11 +262,52 @@ export default function ReserverPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Bandeau disponibilité */}
+              {checkingDispo && (
+                <div style={{ marginTop: '12px', padding: '10px 14px', background: 'rgba(201,148,58,0.08)', borderRadius: '2px', fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--text-l)' }}>
+                  Vérification de la disponibilité…
+                </div>
+              )}
+              {!checkingDispo && dispo && dispo.ok && (
+                <div style={{ marginTop: '12px', padding: '10px 14px', background: 'rgba(74,103,65,0.08)', border: '1px solid rgba(74,103,65,0.2)', borderRadius: '2px', fontFamily: "'Jost',sans-serif", fontSize: '13px', color: '#2d5a27' }}>
+                  ✅ {dispo.tablesDispo} table{dispo.tablesDispo > 1 ? 's' : ''} disponible{dispo.tablesDispo > 1 ? 's' : ''} en {ZONE_LABELS[dispo.zone]} pour {dispo.couverts} couvert{dispo.couverts > 1 ? 's' : ''}
+                </div>
+              )}
+              {!checkingDispo && dispo && !dispo.ok && (
+                <div style={{ marginTop: '12px', padding: '12px 14px', background: 'rgba(196,98,45,0.06)', border: '1px solid rgba(196,98,45,0.2)', borderRadius: '2px', fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)' }}>
+                  <p style={{ marginBottom: '8px' }}>
+                    Aucune table disponible en {ZONE_LABELS[dispo.zone]} pour {dispo.couverts} couvert{dispo.couverts > 1 ? 's' : ''} à {dispo.heure}.
+                    {dispo.suggestionHeure && ` Disponible à ${dispo.suggestionHeure} dans cette zone.`}
+                    {!dispo.suggestionHeure && dispo.zonesDispo && dispo.zonesDispo.length > 0 && ` ${dispo.zonesDispo.map(z => ZONE_LABELS[z]).join(', ')} est disponible à cet horaire.`}
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {dispo.suggestionHeure && (
+                      <button type="button"
+                        onClick={() => setForm(p => ({ ...p, heure: dispo.suggestionHeure! }))}
+                        style={{ padding: '5px 12px', background: 'var(--terra)', color: '#fff', border: 'none', borderRadius: '2px', fontSize: '12px', cursor: 'pointer', fontFamily: "'Jost',sans-serif" }}>
+                        → {dispo.suggestionHeure} en {ZONE_LABELS[dispo.zone]}
+                      </button>
+                    )}
+                    {(dispo.zonesDispo ?? []).map(z => (
+                      <button key={z} type="button"
+                        onClick={() => setForm(p => ({ ...p, zone: z }))}
+                        style={{ padding: '5px 12px', background: 'var(--terra)', color: '#fff', border: 'none', borderRadius: '2px', fontSize: '12px', cursor: 'pointer', fontFamily: "'Jost',sans-serif" }}>
+                        → {ZONE_LABELS[z]} à {dispo.heure}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
               <div style={{ marginTop: '16px' }}>
                 <label className="rf-label">{t('reserver_message')}</label>
                 <textarea className="rf-textarea" placeholder={t('reserver_message')} value={form.notes} onChange={e => setForm(p=>({...p,notes:e.target.value}))} />
               </div>
+
               {error && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)', marginTop: '12px', padding: '10px 14px', background: 'rgba(196,98,45,0.08)', borderRadius: '2px' }}>{error}</p>}
+
               <button type="submit" className="btn-primary" disabled={loading} style={{ width: '100%', marginTop: '24px', padding: '16px', justifyContent: 'center', opacity: loading ? 0.7 : 1 }}>
                 {loading ? t('chargement') : t('reserver_btn')}
               </button>
