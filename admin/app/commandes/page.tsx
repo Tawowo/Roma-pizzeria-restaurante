@@ -247,8 +247,6 @@ export default function CommandesPage() {
   const [empDate, setEmpDate] = useState('')
   const [empLabelJour, setEmpLabelJour] = useState('')
   const [empHeure, setEmpHeure] = useState('')
-  const [empSlotsMidi, setEmpSlotsMidi] = useState<string[]>([])
-  const [empSlotsSoir, setEmpSlotsSoir] = useState<string[]>([])
   const [empPanier, setEmpPanier] = useState<PanierItem[]>([])
   const [empCatActive, setEmpCatActive] = useState('')
   const [empErr, setEmpErr] = useState<string | null>(null)
@@ -687,11 +685,9 @@ export default function CommandesPage() {
   }
 
   const ouvrirModalEmporter = () => {
-    const { date, label, midi, soir } = computeEmpDate()
+    const { date, label } = computeEmpDate()
     setEmpDate(date)
     setEmpLabelJour(label)
-    setEmpSlotsMidi(midi)
-    setEmpSlotsSoir(soir)
     setEmpNom('')
     setEmpTel('')
     setEmpHeure('')
@@ -704,7 +700,6 @@ export default function CommandesPage() {
   const validerEmporter = async () => {
     setEmpErr(null)
     if (!empNom.trim()) { setEmpErr('Le nom est obligatoire'); return }
-    if (!empTel.trim()) { setEmpErr('Le téléphone est obligatoire'); return }
     if (!empHeure) { setEmpErr('Choisissez une heure de retrait'); return }
     if (empPanier.length === 0) { setEmpErr('Ajoutez au moins un article'); return }
     setEmpSaving(true)
@@ -1346,48 +1341,22 @@ export default function CommandesPage() {
                     placeholder="Nom Prénom" />
                 </div>
                 <div>
-                  <label className="block text-sm text-[#555] mb-1">Téléphone *</label>
+                  <label className="block text-sm text-[#555] mb-1">Téléphone</label>
                   <input value={empTel} onChange={e => setEmpTel(e.target.value)} type="tel"
                     className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
                     placeholder="06 XX XX XX XX" />
                 </div>
               </div>
 
-              {/* Créneaux */}
+              {/* Heure de retrait */}
               <div>
                 <label className="block text-sm text-[#555] mb-2">Heure de retrait * — <span className="font-medium text-[#B71C1C]">{empLabelJour}</span></label>
-                {empSlotsMidi.length === 0 && empSlotsSoir.length === 0 ? (
-                  <div className="text-sm text-[#555] italic">Aucun créneau disponible aujourd&apos;hui</div>
-                ) : (
-                  <div className="space-y-3">
-                    {empSlotsMidi.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-2">🌞 Midi</div>
-                        <div className="flex flex-wrap gap-2">
-                          {empSlotsMidi.map(s => (
-                            <button key={s} onClick={() => setEmpHeure(s)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${empHeure === s ? 'bg-[#B71C1C] text-white border-[#B71C1C]' : 'bg-white text-[#333] border-[#E0D5C5] hover:border-[#B71C1C]'}`}>
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {empSlotsSoir.length > 0 && (
-                      <div>
-                        <div className="text-xs font-semibold text-[#555] uppercase tracking-wider mb-2">🌙 Soir</div>
-                        <div className="flex flex-wrap gap-2">
-                          {empSlotsSoir.map(s => (
-                            <button key={s} onClick={() => setEmpHeure(s)}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${empHeure === s ? 'bg-[#B71C1C] text-white border-[#B71C1C]' : 'bg-white text-[#333] border-[#E0D5C5] hover:border-[#B71C1C]'}`}>
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <input
+                  type="time"
+                  value={empHeure}
+                  onChange={e => setEmpHeure(e.target.value)}
+                  className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
+                />
               </div>
 
               {/* Articles + Panier */}

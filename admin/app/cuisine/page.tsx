@@ -58,17 +58,88 @@ function isAjoutApres(ligne: LigneCommande, commandeCreatedAt: string): boolean 
 
 function cardStyle(cmd: Commande, urgents: Set<string>): React.CSSProperties {
   const isUrgent = urgents.has(cmd.id)
-  const isEmporter = cmd.type === 'a_emporter'
-
   if (isUrgent) return { background: '#2a1500', border: '2px solid #D4A843', borderRadius: 16, padding: 24 }
-  if (isEmporter) return { background: '#1a1500', border: '1px solid #F57F17', borderRadius: 16, padding: 24 }
+  if (cmd.type === 'a_emporter') return { background: '#1a3a1a', border: '1px solid #F57F17', borderRadius: 16, padding: 24 }
+  return { background: '#3a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }
+}
 
-  // Sur place : couleur selon ancienneté
-  const min = Math.floor((Date.now() - new Date(cmd.created_at).getTime()) / 60000)
-  let bg = '#1a3a1a'
-  if (min >= 10 && min < 20) bg = '#3a2a0a'
-  else if (min >= 20) bg = '#3a0a0a'
-  return { background: bg, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }
+function renderCard(
+  cmd: Commande,
+  urgents: Set<string>,
+  toggleUrgent: (id: string) => void,
+  marquerPrete: (cmd: Commande) => void,
+  isAjoutApres: (l: LigneCommande, at: string) => boolean,
+) {
+  const displayNum = cmd.type === 'a_emporter'
+    ? `E${cmd.numero_commande}`
+    : `T${cmd.table_numero ?? ''}`
+  return (
+    <div key={cmd.id} style={{ ...cardStyle(cmd, urgents), display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Numéro + Type */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 48, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>{displayNum}</div>
+        <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
+            {cmd.type === 'sur_place'
+              ? formatZone(cmd.zone)
+              : `${cmd.nom_client ? cmd.nom_client.toUpperCase() : 'À EMPORTER'}`}
+          </div>
+          {cmd.type === 'a_emporter' && (
+            <span style={{ background: '#F57F17', color: '#000', fontWeight: 700, fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>📦 EMPORTER</span>
+          )}
+        </div>
+      </div>
+
+      {/* Heure retrait (à emporter uniquement) */}
+      {cmd.type === 'a_emporter' && cmd.heure_retrait && (
+        <div style={{ fontSize: 22, fontWeight: 900, color: '#F57F17', fontFamily: 'monospace', letterSpacing: 2 }}>
+          ⏰ {formatHeure(cmd.heure_retrait)}
+        </div>
+      )}
+
+      {/* Articles */}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 10, flex: 1 }}>
+        {cmd.lignes_commande.map(l => (
+          <div key={l.id} style={{ padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 16 }}>×{l.quantite}</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
+              {l.taille && <span style={{ fontSize: 11, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: 4 }}>{l.taille}</span>}
+              {isAjoutApres(l, cmd.created_at) && (
+                <span style={{ fontSize: 10, background: '#D4A843', color: '#000', fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>AJOUT</span>
+              )}
+            </div>
+            {l.commentaire && (
+              <div style={{ fontSize: 12, color: '#ef5350', marginTop: 2, paddingLeft: 28 }}>⚠ {l.commentaire}</div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Notes */}
+      {cmd.notes && (
+        <div style={{ background: 'rgba(183,28,28,0.3)', border: '1px solid rgba(183,28,28,0.5)', borderRadius: 6, padding: 8, fontSize: 12, color: '#ef9090' }}>
+          ⚠️ {cmd.notes}
+        </div>
+      )}
+
+      {/* Boutons */}
+      <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+        <button
+          onClick={() => toggleUrgent(cmd.id)}
+          style={{ flex: 1, padding: '0 8px', minHeight: 48, borderRadius: 8, background: urgents.has(cmd.id) ? '#D4A843' : 'rgba(212,168,67,0.2)', border: '1px solid #D4A843', color: urgents.has(cmd.id) ? '#000' : '#D4A843', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}
+        >
+          {urgents.has(cmd.id) ? '⚠️ URGENT ✓' : '⚠️ URGENT'}
+        </button>
+        <button
+          onClick={() => marquerPrete(cmd)}
+          style={{ flex: 1, padding: '0 8px', minHeight: 48, background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+        >
+          ✅ PRÊTE
+        </button>
+      </div>
+    </div>
+  )
 }
 
 const CATS_PAS_CUISINE = [
@@ -251,9 +322,11 @@ export default function CuisinePage() {
     const bUrgent = urgents.has(b.id) ? 0 : 1
     return aUrgent - bUrgent
   })
+  const commandesEmporter = commandesTri.filter(c => c.type === 'a_emporter')
+  const commandesSurPlace = commandesTri.filter(c => c.type === 'sur_place')
 
   return (
-    <div style={{ background: '#0A0A0A', minHeight: '100vh', color: '#F5F5F5' }}>
+    <div style={{ background: '#0A0A0A', minHeight: '100vh', color: '#F5F5F5', overflowX: 'hidden' }}>
       {/* Header */}
       <div style={{ height: 48, background: '#1B5E20', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -319,7 +392,7 @@ export default function CuisinePage() {
         )}
       </div>
 
-      <div style={{ padding: '24px' }}>
+      <div style={{ padding: '16px' }}>
         {loading ? (
           <div style={{ color: '#555' }}>Chargement...</div>
         ) : commandesTri.length === 0 ? (
@@ -328,98 +401,23 @@ export default function CuisinePage() {
             <div>{dateFiltre === todayStr ? 'Aucune commande en préparation' : 'Aucune commande ce jour-là'}</div>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 20 }}>
-            {commandesTri.map(cmd => {
-              const displayNum = cmd.type === 'a_emporter'
-                ? `E${cmd.numero_commande}`
-                : `T${cmd.table_numero ?? ''}`
-
-              return (
-                <div key={cmd.id} style={{ ...cardStyle(cmd, urgents), display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-                  {/* Numéro + Type */}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>{displayNum}</div>
-                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
-                        {cmd.type === 'sur_place'
-                          ? formatZone(cmd.zone)
-                          : `À EMPORTER${cmd.nom_client ? ' — ' + cmd.nom_client.toUpperCase() : ''}`}
-                      </div>
-                      {cmd.type === 'a_emporter' && (
-                        <span style={{ background: '#F57F17', color: '#000', fontWeight: 700, fontSize: 11, padding: '3px 8px', borderRadius: 4 }}>
-                          📦 EMPORTER
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Nom client */}
-                  {cmd.nom_client && (
-                    <div style={{ fontSize: 20, color: '#F5F5F5', fontWeight: 600 }}>{cmd.nom_client}</div>
-                  )}
-
-                  {/* Heure retrait (à emporter uniquement) */}
-                  {cmd.type === 'a_emporter' && cmd.heure_retrait && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 28, fontWeight: 900, color: '#F57F17', fontFamily: 'monospace', letterSpacing: 2 }}>
-                        ⏰ {formatHeure(cmd.heure_retrait)}
-                      </span>
-                      {cmd.telephone && (
-                        <span style={{ fontSize: 13, color: '#aaa' }}>📞 {cmd.telephone}</span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Articles */}
-                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: 12, flex: 1 }}>
-                    {cmd.lignes_commande.map(l => (
-                      <div key={l.id} style={{ padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 18 }}>×{l.quantite}</span>
-                          <span style={{ fontSize: 18, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
-                          {l.taille && <span style={{ fontSize: 12, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '2px 6px', borderRadius: 4 }}>{l.taille}</span>}
-                          {isAjoutApres(l, cmd.created_at) && (
-                            <span style={{ fontSize: 11, background: '#D4A843', color: '#000', fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>AJOUT</span>
-                          )}
-                        </div>
-                        {l.commentaire && (
-                          <div style={{ fontSize: 13, color: '#ef5350', marginTop: 2, paddingLeft: 32 }}>⚠ {l.commentaire}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Notes spéciales */}
-                  {cmd.notes && (
-                    <div style={{ background: 'rgba(183,28,28,0.3)', border: '1px solid rgba(183,28,28,0.5)', borderRadius: 8, padding: 10, fontSize: 13, color: '#ef9090' }}>
-                      ⚠️ {cmd.notes}
-                    </div>
-                  )}
-
-                  {/* Boutons URGENT + PRÊTE */}
-                  <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                    <button
-                      onClick={() => toggleUrgent(cmd.id)}
-                      style={{
-                        flex: 1, padding: '0 10px', minHeight: 56, borderRadius: 8,
-                        background: urgents.has(cmd.id) ? '#D4A843' : 'rgba(212,168,67,0.2)',
-                        border: '1px solid #D4A843', color: urgents.has(cmd.id) ? '#000' : '#D4A843',
-                        cursor: 'pointer', fontWeight: 700, fontSize: 14
-                      }}
-                    >
-                      {urgents.has(cmd.id) ? '⚠️ URGENT ✓' : '⚠️ URGENT'}
-                    </button>
-                    <button
-                      onClick={() => marquerPrete(cmd)}
-                      style={{ flex: 1, padding: '0 10px', minHeight: 56, background: '#2E7D32', border: 'none', borderRadius: 8, color: '#fff', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
-                    >
-                      ✅ PRÊTE
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
+          <div style={{ display: 'flex', gap: 16 }}>
+            {/* Colonne GAUCHE : À emporter */}
+            <div style={{ width: '50%' }}>
+              <h2 style={{ color: '#4caf50', fontSize: 14, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>📦 À emporter ({commandesEmporter.length})</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {commandesEmporter.map(cmd => renderCard(cmd, urgents, toggleUrgent, marquerPrete, isAjoutApres))}
+              </div>
+              {commandesEmporter.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>Aucune commande à emporter</div>}
+            </div>
+            {/* Colonne DROITE : Sur place */}
+            <div style={{ width: '50%' }}>
+              <h2 style={{ color: '#ef5350', fontSize: 14, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>🍽 Sur place ({commandesSurPlace.length})</h2>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {commandesSurPlace.map(cmd => renderCard(cmd, urgents, toggleUrgent, marquerPrete, isAjoutApres))}
+              </div>
+              {commandesSurPlace.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>Aucune commande sur place</div>}
+            </div>
           </div>
         )}
       </div>
