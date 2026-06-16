@@ -119,7 +119,7 @@ export default function CuisinePage() {
 
       // Aujourd'hui : seulement commandes actives. Autre jour : tout afficher.
       if (isAujourdhui) {
-        query = query.in('Statut', ['en_cours', 'en_preparation'])
+        query = query.in('statut', ['en_cours', 'en_preparation'])
       }
 
       const { data, error } = await query
@@ -218,7 +218,7 @@ export default function CuisinePage() {
         await supabase.from('lignes_commande').update({ statut: 'pret' }).in('id', ligneIds)
       }
       // Mettre la commande en pret_encaisser
-      await supabase.from('commandes').update({ 'Statut': 'pret_encaisser' }).eq('id', cmd.id)
+      await supabase.from('commandes').update({ statut: 'pret_encaisser' }).eq('id', cmd.id)
       // Mettre la table en orange
       if (cmd.table_numero) {
         await supabase
