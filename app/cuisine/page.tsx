@@ -128,14 +128,14 @@ export default function CuisinePage() {
         ? ['en_cours', 'en_preparation']
         : ['en_cours', 'en_preparation', 'pret_encaisser', 'encaissee', 'annulee']
 
-      // À emporter : filtrer par date_retrait (ils peuvent être commandés un autre jour)
+      // À emporter : date_retrait si renseigné, sinon fallback sur created_at
       const emporterQ = supabase
         .from('commandes')
         .select('*, lignes_commande(*)')
         .eq('type', 'a_emporter')
-        .eq('date_retrait', jour)
         .in('statut', statutFilter)
-        .order('heure_retrait')
+        .or(`date_retrait.eq.${jour},and(date_retrait.is.null,created_at.gte.${jour}T00:00:00,created_at.lte.${jour}T23:59:59)`)
+        .order('heure_retrait', { ascending: true, nullsFirst: false })
 
       // Sur place : filtrer par created_at
       const surPlaceQ = supabase
