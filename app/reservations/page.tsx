@@ -8,25 +8,27 @@ import jsPDF from 'jspdf'
 type StatutRes = 'en_attente' | 'confirmee' | 'annulee'
 type Vue = 'liste' | 'calendrier'
 
+// Noms de colonnes exacts de la table reservations
 interface Reservation {
   id: string
-  heure: string
-  nom_client: string
+  heure_reservation: string
+  nom: string
   telephone: string
-  nb_couverts: number
-  zone: string
-  notes: string
+  nombre_couverts: number
+  zone_preference: string | null
+  notes: string | null
   statut: StatutRes
   date_reservation: string
+  client_id?: string | null
 }
 
 interface FormData {
-  nom_client: string
+  nom: string
   telephone: string
   date_reservation: string
-  heure: string
-  nb_couverts: number
-  zone: string
+  heure_reservation: string
+  nombre_couverts: number
+  zone_preference: string
   notes: string
 }
 
@@ -50,6 +52,11 @@ function getWeek(base: Date): Date[] {
   })
 }
 
+const emptyForm = (): FormData => ({
+  nom: '', telephone: '', date_reservation: new Date().toISOString().split('T')[0],
+  heure_reservation: '20:00', nombre_couverts: 2, zone_preference: '', notes: ''
+})
+
 export default function ReservationsPage() {
   const router = useRouter()
   const [reservations, setReservations] = useState<Reservation[]>([])
@@ -57,7 +64,7 @@ export default function ReservationsPage() {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
   const [filterStatut, setFilterStatut] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState<FormData>({ nom_client: '', telephone: '', date_reservation: new Date().toISOString().split('T')[0], heure: '20:00', nb_couverts: 2, zone: '', notes: '' })
+  const [form, setForm] = useState<FormData>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [vue, setVue] = useState<Vue>('liste')
   const [weekBase, setWeekBase] = useState(new Date())
@@ -69,11 +76,14 @@ export default function ReservationsPage() {
       const startDate = vue === 'calendrier' ? week[0].toISOString().split('T')[0] : filterDate
       const endDate = vue === 'calendrier' ? week[6].toISOString().split('T')[0] : filterDate
 
-      let query = supabase.from('reservations').select('*').gte('date_reservation', startDate).lte('date_reservation', endDate).order('heure')
+      let query = supabase.from('reservations').select('*')
+        .gte('date_reservation', startDate)
+        .lte('date_reservation', endDate)
+        .order('heure_reservation')
       if (filterStatut && vue === 'liste') query = query.eq('statut', filterStatut)
       const { data, error } = await query
       if (error) throw error
-      setReservations(data ?? [])
+      setReservations((data ?? []) as Reservation[])
     } catch (err) {
       console.error('Reservations fetch error:', err)
     } finally {
@@ -107,15 +117,25 @@ export default function ReservationsPage() {
   const handleCreate = async () => {
     setSaving(true)
     try {
-      await supabase.from('reservations').insert([{ ...form, statut: 'en_attente' }])
+      const { error } = await supabase.from('reservations').insert([{
+        nom: form.nom,
+        telephone: form.telephone,
+        date_reservation: form.date_reservation,
+        heure_reservation: form.heure_reservation,
+        nombre_couverts: form.nombre_couverts,
+        zone_preference: form.zone_preference || null,
+        notes: form.notes || null,
+        statut: 'en_attente',
+      }])
+      if (error) { console.error('Insert réservation:', error); return }
       setShowModal(false)
-      setForm({ nom_client: '', telephone: '', date_reservation: new Date().toISOString().split('T')[0], heure: '20:00', nb_couverts: 2, zone: '', notes: '' })
+      setForm(emptyForm())
       await fetchReservations()
     } catch { /* skip */ } finally { setSaving(false) }
   }
 
   const smsText = (r: Reservation) =>
-    `Bonjour ${r.nom_client}, votre réservation chez Roma le ${r.date_reservation} à ${r.heure} pour ${r.nb_couverts} pers. est confirmée. À bientôt !`
+    `Bonjour ${r.nom}, votre réservation chez Roma le ${r.date_reservation} à ${r.heure_reservation} pour ${r.nombre_couverts} pers. est confirmée. À bientôt !`
 
   const exportPDFJour = () => {
     const doc = new jsPDF()
@@ -124,7 +144,7 @@ export default function ReservationsPage() {
     doc.setFontSize(10)
     let y = 35
     reservations.forEach(r => {
-      doc.text(`${r.heure}  ${r.nom_client}  ${r.nb_couverts}p  ${r.zone || ''}  [${STATUT_STYLES[r.statut]?.label}]`, 20, y)
+      doc.text(`${r.heure_reservation}  ${r.nom}  ${r.nombre_couverts}p  ${r.zone_preference || ''}  [${STATUT_STYLES[r.statut]?.label}]`, 20, y)
       y += 8
       if (y > 270) { doc.addPage(); y = 20 }
     })
@@ -138,7 +158,7 @@ export default function ReservationsPage() {
   if (vue === 'calendrier') {
     const grouped: Record<string, Reservation[]> = {}
     reservations.forEach(r => {
-      const key = `${r.date_reservation}-${r.heure}-${r.zone || 'sans-zone'}`
+      const key = `${r.date_reservation}-${r.heure_reservation}-${r.zone_preference || 'sans-zone'}`
       grouped[key] = [...(grouped[key] ?? []), r]
     })
     Object.entries(grouped).forEach(([k, v]) => { if (v.length > 1) conflits.push(k) })
@@ -149,7 +169,6 @@ export default function ReservationsPage() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-[#1A1A1A]">Réservations</h1>
         <div className="flex gap-2">
-          {/* Toggle vue */}
           <div className="flex border border-[#E0D5C5] rounded-lg overflow-hidden">
             <button onClick={() => setVue('liste')}
               className={`px-3 py-2 text-sm font-medium transition-all ${vue === 'liste' ? 'bg-[#1B5E20] text-white' : 'bg-white text-[#555]'}`}>
@@ -168,7 +187,6 @@ export default function ReservationsPage() {
 
       {vue === 'liste' ? (
         <>
-          {/* Filtres */}
           <div className="flex flex-wrap gap-3 mb-6">
             <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)}
               className="px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] bg-white focus:outline-none" />
@@ -196,13 +214,13 @@ export default function ReservationsPage() {
                       <div key={r.id} className="bg-white rounded-xl border border-[#E0D5C5] p-4">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <span className="font-bold text-[#1A1A1A] text-lg">{r.heure}</span>
-                            <span className="ml-2 font-medium text-[#1A1A1A]">{r.nom_client}</span>
+                            <span className="font-bold text-[#1A1A1A] text-lg">{r.heure_reservation}</span>
+                            <span className="ml-2 font-medium text-[#1A1A1A]">{r.nom}</span>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
                         </div>
                         <div className="text-sm text-[#555] space-y-1">
-                          <div>📞 {r.telephone} · {r.nb_couverts} couverts · {r.zone || 'Indifférent'}</div>
+                          <div>📞 {r.telephone} · {r.nombre_couverts} couverts · {r.zone_preference || 'Indifférent'}</div>
                           {r.notes && <div className="text-xs text-[#777]">📝 {r.notes}</div>}
                         </div>
                         <div className="flex gap-2 mt-3">
@@ -230,11 +248,11 @@ export default function ReservationsPage() {
                         const s = STATUT_STYLES[r.statut] ?? STATUT_STYLES.en_attente
                         return (
                           <tr key={r.id} className="border-t border-[#E0D5C5]">
-                            <td className="px-4 py-3 font-mono font-bold text-[#1A1A1A]">{r.heure}</td>
-                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{r.nom_client}</td>
+                            <td className="px-4 py-3 font-mono font-bold text-[#1A1A1A]">{r.heure_reservation}</td>
+                            <td className="px-4 py-3 font-medium text-[#1A1A1A]">{r.nom}</td>
                             <td className="px-4 py-3 text-[#555]">{r.telephone}</td>
-                            <td className="px-4 py-3 text-center text-[#555]">{r.nb_couverts}</td>
-                            <td className="px-4 py-3 text-[#555]">{r.zone}</td>
+                            <td className="px-4 py-3 text-center text-[#555]">{r.nombre_couverts}</td>
+                            <td className="px-4 py-3 text-[#555]">{r.zone_preference}</td>
                             <td className="px-4 py-3 text-[#555] max-w-32 truncate">{r.notes}</td>
                             <td className="px-4 py-3">
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
@@ -273,7 +291,7 @@ export default function ReservationsPage() {
               className="px-3 py-1.5 border border-[#E0D5C5] rounded-lg text-sm text-[#555] bg-white hover:bg-[#F0EBE0]">Semaine suiv. →</button>
           </div>
 
-          {/* Vue calendrier mobile: liste groupée par jour */}
+          {/* Vue calendrier mobile */}
           <div className="md:hidden">
             {Object.entries(
               reservations.reduce((acc, r) => {
@@ -289,11 +307,11 @@ export default function ReservationsPage() {
                 {resas.map(r => (
                   <div key={r.id} className="bg-white rounded-lg border border-[#E0D5C5] p-3 mb-2">
                     <div className="flex justify-between items-center">
-                      <span className="font-mono font-bold text-[#1A1A1A]">{r.heure}</span>
-                      <span className="font-medium">{r.nom_client}</span>
+                      <span className="font-mono font-bold text-[#1A1A1A]">{r.heure_reservation}</span>
+                      <span className="font-medium">{r.nom}</span>
                       <span className={`px-2 py-0.5 rounded text-xs ${STATUT_STYLES[r.statut]?.tw}`}>{STATUT_STYLES[r.statut]?.label}</span>
                     </div>
-                    <div className="text-sm text-[#555] mt-1">{r.nb_couverts} couverts · {r.zone || 'Indifférent'}</div>
+                    <div className="text-sm text-[#555] mt-1">{r.nombre_couverts} couverts · {r.zone_preference || 'Indifférent'}</div>
                   </div>
                 ))}
               </div>
@@ -301,10 +319,9 @@ export default function ReservationsPage() {
             {reservations.length === 0 && <div className="text-[#555] px-1">Aucune réservation cette semaine.</div>}
           </div>
 
-          {/* Vue calendrier desktop: grille */}
+          {/* Vue calendrier desktop */}
           <div className="hidden md:block overflow-x-auto">
             <div className="grid text-sm" style={{ gridTemplateColumns: `80px repeat(7, minmax(120px, 1fr))` }}>
-              {/* Header jours */}
               <div className="bg-[#F0EBE0] border border-[#E0D5C5] p-2 text-xs text-[#555] font-medium rounded-tl-lg"></div>
               {week.map(d => (
                 <div key={d.toISOString()} className="bg-[#F0EBE0] border border-[#E0D5C5] p-2 text-center text-xs font-medium text-[#1A1A1A]">
@@ -312,15 +329,14 @@ export default function ReservationsPage() {
                   <div>{d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</div>
                 </div>
               ))}
-              {/* Créneaux */}
               {CRENEAUX.map(creneau => (
                 <>
                   <div key={`h-${creneau}`} className="border border-[#E0D5C5] p-2 text-xs text-[#555] font-mono bg-[#F0EBE0] flex items-center justify-center">{creneau}</div>
                   {week.map(d => {
                     const dateStr = d.toISOString().split('T')[0]
-                    const resas = reservations.filter(r => r.date_reservation === dateStr && r.heure === creneau)
+                    const resas = reservations.filter(r => r.date_reservation === dateStr && r.heure_reservation === creneau)
                     const conflit = resas.length > 1 || resas.some(r => {
-                      const key = `${r.date_reservation}-${r.heure}-${r.zone || 'sans-zone'}`
+                      const key = `${r.date_reservation}-${r.heure_reservation}-${r.zone_preference || 'sans-zone'}`
                       return conflits.includes(key)
                     })
                     return (
@@ -328,7 +344,7 @@ export default function ReservationsPage() {
                         {conflit && <div className="text-xs text-red-600 font-bold mb-0.5">⚠️ Conflit</div>}
                         {resas.map(r => (
                           <div key={r.id} className={`text-xs rounded px-1 py-0.5 mb-0.5 truncate ${STATUT_STYLES[r.statut]?.tw ?? ''}`}>
-                            {r.nom_client} ({r.nb_couverts}p)
+                            {r.nom} ({r.nombre_couverts}p)
                           </div>
                         ))}
                       </div>
@@ -370,15 +386,16 @@ export default function ReservationsPage() {
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-700">✕</button>
             </div>
             <div className="space-y-3">
-              {[{ label: 'Nom', key: 'nom_client', type: 'text' }, { label: 'Téléphone', key: 'telephone', type: 'tel' }].map(f => (
-                <div key={f.key}>
-                  <label className="block text-xs text-[#555] mb-1">{f.label}</label>
-                  <input type={f.type} value={(form as unknown as Record<string, unknown>)[f.key] as string}
-                    onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
-                </div>
-              ))}
-              {/* Date et Heure: empilés sur mobile, côte à côte sur sm+ */}
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Nom</label>
+                <input type="text" value={form.nom} onChange={e => setForm(prev => ({ ...prev, nom: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
+              </div>
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Téléphone</label>
+                <input type="tel" value={form.telephone} onChange={e => setForm(prev => ({ ...prev, telephone: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
+              </div>
               <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Date</label>
@@ -387,27 +404,27 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Heure</label>
-                  <select value={form.heure} onChange={e => setForm(prev => ({ ...prev, heure: e.target.value }))}
+                  <select value={form.heure_reservation} onChange={e => setForm(prev => ({ ...prev, heure_reservation: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]">
                     {CRENEAUX.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
               </div>
-              {/* Couverts et Zone: empilés sur mobile, côte à côte sur sm+ */}
               <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Couverts</label>
-                  <input type="number" min={1} max={20} value={form.nb_couverts} onChange={e => setForm(prev => ({ ...prev, nb_couverts: Number(e.target.value) }))}
+                  <input type="number" min={1} max={20} value={form.nombre_couverts}
+                    onChange={e => setForm(prev => ({ ...prev, nombre_couverts: Number(e.target.value) }))}
                     className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none" />
                 </div>
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Zone</label>
-                  <select value={form.zone} onChange={e => setForm(prev => ({ ...prev, zone: e.target.value }))}
+                  <select value={form.zone_preference} onChange={e => setForm(prev => ({ ...prev, zone_preference: e.target.value }))}
                     className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]">
                     <option value="">Indifférent</option>
-                    <option value="RDC">RDC</option>
-                    <option value="Étage">Étage</option>
-                    <option value="Terrasse">Terrasse</option>
+                    <option value="rdc">RDC</option>
+                    <option value="etage">Étage</option>
+                    <option value="terrasse">Terrasse</option>
                   </select>
                 </div>
               </div>
