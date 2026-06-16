@@ -206,8 +206,7 @@ export default function ReservationsPage() {
       const table = tablesLibres.find(t => t.id === tableChoisie)
       if (!table) return
       await supabase.from('reservations').update({ statut: 'confirmee' }).eq('id', arrivedModal.id)
-      await supabase.from('tables_restaurant').update({ statut: 'occupee' }).eq('id', table.id)
-      await supabase.from('commandes').insert({
+      const { data: nouvelleCommande, error: cmdErr } = await supabase.from('commandes').insert({
         nom: arrivedModal.nom,
         nom_client: arrivedModal.nom,
         type: 'sur_place',
@@ -216,7 +215,13 @@ export default function ReservationsPage() {
         zone: table.zone,
         couverts: arrivedModal.nombre_couverts,
         total: 0,
-      })
+      }).select().single()
+      if (cmdErr) { console.error('Insert commande:', cmdErr); return }
+      await supabase
+        .from('tables_restaurant')
+        .update({ statut: 'occupee', commande_id: nouvelleCommande.id })
+        .eq('numero', table.numero)
+        .eq('zone', table.zone)
       setArrivedModal(null)
       await fetchReservations()
     } catch (err) {
