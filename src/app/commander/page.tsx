@@ -223,12 +223,12 @@ export default function CommanderPage() {
           : heureRetrait.substring(0, 8)
 
       const cmdPayload = {
-        nom: nom.trim(),
-        telephone: tel.trim(),
+        'Nom': nom.trim(),
+        'Téléphone': tel.trim(),
         heure_retrait: heureFormatee,
         date_retrait: dateRetrait,
-        type: 'a_emporter',
-        statut: 'en_preparation',
+        'Type': 'a_emporter',
+        'Statut': 'en_preparation',
         notes: notes.trim() || null,
         total,
       }

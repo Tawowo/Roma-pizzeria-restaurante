@@ -239,13 +239,13 @@ export default function DashboardPage() {
         { data: ca30Data },
       ] = await Promise.all([
         supabase.from('reservations').select('id, statut').eq('date_reservation', todayStr),
-        supabase.from('commandes').select('id, numero, statut, type, created_at, table_numero').in('statut', ['en_attente', 'en_preparation']),
-        supabase.from('commandes').select('total').eq('statut', 'encaissee').gte('created_at', todayStr + 'T00:00:00').lte('created_at', todayStr + 'T23:59:59'),
-        supabase.from('commandes').select('total').eq('statut', 'encaissee').gte('created_at', yesterdayStr + 'T00:00:00').lte('created_at', yesterdayStr + 'T23:59:59'),
+        supabase.from('commandes').select('id, numero, statut, type, created_at, table_numero').in('Statut', ['en_attente', 'en_preparation']),
+        supabase.from('commandes').select('total').eq('Statut', 'encaissee').gte('created_at', todayStr + 'T00:00:00').lte('created_at', todayStr + 'T23:59:59'),
+        supabase.from('commandes').select('total').eq('Statut', 'encaissee').gte('created_at', yesterdayStr + 'T00:00:00').lte('created_at', yesterdayStr + 'T23:59:59'),
         supabase.from('clients').select('*', { count: 'exact', head: true }),
-        supabase.from('commandes').select('total').eq('statut', 'encaissee').gte('created_at', firstOfMonthStr + 'T00:00:00'),
+        supabase.from('commandes').select('total').eq('Statut', 'encaissee').gte('created_at', firstOfMonthStr + 'T00:00:00'),
         supabase.from('avis').select('*', { count: 'exact', head: true }).eq('statut', 'en_attente'),
-        supabase.from('commandes').select('total, created_at').eq('statut', 'encaissee').gte('created_at', thirtyDaysAgoStr + 'T00:00:00'),
+        supabase.from('commandes').select('total, created_at').eq('Statut', 'encaissee').gte('created_at', thirtyDaysAgoStr + 'T00:00:00'),
       ])
 
       const caJour = (caJourData ?? []).reduce((s, c) => s + (c.total || 0), 0)
