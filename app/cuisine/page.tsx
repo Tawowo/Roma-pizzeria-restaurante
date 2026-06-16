@@ -33,46 +33,18 @@ interface Commande {
   lignes_commande: LigneCommande[]
 }
 
-function useTimer() {
-  const [tick, setTick] = useState(0)
-  useEffect(() => {
-    const interval = setInterval(() => setTick(t => t + 1), 1000)
-    return () => clearInterval(interval)
-  }, [])
-  return tick
-}
-
 function formatHeure(h: string): string {
   const time = h.includes('T') ? h.split('T')[1] : h
   const [hh, mm] = time.substring(0, 5).split(':')
   return `${hh}h${mm}`
 }
 
-// Retourne les secondes restantes avant heure_retrait (négatif si dépassé)
-function secondesRestantes(heureRetrait: string): number {
-  const now = new Date()
-  const time = heureRetrait.includes('T') ? heureRetrait.split('T')[1] : heureRetrait
-  const [hh, mm, ss] = time.substring(0, 8).split(':')
-  const retrait = new Date(now)
-  retrait.setHours(Number(hh), Number(mm), Number(ss ?? 0), 0)
-  return Math.floor((retrait.getTime() - now.getTime()) / 1000)
-}
-
-function formatComptaRebours(heureRetrait: string): string {
-  const secs = secondesRestantes(heureRetrait)
-  const absSecs = Math.abs(secs)
-  const m = Math.floor(absSecs / 60)
-  const s = absSecs % 60
-  const str = `${m}:${s.toString().padStart(2, '0')}`
-  return secs < 0 ? `-${str}` : str
-}
-
-function timerColorRetrait(heureRetrait: string): string {
-  const secs = secondesRestantes(heureRetrait)
-  const mins = secs / 60
-  if (mins > 15) return '#4caf50'
-  if (mins > 5) return '#D4A843'
-  return '#ef5350'
+function formatZone(zone?: string): string {
+  if (!zone) return 'RDC'
+  const z = zone.toLowerCase()
+  if (z === 'etage' || z === 'étage') return 'ÉTAGE'
+  if (z === 'terrasse') return 'TERRASSE'
+  return 'RDC'
 }
 
 function isAjoutApres(ligne: LigneCommande, commandeCreatedAt: string): boolean {
@@ -113,7 +85,6 @@ export default function CuisinePage() {
   const [soundOn, setSoundOn] = useState(true)
   const [dateFiltre, setDateFiltre] = useState(() => new Date().toISOString().split('T')[0])
   const prevCountRef = useRef(0)
-  const tick = useTimer()
 
   const todayStr = new Date().toISOString().split('T')[0]
 
@@ -281,8 +252,6 @@ export default function CuisinePage() {
     return aUrgent - bUrgent
   })
 
-  void tick
-
   return (
     <div style={{ background: '#0A0A0A', minHeight: '100vh', color: '#F5F5F5' }}>
       {/* Header */}
@@ -363,18 +332,18 @@ export default function CuisinePage() {
             {commandesTri.map(cmd => {
               const displayNum = cmd.type === 'a_emporter'
                 ? `E${cmd.numero_commande}`
-                : `${cmd.numero_commande}`
+                : `T${cmd.table_numero ?? ''}`
 
               return (
                 <div key={cmd.id} style={{ ...cardStyle(cmd, urgents), display: 'flex', flexDirection: 'column', gap: 12 }}>
 
                   {/* Numéro + Type */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-                    <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>#{displayNum}</div>
+                    <div style={{ fontSize: 56, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>{displayNum}</div>
                     <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                       <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
                         {cmd.type === 'sur_place'
-                          ? `TABLE ${cmd.table_numero ?? ''} — ${(cmd.zone ?? 'RDC').toUpperCase()}`
+                          ? formatZone(cmd.zone)
                           : `À EMPORTER${cmd.nom_client ? ' — ' + cmd.nom_client.toUpperCase() : ''}`}
                       </div>
                       {cmd.type === 'a_emporter' && (
@@ -390,25 +359,15 @@ export default function CuisinePage() {
                     <div style={{ fontSize: 20, color: '#F5F5F5', fontWeight: 600 }}>{cmd.nom_client}</div>
                   )}
 
-                  {/* Heure retrait + chrono compte à rebours (à emporter uniquement) */}
+                  {/* Heure retrait (à emporter uniquement) */}
                   {cmd.type === 'a_emporter' && cmd.heure_retrait && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 28, fontWeight: 900, color: '#F57F17', fontFamily: 'monospace', letterSpacing: 2 }}>
                         ⏰ {formatHeure(cmd.heure_retrait)}
                       </span>
-                      <span style={{ fontSize: 24, fontFamily: 'monospace', fontWeight: 700, color: timerColorRetrait(cmd.heure_retrait) }}>
-                        {formatComptaRebours(cmd.heure_retrait)}
-                      </span>
                       {cmd.telephone && (
                         <span style={{ fontSize: 13, color: '#aaa' }}>📞 {cmd.telephone}</span>
                       )}
-                    </div>
-                  )}
-
-                  {/* Heure de commande (sur place uniquement, pas de chrono) */}
-                  {cmd.type === 'sur_place' && (
-                    <div style={{ fontSize: 12, color: '#666' }}>
-                      {new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   )}
 
