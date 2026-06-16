@@ -215,8 +215,12 @@ export default function CommanderPage() {
 
     setLoading(true)
     try {
-      // Forcer format HH:MM:SS pour le type PostgreSQL "time without time zone"
-      const heureFormatee = heureRetrait.length === 5 ? heureRetrait + ':00' : heureRetrait
+      // Extraire uniquement HH:MM:SS quel que soit le format reçu
+      const heureFormatee = heureRetrait.includes('T')
+        ? heureRetrait.split('T')[1].substring(0, 8)
+        : heureRetrait.length === 5
+          ? heureRetrait + ':00'
+          : heureRetrait.substring(0, 8)
 
       const cmdPayload = {
         nom: nom.trim(),
