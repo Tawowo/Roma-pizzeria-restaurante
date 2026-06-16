@@ -8,6 +8,13 @@ import jsPDF from 'jspdf'
 type StatutRes = 'en_attente' | 'confirmee' | 'annulee'
 type Vue = 'liste' | 'calendrier'
 
+interface TableLibre {
+  id: string
+  numero: number
+  zone: string
+  capacite: number
+}
+
 interface Reservation {
   id: string
   heure_reservation: string
@@ -91,6 +98,10 @@ export default function ReservationsPage() {
   const [vue, setVue] = useState<Vue>('liste')
   const [weekBase, setWeekBase] = useState(new Date())
   const [smsModal, setSmsModal] = useState<Reservation | null>(null)
+  const [arrivedModal, setArrivedModal] = useState<Reservation | null>(null)
+  const [tablesLibres, setTablesLibres] = useState<TableLibre[]>([])
+  const [tableChoisie, setTableChoisie] = useState('')
+  const [savingArrivee, setSavingArrivee] = useState(false)
 
   const fetchReservations = useCallback(async () => {
     try {
@@ -178,6 +189,43 @@ export default function ReservationsPage() {
     } catch { /* skip */ } finally { setSaving(false) }
   }
 
+  const ouvrirArrivee = async (r: Reservation) => {
+    setArrivedModal(r)
+    setTableChoisie('')
+    const zone = r.zone_preference
+    let q = supabase.from('tables_restaurant').select('id, numero, zone, capacite').eq('actif', true).eq('statut', 'libre')
+    if (zone) q = (q as typeof q).eq('zone', zone)
+    const { data } = await q.order('numero')
+    setTablesLibres((data ?? []) as TableLibre[])
+  }
+
+  const confirmerArrivee = async () => {
+    if (!arrivedModal || !tableChoisie) return
+    setSavingArrivee(true)
+    try {
+      const table = tablesLibres.find(t => t.id === tableChoisie)
+      if (!table) return
+      await supabase.from('reservations').update({ statut: 'confirmee' }).eq('id', arrivedModal.id)
+      await supabase.from('tables_restaurant').update({ statut: 'occupee' }).eq('id', table.id)
+      await supabase.from('commandes').insert({
+        nom: arrivedModal.nom,
+        nom_client: arrivedModal.nom,
+        type: 'sur_place',
+        statut: 'en_attente',
+        table_numero: table.numero,
+        zone: table.zone,
+        couverts: arrivedModal.nombre_couverts,
+        total: 0,
+      })
+      setArrivedModal(null)
+      await fetchReservations()
+    } catch (err) {
+      console.error('confirmerArrivee error:', err)
+    } finally {
+      setSavingArrivee(false)
+    }
+  }
+
   const smsText = (r: Reservation) =>
     `Bonjour ${r.nom}, votre réservation chez Roma le ${r.date_reservation} à ${(r.heure_reservation ?? '').substring(0, 5)} pour ${r.nombre_couverts} pers. est confirmée. À bientôt !`
 
@@ -200,6 +248,7 @@ export default function ReservationsPage() {
   // Actions communes pour une réservation
   const ActionBtns = ({ r, compact = false }: { r: Reservation; compact?: boolean }) => (
     <div className={`flex gap-1 ${compact ? '' : 'flex-wrap'}`}>
+      <button onClick={() => ouvrirArrivee(r)} className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} rounded-lg bg-[#1B5E20] text-white font-medium whitespace-nowrap`}>✅{!compact && ' Client arrivé'}</button>
       {r.statut !== 'confirmee' && (
         <button onClick={() => updateStatut(r.id, 'confirmee')} className={`${compact ? 'px-2 py-1 text-xs' : 'flex-1 py-2 text-sm'} rounded-lg bg-green-100 text-green-700 font-medium`}>✓{!compact && ' Confirmer'}</button>
       )}
@@ -415,6 +464,49 @@ export default function ReservationsPage() {
                 📋 Copier le message
               </button>
               <button onClick={() => setSmsModal(null)} className="px-4 py-2 border border-[#E0D5C5] text-[#555] rounded-lg text-sm">Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Client arrivé */}
+      {arrivedModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold">✅ Client arrivé</h2>
+              <button onClick={() => setArrivedModal(null)} className="text-gray-400 hover:text-gray-700">✕</button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Client</label>
+                <div className="px-3 py-2 rounded-lg text-sm bg-[#F0EBE0] text-[#1A1A1A] font-medium">{arrivedModal.nom}</div>
+              </div>
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Couverts</label>
+                <div className="px-3 py-2 rounded-lg text-sm bg-[#F0EBE0] text-[#1A1A1A]">{arrivedModal.nombre_couverts} personne{arrivedModal.nombre_couverts > 1 ? 's' : ''}</div>
+              </div>
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Table à assigner {arrivedModal.zone_preference ? `(${arrivedModal.zone_preference})` : ''}</label>
+                {tablesLibres.length === 0 ? (
+                  <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">Aucune table libre{arrivedModal.zone_preference ? ` en ${arrivedModal.zone_preference}` : ''}</div>
+                ) : (
+                  <select value={tableChoisie} onChange={e => setTableChoisie(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none focus:ring-2 focus:ring-[#1B5E20]">
+                    <option value="">— Choisir une table —</option>
+                    {tablesLibres.map(t => (
+                      <option key={t.id} value={t.id}>Table {t.numero} · {t.zone} · {t.capacite} pers.</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setArrivedModal(null)} className="flex-1 py-2 rounded-lg text-sm text-[#555] border border-[#E0D5C5]">Annuler</button>
+              <button onClick={confirmerArrivee} disabled={!tableChoisie || savingArrivee}
+                className="flex-1 py-2 rounded-lg text-sm font-medium text-white bg-[#1B5E20] disabled:opacity-50">
+                {savingArrivee ? 'En cours...' : 'Confirmer l\'arrivée'}
+              </button>
             </div>
           </div>
         </div>
