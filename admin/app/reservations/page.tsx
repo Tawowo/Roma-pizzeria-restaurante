@@ -8,7 +8,6 @@ import jsPDF from 'jspdf'
 type StatutRes = 'en_attente' | 'confirmee' | 'annulee'
 type Vue = 'liste' | 'calendrier'
 
-// Noms de colonnes exacts de la table reservations
 interface Reservation {
   id: string
   heure_reservation: string
@@ -30,12 +29,19 @@ interface FormData {
   nombre_couverts: number
   zone_preference: string
   notes: string
+  statut: StatutRes
 }
 
-const STATUT_STYLES: Record<StatutRes, { bg: string; text: string; label: string; tw: string }> = {
-  en_attente: { bg: 'rgba(212,168,67,0.2)', text: '#D4A843', label: 'En attente', tw: 'bg-yellow-100 text-yellow-800' },
-  confirmee: { bg: 'rgba(46,125,50,0.2)', text: '#4caf50', label: 'Confirmée', tw: 'bg-green-100 text-green-800' },
-  annulee: { bg: 'rgba(183,28,28,0.2)', text: '#ef5350', label: 'Annulée', tw: 'bg-red-100 text-red-800' },
+const STATUT_STYLES: Record<StatutRes, { label: string; tw: string }> = {
+  en_attente: { label: 'En attente', tw: 'bg-yellow-100 text-yellow-800' },
+  confirmee:  { label: 'Confirmée',  tw: 'bg-green-100 text-green-800' },
+  annulee:    { label: 'Annulée',    tw: 'bg-red-100 text-red-800' },
+}
+
+const STATUT_BLOC: Record<StatutRes, string> = {
+  confirmee:  'bg-green-100 border-green-300 text-green-800',
+  annulee:    'bg-red-100 border-red-300 text-red-800',
+  en_attente: 'bg-yellow-100 border-yellow-300 text-yellow-800',
 }
 
 const CRENEAUX = ['12:00','12:30','13:00','13:30','14:00','14:30','19:00','19:30','20:00','20:30','21:00','21:30','22:00']
@@ -53,9 +59,24 @@ function getWeek(base: Date): Date[] {
 }
 
 const emptyForm = (): FormData => ({
-  nom: '', telephone: '', date_reservation: new Date().toISOString().split('T')[0],
-  heure_reservation: '20:00', nombre_couverts: 2, zone_preference: '', notes: ''
+  nom: '', telephone: '',
+  date_reservation: new Date().toISOString().split('T')[0],
+  heure_reservation: '20:00',
+  nombre_couverts: 2, zone_preference: '', notes: '', statut: 'en_attente',
 })
+
+function resaToForm(r: Reservation): FormData {
+  return {
+    nom: r.nom,
+    telephone: r.telephone,
+    date_reservation: r.date_reservation,
+    heure_reservation: (r.heure_reservation ?? '').substring(0, 5),
+    nombre_couverts: r.nombre_couverts,
+    zone_preference: r.zone_preference ?? '',
+    notes: r.notes ?? '',
+    statut: r.statut,
+  }
+}
 
 export default function ReservationsPage() {
   const router = useRouter()
@@ -64,6 +85,7 @@ export default function ReservationsPage() {
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
   const [filterStatut, setFilterStatut] = useState<string>('')
   const [showModal, setShowModal] = useState(false)
+  const [editTarget, setEditTarget] = useState<Reservation | null>(null)
   const [form, setForm] = useState<FormData>(emptyForm())
   const [saving, setSaving] = useState(false)
   const [vue, setVue] = useState<Vue>('liste')
@@ -74,7 +96,7 @@ export default function ReservationsPage() {
     try {
       const week = getWeek(weekBase)
       const startDate = vue === 'calendrier' ? week[0].toISOString().split('T')[0] : filterDate
-      const endDate = vue === 'calendrier' ? week[6].toISOString().split('T')[0] : filterDate
+      const endDate   = vue === 'calendrier' ? week[6].toISOString().split('T')[0] : filterDate
 
       let query = supabase.from('reservations').select('*')
         .gte('date_reservation', startDate)
@@ -114,28 +136,50 @@ export default function ReservationsPage() {
     try { await supabase.from('reservations').delete().eq('id', id); await fetchReservations() } catch { /* skip */ }
   }
 
-  const handleCreate = async () => {
+  const openCreate = () => {
+    setEditTarget(null)
+    setForm(emptyForm())
+    setShowModal(true)
+  }
+
+  const openEdit = (r: Reservation) => {
+    setEditTarget(r)
+    setForm(resaToForm(r))
+    setShowModal(true)
+  }
+
+  const handleSave = async () => {
     setSaving(true)
+    const heureFormatee = form.heure_reservation.length === 5
+      ? form.heure_reservation + ':00'
+      : form.heure_reservation.substring(0, 8)
+    const payload = {
+      nom: form.nom,
+      telephone: form.telephone,
+      date_reservation: form.date_reservation,
+      heure_reservation: heureFormatee,
+      nombre_couverts: form.nombre_couverts,
+      zone_preference: form.zone_preference || null,
+      notes: form.notes || null,
+      statut: form.statut,
+    }
     try {
-      const { error } = await supabase.from('reservations').insert([{
-        nom: form.nom,
-        telephone: form.telephone,
-        date_reservation: form.date_reservation,
-        heure_reservation: form.heure_reservation,
-        nombre_couverts: form.nombre_couverts,
-        zone_preference: form.zone_preference || null,
-        notes: form.notes || null,
-        statut: 'en_attente',
-      }])
-      if (error) { console.error('Insert réservation:', error); return }
+      if (editTarget) {
+        const { error } = await supabase.from('reservations').update(payload).eq('id', editTarget.id)
+        if (error) { console.error('Update réservation:', error); return }
+      } else {
+        const { error } = await supabase.from('reservations').insert([{ ...payload, statut: 'en_attente' }])
+        if (error) { console.error('Insert réservation:', error); return }
+      }
       setShowModal(false)
       setForm(emptyForm())
+      setEditTarget(null)
       await fetchReservations()
     } catch { /* skip */ } finally { setSaving(false) }
   }
 
   const smsText = (r: Reservation) =>
-    `Bonjour ${r.nom}, votre réservation chez Roma le ${r.date_reservation} à ${r.heure_reservation} pour ${r.nombre_couverts} pers. est confirmée. À bientôt !`
+    `Bonjour ${r.nom}, votre réservation chez Roma le ${r.date_reservation} à ${(r.heure_reservation ?? '').substring(0, 5)} pour ${r.nombre_couverts} pers. est confirmée. À bientôt !`
 
   const exportPDFJour = () => {
     const doc = new jsPDF()
@@ -144,7 +188,7 @@ export default function ReservationsPage() {
     doc.setFontSize(10)
     let y = 35
     reservations.forEach(r => {
-      doc.text(`${r.heure_reservation}  ${r.nom}  ${r.nombre_couverts}p  ${r.zone_preference || ''}  [${STATUT_STYLES[r.statut]?.label}]`, 20, y)
+      doc.text(`${(r.heure_reservation ?? '').substring(0,5)}  ${r.nom}  ${r.nombre_couverts}p  ${r.zone_preference || ''}  [${STATUT_STYLES[r.statut]?.label}]`, 20, y)
       y += 8
       if (y > 270) { doc.addPage(); y = 20 }
     })
@@ -153,16 +197,20 @@ export default function ReservationsPage() {
 
   const week = getWeek(weekBase)
 
-  // Détection conflits calendrier
-  const conflits: string[] = []
-  if (vue === 'calendrier') {
-    const grouped: Record<string, Reservation[]> = {}
-    reservations.forEach(r => {
-      const key = `${r.date_reservation}-${r.heure_reservation}-${r.zone_preference || 'sans-zone'}`
-      grouped[key] = [...(grouped[key] ?? []), r]
-    })
-    Object.entries(grouped).forEach(([k, v]) => { if (v.length > 1) conflits.push(k) })
-  }
+  // Actions communes pour une réservation
+  const ActionBtns = ({ r, compact = false }: { r: Reservation; compact?: boolean }) => (
+    <div className={`flex gap-1 ${compact ? '' : 'flex-wrap'}`}>
+      {r.statut !== 'confirmee' && (
+        <button onClick={() => updateStatut(r.id, 'confirmee')} className={`${compact ? 'px-2 py-1 text-xs' : 'flex-1 py-2 text-sm'} rounded-lg bg-green-100 text-green-700 font-medium`}>✓{!compact && ' Confirmer'}</button>
+      )}
+      {r.statut !== 'annulee' && (
+        <button onClick={() => updateStatut(r.id, 'annulee')} className={`${compact ? 'px-2 py-1 text-xs' : 'flex-1 py-2 text-sm'} rounded-lg bg-red-100 text-red-700 font-medium`}>✗{!compact && ' Annuler'}</button>
+      )}
+      <button onClick={() => openEdit(r)} className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} rounded-lg bg-blue-100 text-blue-700`}>✏️</button>
+      <button onClick={() => setSmsModal(r)} className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} rounded-lg bg-indigo-100 text-indigo-700`}>SMS</button>
+      <button onClick={() => deleteReservation(r.id)} className={`${compact ? 'px-2 py-1 text-xs' : 'px-3 py-2 text-sm'} rounded-lg bg-gray-100 text-gray-500`}>🗑</button>
+    </div>
+  )
 
   return (
     <div>
@@ -179,7 +227,7 @@ export default function ReservationsPage() {
               📅 Calendrier
             </button>
           </div>
-          <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg font-medium text-white text-sm bg-[#B71C1C] hover:bg-[#C62828]">
+          <button onClick={openCreate} className="px-4 py-2 rounded-lg font-medium text-white text-sm bg-[#B71C1C] hover:bg-[#C62828]">
             + Nouvelle
           </button>
         </div>
@@ -214,7 +262,7 @@ export default function ReservationsPage() {
                       <div key={r.id} className="bg-white rounded-xl border border-[#E0D5C5] p-4">
                         <div className="flex items-start justify-between mb-2">
                           <div>
-                            <span className="font-bold text-[#1A1A1A] text-lg">{r.heure_reservation}</span>
+                            <span className="font-bold text-[#1A1A1A] text-lg">{(r.heure_reservation ?? '').substring(0, 5)}</span>
                             <span className="ml-2 font-medium text-[#1A1A1A]">{r.nom}</span>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
@@ -223,11 +271,8 @@ export default function ReservationsPage() {
                           <div>📞 {r.telephone} · {r.nombre_couverts} couverts · {r.zone_preference || 'Indifférent'}</div>
                           {r.notes && <div className="text-xs text-[#777]">📝 {r.notes}</div>}
                         </div>
-                        <div className="flex gap-2 mt-3">
-                          {r.statut !== 'confirmee' && <button onClick={() => updateStatut(r.id, 'confirmee')} className="flex-1 py-2 rounded-lg text-sm bg-green-100 text-green-700 font-medium">✓ Confirmer</button>}
-                          {r.statut !== 'annulee' && <button onClick={() => updateStatut(r.id, 'annulee')} className="flex-1 py-2 rounded-lg text-sm bg-red-100 text-red-700 font-medium">✗ Annuler</button>}
-                          <button onClick={() => setSmsModal(r)} className="px-3 py-2 rounded-lg text-sm bg-blue-100 text-blue-700">SMS</button>
-                          <button onClick={() => deleteReservation(r.id)} className="px-3 py-2 rounded-lg text-sm bg-gray-100 text-gray-500">🗑</button>
+                        <div className="mt-3">
+                          <ActionBtns r={r} />
                         </div>
                       </div>
                     )
@@ -248,7 +293,7 @@ export default function ReservationsPage() {
                         const s = STATUT_STYLES[r.statut] ?? STATUT_STYLES.en_attente
                         return (
                           <tr key={r.id} className="border-t border-[#E0D5C5]">
-                            <td className="px-4 py-3 font-mono font-bold text-[#1A1A1A]">{r.heure_reservation}</td>
+                            <td className="px-4 py-3 font-mono font-bold text-[#1A1A1A]">{(r.heure_reservation ?? '').substring(0, 5)}</td>
                             <td className="px-4 py-3 font-medium text-[#1A1A1A]">{r.nom}</td>
                             <td className="px-4 py-3 text-[#555]">{r.telephone}</td>
                             <td className="px-4 py-3 text-center text-[#555]">{r.nombre_couverts}</td>
@@ -258,16 +303,7 @@ export default function ReservationsPage() {
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
                             </td>
                             <td className="px-4 py-3">
-                              <div className="flex gap-1">
-                                {r.statut !== 'confirmee' && (
-                                  <button onClick={() => updateStatut(r.id, 'confirmee')} className="px-2 py-1 rounded text-xs bg-green-100 text-green-700">✓</button>
-                                )}
-                                {r.statut !== 'annulee' && (
-                                  <button onClick={() => updateStatut(r.id, 'annulee')} className="px-2 py-1 rounded text-xs bg-red-100 text-red-700">✗</button>
-                                )}
-                                <button onClick={() => setSmsModal(r)} className="px-2 py-1 rounded text-xs bg-blue-100 text-blue-700">SMS</button>
-                                <button onClick={() => deleteReservation(r.id)} className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-500">🗑</button>
-                              </div>
+                              <ActionBtns r={r} compact />
                             </td>
                           </tr>
                         )
@@ -306,12 +342,13 @@ export default function ReservationsPage() {
                 </h3>
                 {resas.map(r => (
                   <div key={r.id} className="bg-white rounded-lg border border-[#E0D5C5] p-3 mb-2">
-                    <div className="flex justify-between items-center">
-                      <span className="font-mono font-bold text-[#1A1A1A]">{r.heure_reservation}</span>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="font-mono font-bold text-[#1A1A1A]">{(r.heure_reservation ?? '').substring(0, 5)}</span>
                       <span className="font-medium">{r.nom}</span>
                       <span className={`px-2 py-0.5 rounded text-xs ${STATUT_STYLES[r.statut]?.tw}`}>{STATUT_STYLES[r.statut]?.label}</span>
                     </div>
-                    <div className="text-sm text-[#555] mt-1">{r.nombre_couverts} couverts · {r.zone_preference || 'Indifférent'}</div>
+                    <div className="text-sm text-[#555] mb-2">{r.nombre_couverts} couverts · {r.zone_preference || 'Indifférent'}</div>
+                    <ActionBtns r={r} compact />
                   </div>
                 ))}
               </div>
@@ -337,27 +374,22 @@ export default function ReservationsPage() {
                   <div className="border border-[#E0D5C5] p-2 text-xs text-[#555] font-mono bg-[#F0EBE0] flex items-center justify-center">{creneau}</div>
                   {week.map(d => {
                     const dateStr = d.toISOString().split('T')[0]
-                    // Comparer les 5 premiers chars de heure_reservation (HH:MM) car DB stocke HH:MM:SS
                     const resas = reservations.filter(r =>
                       r.date_reservation === dateStr &&
                       (r.heure_reservation ?? '').substring(0, 5) === creneau
                     )
-                    const conflit = resas.length > 1
                     return (
                       <div key={`${dateStr}-${creneau}`} className="border border-[#E0D5C5] p-1 min-h-[52px] bg-white">
-                        {conflit && <div className="text-xs text-red-600 font-bold mb-0.5">⚠️ Conflit</div>}
-                        {resas.map(r => {
-                          const statutBg =
-                            r.statut === 'confirmee' ? 'bg-green-100 border-green-300 text-green-800' :
-                            r.statut === 'annulee'   ? 'bg-red-100 border-red-300 text-red-800' :
-                                                       'bg-yellow-100 border-yellow-300 text-yellow-800'
-                          return (
-                            <div key={r.id} className={`text-xs rounded border px-1.5 py-1 mb-0.5 ${statutBg}`}>
-                              <div className="font-semibold truncate">{r.nom}</div>
-                              <div className="opacity-75">{r.nombre_couverts}p{r.zone_preference ? ` · ${r.zone_preference}` : ''}</div>
-                            </div>
-                          )
-                        })}
+                        {resas.map(r => (
+                          <div key={r.id}
+                            className={`text-xs rounded border px-1.5 py-1 mb-0.5 cursor-pointer hover:opacity-80 ${STATUT_BLOC[r.statut] ?? STATUT_BLOC.en_attente}`}
+                            onClick={() => openEdit(r)}
+                            title="Cliquer pour modifier"
+                          >
+                            <div className="font-semibold truncate">{r.nom}</div>
+                            <div className="opacity-75">{r.nombre_couverts}p{r.zone_preference ? ` · ${r.zone_preference}` : ''}</div>
+                          </div>
+                        ))}
                       </div>
                     )
                   })}
@@ -388,12 +420,12 @@ export default function ReservationsPage() {
         </div>
       )}
 
-      {/* Modal Nouvelle réservation */}
+      {/* Modal Créer / Modifier réservation */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl p-6 bg-white shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl p-6 bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold">Nouvelle réservation</h2>
+              <h2 className="text-lg font-bold">{editTarget ? 'Modifier la réservation' : 'Nouvelle réservation'}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-700">✕</button>
             </div>
             <div className="space-y-3">
@@ -415,10 +447,8 @@ export default function ReservationsPage() {
                 </div>
                 <div>
                   <label className="block text-xs text-[#555] mb-1">Heure</label>
-                  <select value={form.heure_reservation} onChange={e => setForm(prev => ({ ...prev, heure_reservation: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]">
-                    {CRENEAUX.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <input type="time" value={form.heure_reservation} onChange={e => setForm(prev => ({ ...prev, heure_reservation: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]" />
                 </div>
               </div>
               <div className="flex flex-col sm:grid sm:grid-cols-2 gap-3">
@@ -439,6 +469,17 @@ export default function ReservationsPage() {
                   </select>
                 </div>
               </div>
+              {editTarget && (
+                <div>
+                  <label className="block text-xs text-[#555] mb-1">Statut</label>
+                  <select value={form.statut} onChange={e => setForm(prev => ({ ...prev, statut: e.target.value as StatutRes }))}
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]">
+                    <option value="en_attente">En attente</option>
+                    <option value="confirmee">Confirmée</option>
+                    <option value="annulee">Annulée</option>
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs text-[#555] mb-1">Notes</label>
                 <textarea value={form.notes} onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))} rows={2}
@@ -447,8 +488,8 @@ export default function ReservationsPage() {
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowModal(false)} className="flex-1 py-2 rounded-lg text-sm text-[#555] border border-[#E0D5C5]">Annuler</button>
-              <button onClick={handleCreate} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-medium text-white bg-[#B71C1C] disabled:opacity-50">
-                {saving ? 'Enregistrement...' : 'Créer'}
+              <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-medium text-white bg-[#B71C1C] disabled:opacity-50">
+                {saving ? 'Enregistrement...' : (editTarget ? 'Enregistrer' : 'Créer')}
               </button>
             </div>
           </div>
