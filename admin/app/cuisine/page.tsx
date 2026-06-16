@@ -82,11 +82,8 @@ function renderCard(
           <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
             {cmd.type === 'sur_place'
               ? formatZone(cmd.zone)
-              : `${cmd.nom_client ? cmd.nom_client.toUpperCase() : 'À EMPORTER'}`}
+              : (cmd.nom_client ? cmd.nom_client.toUpperCase() : '')}
           </div>
-          {cmd.type === 'a_emporter' && (
-            <span style={{ background: '#F57F17', color: '#000', fontWeight: 700, fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>📦 EMPORTER</span>
-          )}
         </div>
       </div>
 
@@ -326,7 +323,7 @@ export default function CuisinePage() {
   const commandesSurPlace = commandesTri.filter(c => c.type === 'sur_place')
 
   return (
-    <div style={{ background: '#0A0A0A', minHeight: '100vh', color: '#F5F5F5', overflowX: 'hidden' }}>
+    <div style={{ background: '#FBF6EE', minHeight: '100vh', color: '#1A1A1A', overflowX: 'hidden' }}>
       {/* Header */}
       <div style={{ height: 48, background: '#1B5E20', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -356,8 +353,8 @@ export default function CuisinePage() {
       </div>
 
       {/* Sélecteur de date */}
-      <div style={{ background: '#111', borderBottom: '1px solid rgba(255,255,255,0.08)', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', letterSpacing: 1, textTransform: 'uppercase' }}>📅 Jour :</span>
+      <div style={{ background: '#F0EBE0', borderBottom: '1px solid rgba(0,0,0,0.08)', padding: '10px 24px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 12, color: '#555', letterSpacing: 1, textTransform: 'uppercase' }}>📅 Jour :</span>
         <input
           type="date"
           value={dateFiltre}
@@ -368,9 +365,8 @@ export default function CuisinePage() {
             fetchCommandes(d)
           }}
           style={{
-            background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 6,
-            color: '#F5F5F5', padding: '5px 10px', fontSize: 13, cursor: 'pointer',
-            colorScheme: 'dark',
+            background: '#fff', border: '1px solid #E0D5C5', borderRadius: 6,
+            color: '#1A1A1A', padding: '5px 10px', fontSize: 13, cursor: 'pointer',
           }}
         />
         {dateFiltre !== todayStr && (
@@ -380,13 +376,13 @@ export default function CuisinePage() {
               setLoading(true)
               fetchCommandes(todayStr)
             }}
-            style={{ fontSize: 12, color: '#4caf50', background: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+            style={{ fontSize: 12, color: '#1B5E20', background: 'rgba(27,94,32,0.08)', border: '1px solid rgba(27,94,32,0.3)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
           >
             ← Aujourd&apos;hui
           </button>
         )}
         {dateFiltre !== todayStr && (
-          <span style={{ fontSize: 11, color: '#D4A843', background: 'rgba(212,168,67,0.1)', border: '1px solid rgba(212,168,67,0.2)', borderRadius: 4, padding: '3px 8px' }}>
+          <span style={{ fontSize: 11, color: '#B71C1C', background: 'rgba(183,28,28,0.06)', border: '1px solid rgba(183,28,28,0.2)', borderRadius: 4, padding: '3px 8px' }}>
             📋 Vue historique
           </span>
         )}
