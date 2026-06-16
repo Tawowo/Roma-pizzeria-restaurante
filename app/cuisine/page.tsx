@@ -124,19 +124,36 @@ export default function CuisinePage() {
       const session = getSession()
       if (!session) { router.replace('/login'); return }
 
-      let query = supabase
+      const statutFilter = isAujourdhui
+        ? ['en_cours', 'en_preparation']
+        : ['en_cours', 'en_preparation', 'pret_encaisser', 'encaissee', 'annulee']
+
+      // À emporter : filtrer par date_retrait (ils peuvent être commandés un autre jour)
+      const emporterQ = supabase
         .from('commandes')
         .select('*, lignes_commande(*)')
+        .eq('type', 'a_emporter')
+        .eq('date_retrait', jour)
+        .in('statut', statutFilter)
+        .order('heure_retrait')
+
+      // Sur place : filtrer par created_at
+      const surPlaceQ = supabase
+        .from('commandes')
+        .select('*, lignes_commande(*)')
+        .eq('type', 'sur_place')
         .gte('created_at', jour + 'T00:00:00')
         .lte('created_at', jour + 'T23:59:59')
+        .in('statut', statutFilter)
         .order('created_at')
 
-      if (isAujourdhui) {
-        query = query.in('statut', ['en_cours', 'en_preparation'])
-      }
+      const [{ data: emporterData, error: err1 }, { data: surPlaceData, error: err2 }] =
+        await Promise.all([emporterQ, surPlaceQ])
 
-      const { data, error } = await query
-      if (error) throw error
+      if (err1) throw err1
+      if (err2) throw err2
+
+      const data = [...(emporterData ?? []), ...(surPlaceData ?? [])]
 
       const result: Commande[] = []
 
