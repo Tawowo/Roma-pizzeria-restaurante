@@ -139,14 +139,14 @@ export default function AdminPage() {
   const submitCmdAdmin = async () => {
     if (!cmdNom || !cmdTel || !cmdHeure || cmdLignes.length === 0) return
     const total = cmdLignes.reduce((s, l) => s + (l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : l.article.prix) * l.quantite, 0)
-    const { data: cmd } = await supabase.from('commandes').insert({ 'Nom': cmdNom, 'Téléphone': cmdTel, heure_retrait: cmdHeure, date_retrait: filterDate, 'Statut': 'en_attente', notes: cmdNote || null, total }).select().single()
+    const { data: cmd } = await supabase.from('commandes').insert({ nom: cmdNom, telephone: cmdTel, heure_retrait: cmdHeure, date_retrait: filterDate, statut: 'en_attente', notes: cmdNote || null, total }).select().single()
     if (!cmd) return
     await supabase.from('lignes_commande').insert(cmdLignes.map(l => ({ commande_id: cmd.id, article_id: l.article.id, article_nom: l.article.nom, quantite: l.quantite, taille: l.taille, prix_unitaire: l.taille === 'pala' ? (l.article.prix_pala || l.article.prix) : l.article.prix, commentaire: l.commentaire || null })))
     setCmdNom(''); setCmdTel(''); setCmdHeure(''); setCmdNote(''); setCmdLignes([])
     load()
   }
-  const updateCmdStatut = async (id: string, statut: string) => { await supabase.from('commandes').update({ 'Statut': statut }).eq('id', id); load() }
-  const deleteCmd = async (id: string) => { if (confirm('Annuler cette commande ?')) { await supabase.from('commandes').update({ 'Statut': 'annulee' }).eq('id', id); load() } }
+  const updateCmdStatut = async (id: string, statut: string) => { await supabase.from('commandes').update({ statut: statut }).eq('id', id); load() }
+  const deleteCmd = async (id: string) => { if (confirm('Annuler cette commande ?')) { await supabase.from('commandes').update({ statut: 'annulee' }).eq('id', id); load() } }
 
   if (!auth) return (
     <div style={{ minHeight: '100vh', background: 'var(--dark)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>

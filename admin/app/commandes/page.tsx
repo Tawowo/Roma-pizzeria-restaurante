@@ -488,10 +488,10 @@ export default function CommandesPage() {
       const { data: cmd, error: cmdErr } = await supabase
         .from('commandes')
         .insert([{
-          'Type': 'sur_place',
-          'Statut': 'en_preparation',
+          type: 'sur_place',
+          statut: 'en_preparation',
           nom_client: nomClient.trim(),
-          'Téléphone': telClient || null,
+          telephone: telClient || null,
           table_numero: modalTable?.num,
           zone: modalTable?.zone,
           couverts,
@@ -553,7 +553,7 @@ export default function CommandesPage() {
     try {
       const { error: payErr } = await supabase
         .from('commandes')
-        .update({ 'Statut': 'encaissee', mode_paiement: modePaiement })
+        .update({ statut: 'encaissee', mode_paiement: modePaiement })
         .eq('id', modalEncaiss.id)
       if (payErr) throw new Error(`Erreur encaissement : ${payErr.message}`)
 
@@ -596,7 +596,7 @@ export default function CommandesPage() {
     try {
       const { error: annErr } = await supabase
         .from('commandes')
-        .update({ 'Statut': 'annulee' })
+        .update({ statut: 'annulee' })
         .eq('id', cmd.id)
       if (annErr) throw new Error(`Erreur annulation : ${annErr.message}`)
 
@@ -712,11 +712,11 @@ export default function CommandesPage() {
       const total = empPanier.reduce((s, p) => s + p.article.prix * p.quantite, 0)
       const { data: cmd, error: cmdErr } = await supabase.from('commandes').insert({
         nom_client: empNom.trim(),
-        'Téléphone': empTel.trim(),
+        telephone: empTel.trim(),
         heure_retrait: empHeure,
         date_retrait: empDate,
-        'Type': 'a_emporter',
-        'Statut': 'en_preparation',
+        type: 'a_emporter',
+        statut: 'en_preparation',
         total,
       }).select().single()
       if (cmdErr || !cmd) throw new Error(cmdErr?.message ?? 'Erreur création commande')
@@ -1479,7 +1479,7 @@ function CommandeRow({
     setUpdatingStatut(true)
     setErrLocal(null)
     try {
-      const { error } = await supabase.from('commandes').update({ 'Statut': statut }).eq('id', cmd.id)
+      const { error } = await supabase.from('commandes').update({ statut: statut }).eq('id', cmd.id)
       if (error) throw new Error(error.message)
       onUpdate()
     } catch (err) {

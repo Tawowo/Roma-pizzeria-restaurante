@@ -953,7 +953,7 @@ export default function HomePage() {
                           }
                           const total = cmdItems.reduce((sum, i) => sum + i.qty * (i.taille === 'pala' ? i.prixPala : i.prix33), 0)
                           const { data: cmd } = await supabase.from('commandes').insert({
-                            client_id: clientId ?? null, 'Type': 'a_emporter', 'Statut': 'en_attente',
+                            client_id: clientId ?? null, type: 'a_emporter', statut: 'en_attente',
                             total, notes: cmdForm.notes || null,
                             heure_retrait: cmdForm.date + 'T' + cmdForm.heure,
                           }).select('id').single()
