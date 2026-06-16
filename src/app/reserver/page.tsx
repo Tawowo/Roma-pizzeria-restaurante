@@ -15,11 +15,6 @@ export default function ReserverPage() {
   const [success, setSuccess] = useState(false)
   const [error, setError]     = useState('')
 
-  const minDate = () => {
-    const d = new Date(); d.setDate(d.getDate() + 1)
-    return d.toISOString().split('T')[0]
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     const day = new Date(form.date + 'T12:00:00').getDay()
@@ -36,10 +31,15 @@ export default function ReserverPage() {
         clientId = nc?.id
       }
       const { error: resaErr } = await supabase.from('reservations').insert({
-        client_id: clientId, nom: form.nom, telephone: form.telephone,
-        date_reservation: form.date, heure_reservation: form.heure,
+        client_id: clientId ?? null,
+        nom: form.nom,
+        telephone: form.telephone,
+        date_reservation: form.date,
+        heure_reservation: form.heure,
         nombre_couverts: parseInt(form.couverts),
-        zone: form.zone || null, notes: form.notes || null, statut: 'en_attente',
+        zone_preference: form.zone || null,
+        notes: form.notes || null,
+        statut: 'en_attente',
       })
       if (resaErr) throw resaErr
       setSuccess(true)
@@ -92,7 +92,7 @@ export default function ReserverPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                 <div>
                   <label className="rf-label">{t('reserver_date')}</label>
-                  <input type="date" className="rf-input" min={minDate()} value={form.date}
+                  <input type="date" className="rf-input" value={form.date}
                     onChange={e => { setError(new Date(e.target.value+'T12:00:00').getDay()===1?t('reserver_lundi'):''); setForm(p=>({...p,date:e.target.value})) }} required />
                 </div>
                 <div>
