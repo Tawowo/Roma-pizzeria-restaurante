@@ -215,15 +215,19 @@ export default function CommanderPage() {
 
     setLoading(true)
     try {
-      // Extraire uniquement HH:MM:SS quel que soit le format reçu
-      const heureBrute = heureRetrait.includes('T') ? heureRetrait.split('T')[1] : heureRetrait
-      const heureFormatee = (heureBrute.length === 5 ? heureBrute + ':00' : heureBrute).substring(0, 8)
+      const heureOnly = heureRetrait.includes('T')
+        ? heureRetrait.split('T')[1].substring(0, 5) + ':00'
+        : heureRetrait.length === 5 ? heureRetrait + ':00' : heureRetrait.substring(0, 8)
+
+      const dateOnly = heureRetrait.includes('T')
+        ? heureRetrait.split('T')[0]
+        : dateRetrait
 
       const cmdPayload = {
-        'nom': nom.trim(),
-        'telephone': tel.trim(),
-        heure_retrait: heureFormatee,
-        date_retrait: dateRetrait,
+        nom: nom.trim(),
+        telephone: tel.trim(),
+        heure_retrait: heureOnly,
+        date_retrait: dateOnly,
         type: 'a_emporter',
         statut: 'en_preparation',
         notes: notes.trim() || null,

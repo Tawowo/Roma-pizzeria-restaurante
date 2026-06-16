@@ -28,22 +28,24 @@ export default function ReserverPage() {
     try {
       let clientId: string | undefined
       const { data: existing } = await supabase
-        .from('client').select('id').eq('telephone', form.telephone).single()
+        .from('clients').select('id').eq('telephone', form.telephone).single()
       if (existing) { clientId = existing.id } else {
         const { data: nc } = await supabase
           .from('clients').insert({ nom: form.nom, telephone: form.telephone, points: 0, nb_visites: 0 })
           .select('id').single()
         clientId = nc?.id
       }
-      await supabase.from('reservation').insert({
+      const { error: resaErr } = await supabase.from('reservations').insert({
         client_id: clientId, nom: form.nom, telephone: form.telephone,
         date_reservation: form.date, heure_reservation: form.heure,
         nombre_couverts: parseInt(form.couverts),
         zone: form.zone || null, notes: form.notes || null, statut: 'en_attente',
       })
+      if (resaErr) throw resaErr
       setSuccess(true)
-    } catch {
-      setError('Une erreur est survenue. Veuillez réessayer.')
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Erreur inconnue'
+      setError(`Erreur : ${msg}`)
     } finally {
       setLoading(false)
     }
