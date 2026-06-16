@@ -134,7 +134,7 @@ export default function FinancesPage() {
 
       const { data: cmdData, error: cmdErr } = await supabase
         .from('commandes').select('id, total, created_at')
-        .eq('statut', 'encaissee').gte('created_at', r.start + 'T00:00:00').lte('created_at', r.end + 'T23:59:59')
+        .eq('Statut', 'encaissee').gte('created_at', r.start + 'T00:00:00').lte('created_at', r.end + 'T23:59:59')
       if (cmdErr) throw cmdErr
       setCommandes(cmdData ?? [])
 
@@ -204,7 +204,7 @@ export default function FinancesPage() {
         const mStart = d.toISOString().split('T')[0]
         const mEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]
         const { data: mData } = await supabase.from('commandes').select('total')
-          .eq('statut', 'encaissee').gte('created_at', mStart + 'T00:00:00').lte('created_at', mEnd + 'T23:59:59')
+          .eq('Statut', 'encaissee').gte('created_at', mStart + 'T00:00:00').lte('created_at', mEnd + 'T23:59:59')
         const mCA = (mData ?? []).reduce((s, c) => s + (c.total || 0), 0)
         months12.push({ label: d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }), ca: mCA })
       }
@@ -221,7 +221,7 @@ export default function FinancesPage() {
     if (!period2.start || !period2.end) return
     try {
       const { data } = await supabase.from('commandes').select('total')
-        .eq('statut', 'encaissee')
+        .eq('Statut', 'encaissee')
         .gte('created_at', period2.start + 'T00:00:00')
         .lte('created_at', period2.end + 'T23:59:59')
       const ca = (data ?? []).reduce((s, c) => s + (c.total || 0), 0)
