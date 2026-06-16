@@ -147,6 +147,7 @@ export default function ReserverPage() {
         clientId = nc?.id
       }
       const heureFormatee = form.heure.length === 5 ? form.heure + ':00' : form.heure
+      console.log('[reserver] zone avant insert:', JSON.stringify(form.zone), '→ zone_preference:', form.zone || null)
       const { error: resaErr } = await supabase.from('reservations').insert({
         client_id: clientId ?? null,
         nom: form.nom,
@@ -254,7 +255,7 @@ export default function ReserverPage() {
                 </div>
                 <div>
                   <label className="rf-label">{t('reserver_zone')}</label>
-                  <select className="rf-select" value={form.zone} onChange={e => setForm(p=>({...p,zone:e.target.value}))} required>
+                  <select className="rf-select" value={form.zone} onChange={e => setForm(p=>({...p,zone:e.target.value}))}>
                     <option value="">{t('reserver_zone_indifferent')}</option>
                     <option value="rdc">{t('reserver_zone_rdc')}</option>
                     <option value="etage">{t('reserver_zone_etage')}</option>
