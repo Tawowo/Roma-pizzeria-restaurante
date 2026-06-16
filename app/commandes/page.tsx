@@ -741,7 +741,7 @@ export default function CommandesPage() {
     }
   }
 
-  const tablesByZone = tables.filter(t => t.zone === zone)
+  const tablesByZone = tables.filter(t => t.zone === zone).sort((a, b) => a.num - b.num)
   const commandesEmporter = commandes.filter(c =>
     c.type === 'a_emporter' && !['encaissee', 'annulee'].includes(c.statut)
   )
@@ -825,7 +825,6 @@ export default function CommandesPage() {
             <input
               type="date"
               value={dateFiltre}
-              max={new Date().toISOString().split('T')[0]}
               onChange={e => {
                 setDateFiltre(e.target.value)
                 fetchTout(e.target.value)
@@ -880,7 +879,6 @@ export default function CommandesPage() {
             <input
               type="date"
               value={dateFiltre}
-              max={new Date().toISOString().split('T')[0]}
               onChange={e => {
                 setDateFiltre(e.target.value)
                 fetchTout(e.target.value)
@@ -1474,6 +1472,17 @@ function CommandeRow({
   const s = STATUT_LABELS[cmd.statut] ?? STATUT_LABELS.brouillon
   const [updatingStatut, setUpdatingStatut] = useState(false)
   const [errLocal, setErrLocal] = useState<string | null>(null)
+  const [showModifier, setShowModifier] = useState(false)
+  const [modifForm, setModifForm] = useState({
+    nom: (cmd as unknown as Record<string, string>).nom ?? cmd.nom_client ?? '',
+    telephone: (cmd as unknown as Record<string, string>).telephone ?? '',
+    couverts: cmd.couverts ?? 2,
+    notes: (cmd as unknown as Record<string, string>).notes ?? '',
+    statut: cmd.statut,
+    heure_retrait: (cmd as unknown as Record<string, string>).heure_retrait?.substring(0, 5) ?? '',
+    date_retrait: (cmd as unknown as Record<string, string>).date_retrait ?? '',
+  })
+  const [savingModif, setSavingModif] = useState(false)
 
   const updateStatut = async (statut: StatutCmd) => {
     setUpdatingStatut(true)
@@ -1490,6 +1499,36 @@ function CommandeRow({
     }
   }
 
+  const saveModif = async () => {
+    setSavingModif(true)
+    setErrLocal(null)
+    try {
+      const heureFormatee = modifForm.heure_retrait.length === 5
+        ? modifForm.heure_retrait + ':00'
+        : modifForm.heure_retrait.substring(0, 8) || null
+      const payload: Record<string, unknown> = {
+        nom: modifForm.nom,
+        telephone: modifForm.telephone || null,
+        couverts: modifForm.couverts,
+        notes: modifForm.notes || null,
+        statut: modifForm.statut,
+      }
+      if (cmd.type === 'a_emporter') {
+        payload.heure_retrait = heureFormatee
+        payload.date_retrait = modifForm.date_retrait || null
+      }
+      const { error } = await supabase.from('commandes').update(payload).eq('id', cmd.id)
+      if (error) throw new Error(error.message)
+      setShowModifier(false)
+      onUpdate()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setErrLocal(`Erreur modification : ${msg}`)
+    } finally {
+      setSavingModif(false)
+    }
+  }
+
   const NEXT_STATUT: Partial<Record<StatutCmd, { statut: StatutCmd; label: string }>> = {
     brouillon: { statut: 'en_preparation', label: '→ En cuisine' },
     en_cours: { statut: 'pret_encaisser', label: '→ Prête' },
@@ -1498,42 +1537,118 @@ function CommandeRow({
   const next = NEXT_STATUT[cmd.statut]
 
   return (
-    <div className="w-full rounded-xl p-4 flex flex-col gap-2 bg-white border border-[#E0D5C5] shadow-sm">
-      {errLocal && (
-        <div className="text-red-600 text-xs bg-red-50 px-2 py-1 rounded">{errLocal}</div>
-      )}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-4">
-          <div className="text-xl font-bold text-[#D4A843]">#{cmd.numero_commande}</div>
-          {cmd.nom_client && <div className="text-sm font-medium text-[#1A1A1A]">{cmd.nom_client}</div>}
-          {cmd.table_numero && <div className="text-sm text-[#555]">Table {cmd.table_numero}</div>}
-          {cmd.couverts && <div className="text-sm text-[#555]">{cmd.couverts} cvts</div>}
-          <div className="text-sm text-[#555]">{new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
-          <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="font-medium text-[#1A1A1A]">{cmd.total?.toFixed(2)} €</div>
-          {next && (
+    <>
+      <div className="w-full rounded-xl p-4 flex flex-col gap-2 bg-white border border-[#E0D5C5] shadow-sm">
+        {errLocal && (
+          <div className="text-red-600 text-xs bg-red-50 px-2 py-1 rounded">{errLocal}</div>
+        )}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+            <div className="text-xl font-bold text-[#D4A843]">#{cmd.numero_commande}</div>
+            {cmd.nom_client && <div className="text-sm font-medium text-[#1A1A1A]">{cmd.nom_client}</div>}
+            {cmd.table_numero && <div className="text-sm text-[#555]">Table {cmd.table_numero}</div>}
+            {cmd.couverts && <div className="text-sm text-[#555]">{cmd.couverts} cvts</div>}
+            <div className="text-sm text-[#555]">{new Date(cmd.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</div>
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${s.tw}`}>{s.label}</span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="font-medium text-[#1A1A1A]">{cmd.total?.toFixed(2)} €</div>
+            {next && (
+              <button
+                onClick={() => updateStatut(next.statut)}
+                disabled={updatingStatut}
+                className="px-3 py-1 rounded text-xs font-medium bg-[#1B5E20]/10 text-[#1B5E20] border border-[#1B5E20]/20 disabled:opacity-50">
+                {next.label}
+              </button>
+            )}
+            {(STATUTS_ACTIFS as string[]).includes(cmd.statut) && (
+              <button onClick={onEncaisser}
+                className="px-3 py-1 rounded text-xs font-medium bg-[#B71C1C] text-white">
+                💳 Encaisser
+              </button>
+            )}
             <button
-              onClick={() => updateStatut(next.statut)}
-              disabled={updatingStatut}
-              className="px-3 py-1 rounded text-xs font-medium bg-[#1B5E20]/10 text-[#1B5E20] border border-[#1B5E20]/20 disabled:opacity-50">
-              {next.label}
+              onClick={() => { setModifForm({ nom: (cmd as unknown as Record<string, string>).nom ?? cmd.nom_client ?? '', telephone: (cmd as unknown as Record<string, string>).telephone ?? '', couverts: cmd.couverts ?? 2, notes: (cmd as unknown as Record<string, string>).notes ?? '', statut: cmd.statut, heure_retrait: (cmd as unknown as Record<string, string>).heure_retrait?.substring(0, 5) ?? '', date_retrait: (cmd as unknown as Record<string, string>).date_retrait ?? '' }); setShowModifier(true) }}
+              className="px-3 py-1 rounded text-xs font-medium border border-blue-300 text-blue-600 hover:bg-blue-50">
+              ✏️
             </button>
-          )}
-          {(STATUTS_ACTIFS as string[]).includes(cmd.statut) && (
-            <button onClick={onEncaisser}
-              className="px-3 py-1 rounded text-xs font-medium bg-[#B71C1C] text-white">
-              💳 Encaisser
+            <button
+              onClick={onSupprimer}
+              className="px-3 py-1 rounded text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50">
+              🗑
             </button>
-          )}
-          <button
-            onClick={onSupprimer}
-            className="px-3 py-1 rounded text-xs font-medium border border-red-300 text-red-600 hover:bg-red-50">
-            🗑
-          </button>
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Modal Modifier */}
+      {showModifier && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-lg font-bold">Modifier commande #{cmd.numero_commande}</h2>
+              <button onClick={() => setShowModifier(false)} className="text-gray-400 hover:text-gray-700">✕</button>
+            </div>
+            {errLocal && <div className="mb-3 p-2 rounded bg-red-50 border border-red-300 text-red-700 text-sm">⚠️ {errLocal}</div>}
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Nom</label>
+                <input type="text" value={modifForm.nom} onChange={e => setModifForm(p => ({ ...p, nom: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
+              </div>
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Téléphone</label>
+                <input type="tel" value={modifForm.telephone} onChange={e => setModifForm(p => ({ ...p, telephone: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none" />
+              </div>
+              {cmd.type === 'sur_place' && (
+                <div>
+                  <label className="block text-xs text-[#555] mb-1">Couverts</label>
+                  <input type="number" min={1} max={20} value={modifForm.couverts}
+                    onChange={e => setModifForm(p => ({ ...p, couverts: Number(e.target.value) }))}
+                    className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none" />
+                </div>
+              )}
+              {cmd.type === 'a_emporter' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-[#555] mb-1">Date retrait</label>
+                    <input type="date" value={modifForm.date_retrait} onChange={e => setModifForm(p => ({ ...p, date_retrait: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-[#555] mb-1">Heure retrait</label>
+                    <input type="time" value={modifForm.heure_retrait} onChange={e => setModifForm(p => ({ ...p, heure_retrait: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]" />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Statut</label>
+                <select value={modifForm.statut} onChange={e => setModifForm(p => ({ ...p, statut: e.target.value as StatutCmd }))}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5]">
+                  <option value="brouillon">Brouillon</option>
+                  <option value="en_preparation">En cuisine</option>
+                  <option value="pret_encaisser">Prête</option>
+                  <option value="encaissee">Encaissée</option>
+                  <option value="annulee">Annulée</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[#555] mb-1">Notes</label>
+                <textarea value={modifForm.notes} onChange={e => setModifForm(p => ({ ...p, notes: e.target.value }))} rows={2}
+                  className="w-full px-3 py-2 rounded-lg text-sm border border-[#E0D5C5] focus:outline-none resize-none" />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => setShowModifier(false)} className="flex-1 py-2 rounded-lg text-sm text-[#555] border border-[#E0D5C5]">Annuler</button>
+              <button onClick={saveModif} disabled={savingModif} className="flex-1 py-2 rounded-lg text-sm font-medium text-white bg-[#B71C1C] disabled:opacity-50">
+                {savingModif ? 'Enregistrement...' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
