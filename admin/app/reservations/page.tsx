@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
@@ -321,36 +321,47 @@ export default function ReservationsPage() {
 
           {/* Vue calendrier desktop */}
           <div className="hidden md:block overflow-x-auto">
-            <div className="grid text-sm" style={{ gridTemplateColumns: `80px repeat(7, minmax(120px, 1fr))` }}>
+            <div className="grid text-sm" style={{ gridTemplateColumns: `80px repeat(7, minmax(130px, 1fr))` }}>
               <div className="bg-[#F0EBE0] border border-[#E0D5C5] p-2 text-xs text-[#555] font-medium rounded-tl-lg"></div>
-              {week.map(d => (
-                <div key={d.toISOString()} className="bg-[#F0EBE0] border border-[#E0D5C5] p-2 text-center text-xs font-medium text-[#1A1A1A]">
-                  <div className="font-bold">{d.toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
-                  <div>{d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</div>
-                </div>
-              ))}
+              {week.map(d => {
+                const isToday = d.toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
+                return (
+                  <div key={d.toISOString()} className={`border border-[#E0D5C5] p-2 text-center text-xs font-medium ${isToday ? 'bg-[#1B5E20] text-white' : 'bg-[#F0EBE0] text-[#1A1A1A]'}`}>
+                    <div className="font-bold">{d.toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
+                    <div>{d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</div>
+                  </div>
+                )
+              })}
               {CRENEAUX.map(creneau => (
-                <>
-                  <div key={`h-${creneau}`} className="border border-[#E0D5C5] p-2 text-xs text-[#555] font-mono bg-[#F0EBE0] flex items-center justify-center">{creneau}</div>
+                <React.Fragment key={creneau}>
+                  <div className="border border-[#E0D5C5] p-2 text-xs text-[#555] font-mono bg-[#F0EBE0] flex items-center justify-center">{creneau}</div>
                   {week.map(d => {
                     const dateStr = d.toISOString().split('T')[0]
-                    const resas = reservations.filter(r => r.date_reservation === dateStr && r.heure_reservation === creneau)
-                    const conflit = resas.length > 1 || resas.some(r => {
-                      const key = `${r.date_reservation}-${r.heure_reservation}-${r.zone_preference || 'sans-zone'}`
-                      return conflits.includes(key)
-                    })
+                    // Comparer les 5 premiers chars de heure_reservation (HH:MM) car DB stocke HH:MM:SS
+                    const resas = reservations.filter(r =>
+                      r.date_reservation === dateStr &&
+                      (r.heure_reservation ?? '').substring(0, 5) === creneau
+                    )
+                    const conflit = resas.length > 1
                     return (
-                      <div key={`${d.toISOString()}-${creneau}`} className="border border-[#E0D5C5] p-1 min-h-[48px] bg-white">
+                      <div key={`${dateStr}-${creneau}`} className="border border-[#E0D5C5] p-1 min-h-[52px] bg-white">
                         {conflit && <div className="text-xs text-red-600 font-bold mb-0.5">⚠️ Conflit</div>}
-                        {resas.map(r => (
-                          <div key={r.id} className={`text-xs rounded px-1 py-0.5 mb-0.5 truncate ${STATUT_STYLES[r.statut]?.tw ?? ''}`}>
-                            {r.nom} ({r.nombre_couverts}p)
-                          </div>
-                        ))}
+                        {resas.map(r => {
+                          const statutBg =
+                            r.statut === 'confirmee' ? 'bg-green-100 border-green-300 text-green-800' :
+                            r.statut === 'annulee'   ? 'bg-red-100 border-red-300 text-red-800' :
+                                                       'bg-yellow-100 border-yellow-300 text-yellow-800'
+                          return (
+                            <div key={r.id} className={`text-xs rounded border px-1.5 py-1 mb-0.5 ${statutBg}`}>
+                              <div className="font-semibold truncate">{r.nom}</div>
+                              <div className="opacity-75">{r.nombre_couverts}p{r.zone_preference ? ` · ${r.zone_preference}` : ''}</div>
+                            </div>
+                          )
+                        })}
                       </div>
                     )
                   })}
-                </>
+                </React.Fragment>
               ))}
             </div>
           </div>
