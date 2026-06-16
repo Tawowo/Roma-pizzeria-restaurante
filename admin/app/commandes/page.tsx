@@ -224,7 +224,7 @@ export default function CommandesPage() {
     bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: ''
   })
   const [saving, setSaving] = useState(false)
-  const [errNom, setErrNom] = useState('')
+
   const [panierEnvoiSelectionne, setPanierEnvoiSelectionne] = useState<Set<number>>(new Set())
   const [existingCmdId, setExistingCmdId] = useState<string | null>(null)
   const existingCmdIdRef = useRef<string | null>(null) // ref pour éviter les stale closures
@@ -367,7 +367,6 @@ export default function CommandesPage() {
     setClientFidele(null)
     setPanier([])
     setReduction({ pct: '', montant: '', codePromo: '', codePromoValeur: 0, codePromoMsg: '', bonFidelite: '', bonFideliteValeur: 0, bonFideliteMsg: '', offrir: false, offrirMotif: '' })
-    setErrNom('')
     setPanierEnvoiSelectionne(new Set())
     existingCmdIdRef.current = null
     setExistingCmdId(null)
@@ -429,7 +428,6 @@ export default function CommandesPage() {
   }
 
   const envoyerEnCuisine = async () => {
-    if (!nomClient.trim()) { setErrNom('Le nom est obligatoire'); return }
     if (panier.length === 0) return
 
     const indicesEnvoi = panierEnvoiSelectionne.size === 0
@@ -488,7 +486,7 @@ export default function CommandesPage() {
         .insert([{
           type: 'sur_place',
           statut: 'en_preparation',
-          nom_client: nomClient.trim(),
+          nom_client: nomClient.trim() || (modalTable ? `Table ${modalTable.num}` : 'Client'),
           telephone: telClient || null,
           table_numero: modalTable?.num,
           zone: modalTable?.zone,
@@ -936,11 +934,10 @@ export default function CommandesPage() {
                 <div className="max-w-md space-y-4">
                   <h3 className="font-semibold text-[#1A1A1A]">Client</h3>
                   <div>
-                    <label className="block text-sm text-[#555] mb-1">Nom / Prénom *</label>
-                    <input value={nomClient} onChange={e => { setNomClient(e.target.value); setErrNom('') }}
-                      className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20] ${errNom ? 'border-red-400' : 'border-[#E0D5C5]'}`}
-                      placeholder="Ex: Dupont Jean" />
-                    {errNom && <p className="text-red-600 text-xs mt-1">{errNom}</p>}
+                    <label className="block text-sm text-[#555] mb-1">Nom / Prénom</label>
+                    <input value={nomClient} onChange={e => setNomClient(e.target.value)}
+                      className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
+                      placeholder={modalTable ? `Table ${modalTable.num}` : 'Ex: Dupont Jean'} />
                   </div>
                   <div>
                     <label className="block text-sm text-[#555] mb-1">Téléphone</label>
@@ -959,7 +956,7 @@ export default function CommandesPage() {
                     <input type="number" min={1} max={20} value={couverts} onChange={e => setCouverts(Number(e.target.value))}
                       className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none" />
                   </div>
-                  <button onClick={() => { if (!nomClient.trim()) { setErrNom('Le nom est obligatoire'); return } setEtape(2) }}
+                  <button onClick={() => { setEtape(2) }}
                     className="w-full bg-[#1B5E20] hover:bg-[#2E7D32] text-white py-2 rounded-lg font-medium">
                     Suivant →
                   </button>

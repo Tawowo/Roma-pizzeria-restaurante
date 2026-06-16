@@ -59,8 +59,8 @@ function isAjoutApres(ligne: LigneCommande, commandeCreatedAt: string): boolean 
 function cardStyle(cmd: Commande, urgents: Set<string>): React.CSSProperties {
   const isUrgent = urgents.has(cmd.id)
   if (isUrgent) return { background: '#2a1500', border: '2px solid #D4A843', borderRadius: 16, padding: 24 }
-  if (cmd.type === 'a_emporter') return { background: '#1a3a1a', border: '1px solid #F57F17', borderRadius: 16, padding: 24 }
-  return { background: '#3a0a0a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 16, padding: 24 }
+  if (cmd.type === 'a_emporter') return { background: '#1B5E20', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: 24 }
+  return { background: '#B71C1C', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 16, padding: 24 }
 }
 
 function renderCard(
