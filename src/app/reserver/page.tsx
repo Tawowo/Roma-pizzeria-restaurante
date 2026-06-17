@@ -228,6 +228,7 @@ export default function ReserverPage() {
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.15)', borderRadius: '2px', padding: 'clamp(24px,5vw,40px)' }}>
+              <p style={{color: 'red', fontWeight: 'bold', fontSize: '20px'}}>VERSION NOUVELLE ✓</p>
               {/* Nom + Téléphone */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div>
