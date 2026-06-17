@@ -298,6 +298,21 @@ export default function CuisinePage() {
           .update({ statut: 'pret_encaisser' })
           .eq('numero', cmd.table_numero)
       }
+      try {
+        const nomClient = cmd.nom_client || `Table ${cmd.table_numero}`
+        const message = cmd.type === 'a_emporter'
+          ? `📦 Commande E${cmd.numero_commande} prête — ${nomClient} (retrait ${cmd.heure_retrait ? cmd.heure_retrait.substring(0, 5).replace(':', 'h') : ''})`
+          : `🍽 Table ${cmd.table_numero} prête — ${nomClient}`
+        await fetch('https://ntfy.sh/roma-cuisine-andrei-2024', {
+          method: 'POST',
+          body: message,
+          headers: {
+            'Title': '✅ Commande prête — Roma',
+            'Priority': 'high',
+            'Tags': 'white_check_mark'
+          }
+        })
+      } catch { /* notification non bloquante */ }
       await fetchCommandes()
     } catch (err) {
       console.error('Update error:', err)
