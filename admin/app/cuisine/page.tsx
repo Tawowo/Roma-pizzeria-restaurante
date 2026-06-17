@@ -298,12 +298,14 @@ export default function CuisinePage() {
           .update({ statut: 'pret_encaisser' })
           .eq('numero', cmd.table_numero)
       }
+      await fetchCommandes()
+      const nomClient = cmd.nom_client || `Table ${cmd.table_numero}`
+      const message = cmd.type === 'a_emporter'
+        ? `📦 Commande E${cmd.numero_commande} prête — ${nomClient} (retrait ${cmd.heure_retrait ? cmd.heure_retrait.substring(0, 5).replace(':', 'h') : ''})`
+        : `🍽 Table ${cmd.table_numero} prête — ${nomClient}`
+      console.log('[ntfy] Envoi notification:', message)
       try {
-        const nomClient = cmd.nom_client || `Table ${cmd.table_numero}`
-        const message = cmd.type === 'a_emporter'
-          ? `📦 Commande E${cmd.numero_commande} prête — ${nomClient} (retrait ${cmd.heure_retrait ? cmd.heure_retrait.substring(0, 5).replace(':', 'h') : ''})`
-          : `🍽 Table ${cmd.table_numero} prête — ${nomClient}`
-        await fetch('https://ntfy.sh/roma-cuisine-andrei-2024', {
+        const response = await fetch('https://ntfy.sh/roma-cuisine-andrei-2024', {
           method: 'POST',
           body: message,
           headers: {
@@ -312,8 +314,14 @@ export default function CuisinePage() {
             'Tags': 'white_check_mark'
           }
         })
-      } catch { /* notification non bloquante */ }
-      await fetchCommandes()
+        console.log('[ntfy] Réponse:', response.status, response.ok)
+        if (!response.ok) {
+          const errText = await response.text()
+          console.error('[ntfy] Erreur:', errText)
+        }
+      } catch (ntfyErr) {
+        console.error('[ntfy] Exception:', ntfyErr)
+      }
     } catch (err) {
       console.error('Update error:', err)
     }
