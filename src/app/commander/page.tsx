@@ -60,6 +60,7 @@ export default function CommanderPage() {
   const [labelJour, setLabelJour] = useState('')
   const [heureRetrait, setHeureRetrait] = useState('')
   const [notes, setNotes] = useState('')
+  const [email, setEmail] = useState('')
   const [slotsMidi, setSlotsMidi] = useState<string[]>([])
   const [slotsSoir, setSlotsSoir] = useState<string[]>([])
   const [slotsCapacite, setSlotsCapacite] = useState<Record<string, number>>({})
@@ -226,6 +227,7 @@ export default function CommanderPage() {
       const cmdPayload = {
         nom: nom.trim(),
         telephone: tel.trim(),
+        email: email.trim() || null,
         heure_retrait: heureOnly,
         date_retrait: dateOnly,
         type: 'a_emporter',
@@ -318,6 +320,36 @@ export default function CommanderPage() {
         if (pts > 0) { setPointsGagnes(pts); setTotalPointsApres(newTotal) }
       } catch (fidelErr) {
         console.error('[vitrine] fidelité error (non bloquant):', fidelErr)
+      }
+
+      // Email confirmation
+      if (email.trim()) {
+        try {
+          await fetch('/api/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: email.trim(),
+              subject: 'Confirmation de votre commande — Roma Pizzeria Restaurant',
+              html: `
+                <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background: #FBF6EE;">
+                  <h1 style="color: #B71C1C; font-size: 28px; margin-bottom: 8px;">Roma Pizzeria Restaurant</h1>
+                  <p style="color: #555; font-size: 14px; margin-bottom: 32px;">20 place Jacques du Bellay, Savigné-sur-Lathan</p>
+                  <h2 style="color: #1A1A1A; font-size: 20px;">Votre commande est confirmée ✅</h2>
+                  <p>Bonjour <strong>${nom}</strong>,</p>
+                  <p>Nous avons bien reçu votre commande à emporter. Vous pouvez venir la récupérer à <strong>${heureOnly.substring(0, 5).replace(':', 'h')}</strong>.</p>
+                  <div style="background: white; border-radius: 8px; padding: 20px; margin: 24px 0; border-left: 4px solid #B71C1C;">
+                    <p style="margin: 0; color: #555; font-size: 13px;">Numéro de commande</p>
+                    <p style="margin: 4px 0 0; font-size: 24px; font-weight: bold; color: #B71C1C;">#${cmd.numero_commande}</p>
+                  </div>
+                  <p>Nous préparons votre commande avec soin. Vous recevrez un autre email dès qu'elle sera prête.</p>
+                  <p style="color: #555; font-size: 13px;">Si vous n'avez pas encore de compte fidélité, créez-en un sur notre site pour cumuler des points à chaque commande et obtenir des réductions !</p>
+                  <p style="margin-top: 32px;">À bientôt,<br><strong>L'équipe Roma Pizzeria Restaurant</strong></p>
+                </div>
+              `
+            })
+          })
+        } catch { /* email non bloquant */ }
       }
 
       // ✅ Seulement ici, après tous les inserts réussis
@@ -631,6 +663,13 @@ export default function CommanderPage() {
             <div>
               <label className="rf-label">Notes (optionnel)</label>
               <textarea className="rf-textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Sonnez à la porte rouge..." />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="rf-label">Email (optionnel)</label>
+              <input className="rf-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="votre@email.com" />
+              <p style={{ fontSize: 11, color: 'var(--textl)', marginTop: 4 }}>📧 Recevez la confirmation et un email quand votre commande est prête (optionnel)</p>
             </div>
 
             <p style={{ fontSize: 12, color: 'var(--textl)', lineHeight: 1.6, textAlign: 'center' }}>

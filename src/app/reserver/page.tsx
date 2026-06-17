@@ -51,7 +51,7 @@ interface Dispo {
 export default function ReserverPage() {
   const { lang, setLang, t } = useLang()
   const [form, setForm] = useState({
-    nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: ''
+    nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '', email: ''
   })
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
@@ -160,6 +160,30 @@ export default function ReserverPage() {
         statut: 'en_attente',
       })
       if (resaErr) throw resaErr
+      if (form.email?.trim()) {
+        try {
+          await fetch('/api/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: form.email.trim(),
+              subject: 'Confirmation de votre réservation — Roma Pizzeria Restaurant',
+              html: `
+                <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background: #FBF6EE;">
+                  <h1 style="color: #B71C1C;">Roma Pizzeria Restaurant</h1>
+                  <h2>Votre réservation est enregistrée ✅</h2>
+                  <p>Bonjour <strong>${form.nom}</strong>,</p>
+                  <p>Nous avons bien reçu votre demande de réservation pour le <strong>${form.date}</strong> à <strong>${form.heure}</strong> pour <strong>${form.couverts} couverts</strong>.</p>
+                  <p>Nous vous confirmerons par téléphone dans les plus brefs délais.</p>
+                  <hr style="border: 1px solid #E0D5C5; margin: 24px 0;">
+                  <p style="font-size: 13px; color: #555;">💡 Vous n'avez pas encore de compte fidélité ? Créez-en un sur notre site pour cumuler des points et obtenir des avantages exclusifs !</p>
+                  <p>À bientôt,<br><strong>L'équipe Roma Pizzeria Restaurant</strong></p>
+                </div>
+              `
+            })
+          })
+        } catch { /* email non bloquant */ }
+      }
       setSuccess(true)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : (err as { message?: string })?.message ?? 'Erreur inconnue'
@@ -197,7 +221,7 @@ export default function ReserverPage() {
               <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
               <p style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: '22px', fontStyle: 'italic', color: 'var(--text-m)', marginBottom: '24px' }}>{t('reserver_succes')}</p>
               <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <button onClick={() => { setSuccess(false); setForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'' }); setDispo(null) }} className="btn-secondary">{t('reserver_titre')}</button>
+                <button onClick={() => { setSuccess(false); setForm({ nom:'', telephone:'', date:'', heure:'', couverts:'2', zone:'', notes:'', email:'' }); setDispo(null) }} className="btn-secondary">{t('reserver_titre')}</button>
                 <Link href="/" className="btn-primary">{t('retour')}</Link>
               </div>
             </div>
@@ -305,6 +329,13 @@ export default function ReserverPage() {
               <div style={{ marginTop: '16px' }}>
                 <label className="rf-label">{t('reserver_message')}</label>
                 <textarea className="rf-textarea" placeholder={t('reserver_message')} value={form.notes} onChange={e => setForm(p=>({...p,notes:e.target.value}))} />
+              </div>
+
+              {/* Email */}
+              <div style={{ marginTop: '16px' }}>
+                <label className="rf-label">Email (optionnel)</label>
+                <input type="email" className="rf-input" placeholder="votre@email.com" value={form.email} onChange={e => setForm(p=>({...p,email:e.target.value}))} />
+                <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--textl)', marginTop: 4 }}>📧 Recevez la confirmation par email (optionnel)</p>
               </div>
 
               {error && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)', marginTop: '12px', padding: '10px 14px', background: 'rgba(196,98,45,0.08)', borderRadius: '2px' }}>{error}</p>}
