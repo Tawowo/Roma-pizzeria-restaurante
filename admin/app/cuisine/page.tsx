@@ -309,7 +309,7 @@ export default function CuisinePage() {
           method: 'POST',
           body: message,
           headers: {
-            'Title': '✅ Commande prête — Roma',
+            'Title': 'Commande prete - Roma',
             'Priority': 'high',
             'Tags': 'white_check_mark'
           }
