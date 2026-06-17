@@ -152,6 +152,7 @@ export default function ReserverPage() {
         client_id: clientId ?? null,
         nom: form.nom,
         telephone: form.telephone,
+        email: form.email?.trim() || null,
         date_reservation: form.date,
         heure_reservation: heureFormatee,
         nombre_couverts: parseInt(form.couverts),
@@ -237,6 +238,15 @@ export default function ReserverPage() {
                   <label className="rf-label">{t('reserver_tel')}</label>
                   <input type="tel" className="rf-input" placeholder={t('reserver_tel')} value={form.telephone} onChange={e => setForm(p=>({...p,telephone:e.target.value}))} required />
                 </div>
+              </div>
+
+              {/* Email */}
+              <div style={{ marginTop: '16px' }}>
+                <label className="rf-label">Email <span style={{ color: '#888', fontSize: '13px' }}>(optionnel)</span></label>
+                <input type="email" className="rf-input" placeholder="votre@email.com" value={form.email} onChange={e => setForm(p=>({...p,email:e.target.value}))} />
+                <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                  📧 En renseignant votre email, vous recevrez une confirmation de réservation et un message après votre repas pour partager votre expérience.
+                </p>
               </div>
 
               {/* Date + Heure */}
@@ -329,13 +339,6 @@ export default function ReserverPage() {
               <div style={{ marginTop: '16px' }}>
                 <label className="rf-label">{t('reserver_message')}</label>
                 <textarea className="rf-textarea" placeholder={t('reserver_message')} value={form.notes} onChange={e => setForm(p=>({...p,notes:e.target.value}))} />
-              </div>
-
-              {/* Email */}
-              <div style={{ marginTop: '16px' }}>
-                <label className="rf-label">Email (optionnel)</label>
-                <input type="email" className="rf-input" placeholder="votre@email.com" value={form.email} onChange={e => setForm(p=>({...p,email:e.target.value}))} />
-                <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '11px', color: 'var(--textl)', marginTop: 4 }}>📧 Recevez la confirmation par email (optionnel)</p>
               </div>
 
               {error && <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '13px', color: 'var(--terra)', marginTop: '12px', padding: '10px 14px', background: 'rgba(196,98,45,0.08)', borderRadius: '2px' }}>{error}</p>}

@@ -623,6 +623,15 @@ export default function CommanderPage() {
               )}
             </div>
 
+            {/* Email */}
+            <div>
+              <label className="rf-label">Email <span style={{ color: '#888', fontSize: '13px' }}>(optionnel)</span></label>
+              <input className="rf-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="votre@email.com" />
+              <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
+                📧 En renseignant votre email, vous recevrez une confirmation de commande et un email dès que votre commande sera prête à récupérer.
+              </p>
+            </div>
+
             {/* Créneaux de retrait */}
             <div>
               <label className="rf-label">Heure de retrait *</label>
@@ -663,13 +672,6 @@ export default function CommanderPage() {
             <div>
               <label className="rf-label">Notes (optionnel)</label>
               <textarea className="rf-textarea" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Sonnez à la porte rouge..." />
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="rf-label">Email (optionnel)</label>
-              <input className="rf-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="votre@email.com" />
-              <p style={{ fontSize: 11, color: 'var(--textl)', marginTop: 4 }}>📧 Recevez la confirmation et un email quand votre commande est prête (optionnel)</p>
             </div>
 
             <p style={{ fontSize: 12, color: 'var(--textl)', lineHeight: 1.6, textAlign: 'center' }}>
