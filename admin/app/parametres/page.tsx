@@ -10,7 +10,6 @@ type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp' | 'utilisat
 
 interface ParamMap { [key: string]: string }
 interface TableResto { id: string; numero: number; nom?: string; zone: string; capacite: number; actif: boolean }
-interface ProfilAdmin { id: string; role: string; nom: string }
 
 interface ProfilComplet {
   id: string
@@ -52,7 +51,6 @@ export default function ParametresPage() {
   const router = useRouter()
   const [section, setSection] = useState<Section>('infos')
   const [params, setParams] = useState<ParamMap>({})
-  const [profils, setProfils] = useState<ProfilAdmin[]>([])
   const [mdp, setMdp] = useState<Record<string, string>>({})
   const [tables, setTables] = useState<TableResto[]>([])
   const [tablesErr, setTablesErr] = useState('')
@@ -75,20 +73,13 @@ export default function ParametresPage() {
       ;(data ?? []).forEach((r: { cle: string; valeur: string }) => { map[r.cle] = r.valeur })
       setParams(map)
 
-      const { data: profilsData } = await supabase.from('profils_admin').select('id, role, nom')
-      setProfils(profilsData ?? [])
+      const { data: profilsData } = await supabase.from('profils_admin').select('*').order('nom')
+      setProfilsComplets((profilsData ?? []).map(p => ({ ...p, permissions: p.permissions ?? {} })))
     } catch (err) {
       console.error(err)
     } finally {
       setLoading(false)
     }
-  }, [])
-
-  const fetchProfils = useCallback(async () => {
-    try {
-      const { data } = await supabase.from('profils_admin').select('*').order('nom')
-      setProfilsComplets((data ?? []).map(p => ({ ...p, permissions: p.permissions ?? {} })))
-    } catch { /* skip */ }
   }, [])
 
   const fetchTables = useCallback(async () => {
@@ -110,10 +101,6 @@ export default function ParametresPage() {
     fetchTables()
   }, [router, fetchAll, fetchTables])
 
-  useEffect(() => {
-    if (section === 'utilisateurs') fetchProfils()
-  }, [section, fetchProfils])
-
   const saveParams = async (keys: string[]) => {
     setSaving(true)
     try {
@@ -124,13 +111,13 @@ export default function ParametresPage() {
     } catch (err) { console.error(err) } finally { setSaving(false) }
   }
 
-  const handleChangerMdp = async (profilId: string, role: string) => {
+  const handleChangerMdp = async (profilId: string) => {
     const session = getSession()
     if (!session) return
 
-    const actuel = mdp[role + '_actuel'] || ''
-    const nouveau = mdp[role + '_nouveau'] || ''
-    const confirm = mdp[role + '_confirm'] || ''
+    const actuel = mdp[profilId + '_actuel'] || ''
+    const nouveau = mdp[profilId + '_nouveau'] || ''
+    const confirm = mdp[profilId + '_confirm'] || ''
 
     if (!actuel) { setSavedMsg('Mot de passe actuel requis'); return }
     if (nouveau !== confirm) { setSavedMsg('Les mots de passe ne correspondent pas'); return }
@@ -159,7 +146,7 @@ export default function ParametresPage() {
         .eq('id', profilId)
 
       setSavedMsg('Mot de passe mis à jour ✓')
-      setMdp(prev => ({ ...prev, [role + '_actuel']: '', [role + '_nouveau']: '', [role + '_confirm']: '' }))
+      setMdp(prev => ({ ...prev, [profilId + '_actuel']: '', [profilId + '_nouveau']: '', [profilId + '_confirm']: '' }))
       setTimeout(() => setSavedMsg(''), 3000)
     } catch (err) {
       console.error(err)
@@ -212,7 +199,7 @@ export default function ParametresPage() {
       setNouveauProfil({ nom: '', role: 'andre', password: '', confirmPassword: '' })
       setShowAddProfil(false)
       setProfilMsg('Profil créé ✓')
-      await fetchProfils()
+      await fetchAll()
     } catch (err) {
       console.error(err)
       setProfilMsg('Erreur lors de la création')
@@ -231,7 +218,7 @@ export default function ParametresPage() {
       }
       await supabase.from('profils_admin').update(updateData).eq('id', profilId)
       setProfilMsg('Profil mis à jour ✓')
-      await fetchProfils()
+      await fetchAll()
       setEditingProfil(null)
     } catch (err) {
       console.error(err)
@@ -246,7 +233,7 @@ export default function ParametresPage() {
     try {
       await supabase.from('profils_admin').delete().eq('id', profilId)
       setProfilMsg('Profil supprimé')
-      await fetchProfils()
+      await fetchAll()
     } catch (err) {
       console.error(err)
       setProfilMsg('Erreur lors de la suppression')
@@ -534,13 +521,26 @@ export default function ParametresPage() {
                       </div>
                       <div>
                         <label className="block text-xs text-[#555] mb-1">Rôle *</label>
-                        <select value={nouveauProfil.role}
-                          onChange={e => setNouveauProfil(p => ({...p, role: e.target.value}))}
+                        <select
+                          value={['monica','andre','roberto'].includes(nouveauProfil.role) ? nouveauProfil.role : '_autre'}
+                          onChange={e => {
+                            if (e.target.value === '_autre') setNouveauProfil(p => ({...p, role: ''}))
+                            else setNouveauProfil(p => ({...p, role: e.target.value}))
+                          }}
                           className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg">
-                          <option value="monica">Gérante</option>
+                          <option value="monica">Gérant(e)</option>
                           <option value="andre">Serveur</option>
                           <option value="roberto">Cuisinier</option>
+                          <option value="_autre">Autre...</option>
                         </select>
+                        {!['monica','andre','roberto'].includes(nouveauProfil.role) && (
+                          <input
+                            value={nouveauProfil.role}
+                            onChange={e => setNouveauProfil(p => ({...p, role: e.target.value}))}
+                            placeholder="Ex: Caissier, Livraison..."
+                            className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg mt-2"
+                          />
+                        )}
                       </div>
                       <div>
                         <label className="block text-xs text-[#555] mb-1">Mot de passe *</label>
@@ -568,7 +568,7 @@ export default function ParametresPage() {
 
           {section === 'mdp' && (
             <div className="space-y-4">
-              {profils.filter((p, i) => profils.findIndex(q => q.role === p.role) === i).map(p => (
+              {profilsComplets.map(p => (
                 <div key={p.id} className="border border-[#E0D5C5] rounded-xl p-4">
                   <h3 className="font-semibold mb-3 text-[#1A1A1A]">{p.nom} <span className="text-xs text-[#555] font-normal">({p.role})</span></h3>
                   <div className="space-y-2">
@@ -578,12 +578,12 @@ export default function ParametresPage() {
                           {type === 'actuel' ? 'Mot de passe actuel' : type === 'nouveau' ? 'Nouveau mot de passe' : 'Confirmer le nouveau'}
                         </label>
                         <input type="password"
-                          value={mdp[p.role + '_' + type] || ''}
-                          onChange={e => setMdp(prev => ({ ...prev, [p.role + '_' + type]: e.target.value }))}
+                          value={mdp[p.id + '_' + type] || ''}
+                          onChange={e => setMdp(prev => ({ ...prev, [p.id + '_' + type]: e.target.value }))}
                           className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
                       </div>
                     ))}
-                    <button onClick={() => handleChangerMdp(p.id, p.role)} disabled={saving}
+                    <button onClick={() => handleChangerMdp(p.id)} disabled={saving}
                       className="w-full py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium mt-2 hover:bg-[#2E7D32] disabled:opacity-50">
                       {saving ? 'Mise à jour...' : 'Changer le mot de passe'}
                     </button>
