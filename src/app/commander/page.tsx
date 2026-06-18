@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { supabase, Article, Categorie } from '@/lib/supabase'
 import { useLang } from '@/lib/LanguageContext'
+import { useClient } from '@/lib/useClient'
 
 type LignePanier = {
   article: Article
@@ -49,6 +50,7 @@ const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi',
 
 export default function CommanderPage() {
   const { t } = useLang()
+  const { client: clientConnecte, saveClient } = useClient()
   const [step, setStep] = useState<'menu' | 'panier' | 'infos' | 'confirmation'>('menu')
   const [categories, setCategories] = useState<Categorie[]>([])
   const [articles, setArticles] = useState<Article[]>([])
@@ -146,6 +148,17 @@ export default function CommanderPage() {
     })
     computeDate()
   }, [computeDate])
+
+  // Pré-remplissage si client connecté
+  useEffect(() => {
+    if (!clientConnecte) return
+    if (nom === '' && tel === '') {
+      setNom(clientConnecte.nom)
+      setTel(clientConnecte.telephone)
+      if (clientConnecte.email) setEmail(clientConnecte.email)
+      rechercherClient(clientConnecte.telephone)
+    }
+  }, [clientConnecte]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const rechercherClient = useCallback(async (telVal: string) => {
     console.log('vérifier appelé:', telVal)
@@ -317,7 +330,13 @@ export default function CommanderPage() {
           await supabase.from('commandes').update({ points_gagnes: pts }).eq('id', cmd.id)
         }
 
-        if (pts > 0) { setPointsGagnes(pts); setTotalPointsApres(newTotal) }
+        if (pts > 0) {
+          setPointsGagnes(pts)
+          setTotalPointsApres(newTotal)
+          if (clientFidele) {
+            saveClient({ id: clientFidele.id, nom: clientFidele.nom, telephone: tel.trim(), email: email.trim() || undefined, points: newTotal })
+          }
+        }
       } catch (fidelErr) {
         console.error('[vitrine] fidelité error (non bloquant):', fidelErr)
       }
@@ -540,7 +559,9 @@ export default function CommanderPage() {
               <span>Total</span><span style={{ color: 'var(--r)' }}>{total.toFixed(2)} €</span>
             </div>
             <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 6 }}>
-              ⭐ Vous gagnerez environ {Math.floor(total)} points fidélité
+              {clientFidele
+                ? `Vous avez actuellement ${clientFidele.points} pts 🎁`
+                : `⭐ Vous gagnerez environ ${Math.floor(total)} points fidélité`}
             </div>
           </div>
 

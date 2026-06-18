@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useLang } from '@/lib/LanguageContext'
 import type { Lang } from '@/lib/translations'
+import { useClient } from '@/lib/useClient'
 
 // Horaires d'ouverture par jour JS (0=dim, 1=lun, 2=mar, 3=mer, 4=jeu, 5=ven, 6=sam)
 function getHoraires(day: number): { debut: string; fin: string }[] {
@@ -50,6 +51,7 @@ interface Dispo {
 
 export default function ReserverPage() {
   const { lang, setLang, t } = useLang()
+  const { client: clientConnecte } = useClient()
   const [form, setForm] = useState({
     nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '', email: ''
   })
@@ -126,6 +128,17 @@ export default function ReserverPage() {
       setDispo(null)
     }
   }, [form.date, form.heure, form.zone, form.couverts, checkDispo])
+
+  // Pré-remplissage si client connecté
+  useEffect(() => {
+    if (!clientConnecte) return
+    setForm(prev => ({
+      ...prev,
+      nom: prev.nom || clientConnecte.nom,
+      telephone: prev.telephone || clientConnecte.telephone,
+      email: prev.email || clientConnecte.email || '',
+    }))
+  }, [clientConnecte])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -103,6 +103,7 @@ export default function ComptePage() {
         localStorage.setItem('roma_client_id', c.id)
         localStorage.setItem('roma_client_tel', c.telephone)
         localStorage.setItem('roma_client_nom', c.nom)
+        localStorage.setItem('roma_client', JSON.stringify({ id: c.id, nom: c.nom, telephone: c.telephone, email: c.email ?? undefined, points: c.points ?? 0 }))
         await loadDashboard(c.id, c.telephone)
         setScreen('dashboard')
       } else {
@@ -130,6 +131,7 @@ export default function ComptePage() {
       localStorage.setItem('roma_client_id', c.id)
       localStorage.setItem('roma_client_tel', phone.trim())
       localStorage.setItem('roma_client_nom', c.nom)
+      localStorage.setItem('roma_client', JSON.stringify({ id: c.id, nom: c.nom, telephone: phone.trim(), email: c.email ?? undefined, points: c.points ?? 0 }))
       setReservations([]); setMouvements([]); setCommandes([])
       setScreen('dashboard')
     } catch {
@@ -143,6 +145,7 @@ export default function ComptePage() {
     localStorage.removeItem('roma_client_id')
     localStorage.removeItem('roma_client_tel')
     localStorage.removeItem('roma_client_nom')
+    localStorage.removeItem('roma_client')
     setClient(null); setScreen('home'); setPhone(''); setNom(''); setPrenom(''); setEmail('')
   }
 
