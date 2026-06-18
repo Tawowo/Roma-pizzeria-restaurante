@@ -335,7 +335,9 @@ export default function CommanderPage() {
           }
         }
       } catch (fidelErr) {
-        console.error('[vitrine] fidelité error (non bloquant):', fidelErr)
+        const msg = fidelErr instanceof Error ? fidelErr.message : String(fidelErr)
+        console.error('[vitrine] fidelité error:', msg)
+        setErr(`Erreur points fidélité : ${msg}`)
       }
 
       // Email confirmation
@@ -555,11 +557,10 @@ export default function CommanderPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: "'Playfair Display',serif", fontSize: 22, fontWeight: 700 }}>
               <span>Total</span><span style={{ color: 'var(--r)' }}>{total.toFixed(2)} €</span>
             </div>
-            <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 6 }}>
-              {clientFidele
-                ? `Vous avez actuellement ${clientFidele.points} pts 🎁`
-                : `⭐ Vous gagnerez environ ${Math.floor(total)} points fidélité`}
-            </div>
+            {clientFidele
+              ? <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 6 }}>Vous avez actuellement {clientFidele.points} pts 🎁</div>
+              : total > 0 ? <div style={{ fontSize: 12, color: '#1B5E20', marginTop: 6 }}>⭐ Vous gagnerez environ {Math.floor(total)} points fidélité</div>
+              : null}
           </div>
 
           <div style={{ display: 'flex', gap: 12, marginTop: 20 }}>
