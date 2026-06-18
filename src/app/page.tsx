@@ -27,7 +27,7 @@ export default function HomePage() {
   const [articles, setArticles] = useState<Article[]>([])
   const [formules, setFormules] = useState<Formule[]>([])
   const [parametre, setParametre] = useState<{ msg_fermeture?: string; site_ouvert?: string }>({})
-  const [resaForm, setResaForm] = useState({ nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '' })
+  const [resaForm, setResaForm] = useState({ nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '', email: '' })
   const [resaLoading, setResaLoading] = useState(false)
   const [resaSuccess, setResaSuccess] = useState(false)
   const [resaError, setResaError] = useState('')
@@ -209,10 +209,24 @@ export default function HomePage() {
       }
       await supabase.from('reservations').insert({
         client_id: clientId, nom: resaForm.nom, telephone: resaForm.telephone,
+        email: resaForm.email?.trim() || null,
         date_reservation: resaForm.date, heure_reservation: resaForm.heure,
         nombre_couverts: parseInt(resaForm.couverts),
-        zone: resaForm.zone || null, notes: resaForm.notes || null, statut: 'en_attente',
+        zone_preference: resaForm.zone || null, notes: resaForm.notes || null, statut: 'en_attente',
       })
+      if (resaForm.email?.trim()) {
+        try {
+          await fetch('/api/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: resaForm.email.trim(),
+              subject: 'Confirmation de votre réservation — Roma Pizzeria Restaurant',
+              html: `<div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#FBF6EE;"><h1 style="color:#B71C1C;">Roma Pizzeria Restaurant</h1><h2>Votre réservation est enregistrée ✅</h2><p>Bonjour <strong>${resaForm.nom}</strong>,</p><p>Nous avons bien reçu votre demande de réservation pour le <strong>${resaForm.date}</strong> à <strong>${resaForm.heure}</strong> pour <strong>${resaForm.couverts} couverts</strong>.</p><p>Nous vous confirmerons par téléphone dans les plus brefs délais.</p><p>À bientôt,<br><strong>L'équipe Roma Pizzeria Restaurant</strong></p></div>`
+            })
+          })
+        } catch { /* email non bloquant */ }
+      }
       setResaSuccess(true)
     } catch {
       setResaError('Une erreur est survenue. Veuillez réessayer.')
@@ -998,7 +1012,7 @@ export default function HomePage() {
               <div style={{ background: 'var(--verde-pale)', border: '1px solid var(--verde)', borderRadius: 4, padding: 40, textAlign: 'center' }}>
                 <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
                 <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, fontStyle: 'italic', color: 'var(--verde)', marginBottom: 20 }}>{t.resa_success}</p>
-                <button onClick={() => { setResaSuccess(false); setResaForm({ nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '' }) }} className="btn-secondary">Nouvelle réservation</button>
+                <button onClick={() => { setResaSuccess(false); setResaForm({ nom: '', telephone: '', date: '', heure: '', couverts: '2', zone: '', notes: '', email: '' }) }} className="btn-secondary">Nouvelle réservation</button>
               </div>
             ) : (
               <form onSubmit={handleResa} style={{ background: 'white', borderRadius: 4, padding: 32, boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
@@ -1025,6 +1039,11 @@ export default function HomePage() {
                       </div>
                     )}
                   </div>
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6, letterSpacing: 0.5 }}>Email <span style={{ color: '#888', fontSize: '13px' }}>(optionnel)</span></label>
+                  <input type="email" className="form-input" placeholder="votre@email.com" value={resaForm.email} onChange={e => setResaForm(p => ({ ...p, email: e.target.value }))} />
+                  <p style={{ fontSize: 12, color: '#888', marginTop: 4, fontFamily: 'Jost' }}>📧 En renseignant votre email, vous recevrez une confirmation de réservation et un message après votre repas pour partager votre expérience.</p>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                   <div>
