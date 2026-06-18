@@ -7,27 +7,31 @@ export interface ClientLocal {
   telephone: string
   email?: string
   points: number
+  nb_visites?: number
 }
 
 export function useClient() {
   const [client, setClient] = useState<ClientLocal | null>(null)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
+    // Seulement côté client
     try {
       const saved = localStorage.getItem('roma_client')
       if (saved) setClient(JSON.parse(saved))
     } catch {}
+    setLoaded(true)
   }, [])
 
   const saveClient = (c: ClientLocal) => {
     setClient(c)
-    localStorage.setItem('roma_client', JSON.stringify(c))
+    try { localStorage.setItem('roma_client', JSON.stringify(c)) } catch {}
   }
 
   const logout = () => {
     setClient(null)
-    localStorage.removeItem('roma_client')
+    try { localStorage.removeItem('roma_client') } catch {}
   }
 
-  return { client, saveClient, logout }
+  return { client, saveClient, logout, loaded }
 }
