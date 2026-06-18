@@ -152,6 +152,8 @@ export default function CommanderPage() {
 
   // Pré-remplissage si client connecté
   useEffect(() => {
+    console.log('[useClient] localStorage roma_client:', localStorage.getItem('roma_client'))
+    console.log('[useClient] clientConnecte:', clientConnecte)
     if (clientConnecte && !nom && !tel) {
       setNom(clientConnecte.nom || '')
       setTel(clientConnecte.telephone || '')
