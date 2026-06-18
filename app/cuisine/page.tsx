@@ -299,7 +299,7 @@ export default function CuisinePage() {
           .update({ statut: 'pret_encaisser' })
           .eq('numero', cmd.table_numero)
       }
-      console.log('[marquerPrete] cmd.email:', cmd.email, '| cmd.type:', cmd.type, '| cmd.id:', cmd.id)
+      console.log('[marquerPrete] cmd complet:', JSON.stringify({ id: cmd.id, type: cmd.type, email: cmd.email, nom_client: cmd.nom_client, statut: cmd.statut }))
       if (cmd.type === 'a_emporter' && cmd.email) {
         try {
           const emailRes = await fetch('/api/email', {
