@@ -18,6 +18,7 @@ type ClientFidele = {
   nom: string
   points: number
   nb_visites: number
+  telephone?: string
 }
 
 const CATS_PAS_CUISINE = [
@@ -151,14 +152,20 @@ export default function CommanderPage() {
 
   // Pré-remplissage si client connecté
   useEffect(() => {
-    if (!clientConnecte) return
-    if (nom === '' && tel === '') {
-      setNom(clientConnecte.nom)
-      setTel(clientConnecte.telephone)
-      if (clientConnecte.email) setEmail(clientConnecte.email)
-      rechercherClient(clientConnecte.telephone)
+    if (clientConnecte && !nom && !tel) {
+      setNom(clientConnecte.nom || '')
+      setTel(clientConnecte.telephone || '')
+      setEmail(clientConnecte.email || '')
+      setClientFidele({
+        id: clientConnecte.id,
+        nom: clientConnecte.nom,
+        points: clientConnecte.points,
+        nb_visites: 0,
+        telephone: clientConnecte.telephone,
+      })
+      setClientTrouve(true)
     }
-  }, [clientConnecte]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clientConnecte])
 
   const rechercherClient = useCallback(async (telVal: string) => {
     console.log('vérifier appelé:', telVal)
