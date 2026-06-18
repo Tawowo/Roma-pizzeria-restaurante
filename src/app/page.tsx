@@ -31,7 +31,7 @@ export default function HomePage() {
   const [resaLoading, setResaLoading] = useState(false)
   const [resaSuccess, setResaSuccess] = useState(false)
   const [resaError, setResaError] = useState('')
-  const [cmdForm, setCmdForm] = useState({ nom: '', telephone: '', date: '', heure: '', notes: '' })
+  const [cmdForm, setCmdForm] = useState({ nom: '', telephone: '', date: '', heure: '', notes: '', email: '' })
   const [cmdItems, setCmdItems] = useState<{ pizzaId: string; nom: string; prix33: number; prixPala: number; qty: number; taille: '33cm' | 'pala'; calzone: boolean }[]>([])
   const [cmdStep, setCmdStep] = useState<1 | 2>(1)
   const [cmdLoading, setCmdLoading] = useState(false)
@@ -748,7 +748,7 @@ export default function HomePage() {
               <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 24 }}>
                 Andreï vous rappelle pour confirmer. 📞 06 68 36 62 98
               </p>
-              <button onClick={() => { setCmdSuccess(false); setCmdStep(1); setCmdItems([]); setCmdForm({ nom: '', telephone: '', date: '', heure: '', notes: '' }) }} className="btn-primary">Nouvelle commande</button>
+              <button onClick={() => { setCmdSuccess(false); setCmdStep(1); setCmdItems([]); setCmdForm({ nom: '', telephone: '', date: '', heure: '', notes: '', email: '' }) }} className="btn-primary">Nouvelle commande</button>
             </div>
           ) : (
             <div style={{ background: 'white', borderRadius: 4, overflow: 'hidden', boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}>
@@ -907,6 +907,11 @@ export default function HomePage() {
                       </div>
                     )}
 
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Email <span style={{ color: '#888', fontSize: '13px' }}>(optionnel)</span></label>
+                      <input type="email" className="form-input" placeholder="votre@email.com" value={cmdForm.email} onChange={e => setCmdForm(p => ({ ...p, email: e.target.value }))} />
+                      <p style={{ fontSize: 12, color: '#888', marginTop: 4, fontFamily: 'Jost' }}>📧 En renseignant votre email, vous recevrez une confirmation de commande et un email quand votre commande sera prête.</p>
+                    </div>
                     <div style={{ marginBottom: 20 }}>
                       <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Notes / Allergies</label>
                       <textarea className="form-input" placeholder="Allergie, demande particulière..." value={cmdForm.notes} onChange={e => setCmdForm(p => ({ ...p, notes: e.target.value }))} rows={2} style={{ resize: 'vertical' }} />
@@ -970,9 +975,11 @@ export default function HomePage() {
                           const total = cmdItems.reduce((sum, i) => sum + i.qty * (i.taille === 'pala' ? i.prixPala : i.prix33), 0)
                           const { data: cmd } = await supabase.from('commandes').insert({
                             client_id: clientId ?? null, type: 'a_emporter', statut: 'en_attente',
+                            nom: cmdForm.nom, telephone: cmdForm.telephone,
+                            email: cmdForm.email?.trim() || null,
                             total, notes: cmdForm.notes || null,
                             heure_retrait: cmdForm.date + 'T' + cmdForm.heure,
-                          }).select('id').single()
+                          }).select('id, numero_commande').single()
                           if (cmd) {
                             await supabase.from('lignes_commande').insert(
                               cmdItems.map(item => ({
@@ -983,6 +990,21 @@ export default function HomePage() {
                                 prix_unitaire: item.taille === 'pala' ? item.prixPala : item.prix33,
                               }))
                             )
+                            if (cmdForm.email?.trim()) {
+                              try {
+                                const emailRes = await fetch('/api/email', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    to: cmdForm.email.trim(),
+                                    subject: 'Confirmation de votre commande — Roma Pizzeria Restaurant',
+                                    html: `<div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#FBF6EE;"><h1 style="color:#B71C1C;">Roma Pizzeria Restaurant</h1><p style="color:#555;font-size:14px;">20 place Jacques du Bellay, Savigné-sur-Lathan</p><h2>Votre commande est confirmée ✅</h2><p>Bonjour <strong>${cmdForm.nom}</strong>,</p><p>Nous avons bien reçu votre commande à emporter. Vous pouvez venir la récupérer à <strong>${cmdForm.heure}</strong>.</p><div style="background:white;border-radius:8px;padding:20px;margin:24px 0;border-left:4px solid #B71C1C;"><p style="margin:0;color:#555;font-size:13px;">Numéro de commande</p><p style="margin:4px 0 0;font-size:24px;font-weight:bold;color:#B71C1C;">#${cmd.numero_commande}</p></div><p>Nous préparons votre commande avec soin. Vous recevrez un email dès qu'elle sera prête.</p><p>À bientôt,<br><strong>L'équipe Roma Pizzeria Restaurant</strong></p></div>`
+                                  })
+                                })
+                                const emailJson = await emailRes.json()
+                                console.log('[email cmd]', emailRes.status, emailJson)
+                              } catch (e) { console.error('[email cmd] exception:', e) }
+                            }
                           }
                           setCmdSuccess(true)
                         } catch {
