@@ -26,9 +26,11 @@ interface MouvementFidelite {
 
 interface BonFidelite {
   id: string
-  valeur: number
+  article_nom: string
+  points_utilises: number
+  code: string
   statut: string
-  date_expiration: string
+  created_at: string
 }
 
 interface Commande {
@@ -376,9 +378,12 @@ export default function ClientsPage() {
               <div className="mb-4">
                 <div className="text-xs text-[#555] mb-2 uppercase tracking-widest font-medium">Bons actifs</div>
                 {bons.map(b => (
-                  <div key={b.id} className="text-xs flex justify-between">
-                    <span className="text-[#D4A843] font-bold">{b.valeur} €</span>
-                    <span className="text-[#555]">exp. {b.date_expiration}</span>
+                  <div key={b.id} className="text-xs py-1 border-b border-[#F0EBE0] last:border-0">
+                    <div className="font-medium text-[#1A1A1A]">{b.article_nom}</div>
+                    <div className="flex justify-between text-[#555] mt-0.5">
+                      <span className="font-mono">{b.code}</span>
+                      <span>{b.points_utilises} pts</span>
+                    </div>
                   </div>
                 ))}
               </div>

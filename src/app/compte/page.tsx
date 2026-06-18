@@ -159,10 +159,19 @@ export default function ComptePage() {
     }
   }
 
-  const handleUtiliserRecompense = (r: typeof RECOMPENSES[0]) => {
+  const handleUtiliserRecompense = async (r: typeof RECOMPENSES[0]) => {
     if (!client || client.points < r.points) return
     const code = 'ROMA-' + Math.random().toString(36).substring(2, 8).toUpperCase()
-    setBonCode(`${code} — ${r.label}`)
+    try {
+      const newPts = client.points - r.points
+      await Promise.all([
+        supabase.from('bons_fidelite').insert({ client_id: client.id, article_nom: r.label, points_utilises: r.points, code, statut: 'actif' }),
+        supabase.from('clients').update({ points: newPts }).eq('id', client.id),
+        supabase.from('mouvements_fidelite').insert({ client_id: client.id, points: -r.points, motif: `Récompense : ${r.label}` }),
+      ])
+      setClient(prev => prev ? { ...prev, points: newPts } : null)
+      setBonCode(`${code} — ${r.label}`)
+    } catch { /* skip */ }
   }
 
   const visites = client?.nb_visites ?? reservations.filter(r => r.statut === 'honoree').length

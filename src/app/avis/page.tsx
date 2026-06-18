@@ -66,9 +66,11 @@ export default function AvisPage() {
         auteur: clientInfo.nom, source: 'site', statut: 'en_attente',
       })
       if (err) throw err
-      await supabase.from('mouvements_fidelite').insert({
-        client_id: clientInfo.id, points: 10, motif: 'Avis laissé ⭐',
-      })
+      const { data: cli } = await supabase.from('clients').select('points').eq('id', clientInfo.id).single()
+      await Promise.all([
+        supabase.from('mouvements_fidelite').insert({ client_id: clientInfo.id, points: 10, motif: 'Avis laissé' }),
+        supabase.from('clients').update({ points: (cli?.points ?? 0) + 10 }).eq('id', clientInfo.id),
+      ])
       setSuccess(true)
     } catch {
       setError('Erreur lors de la soumission. Vous avez peut-être déjà laissé un avis.')

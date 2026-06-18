@@ -161,6 +161,19 @@ export default function ReserverPage() {
         statut: 'en_attente',
       })
       if (resaErr) throw resaErr
+
+      // +5 points fidélité pour réservation
+      if (clientId) {
+        try {
+          const { data: cli } = await supabase.from('clients').select('points').eq('id', clientId).single()
+          const newPts = (cli?.points ?? 0) + 5
+          await Promise.all([
+            supabase.from('clients').update({ points: newPts }).eq('id', clientId),
+            supabase.from('mouvements_fidelite').insert({ client_id: clientId, points: 5, motif: 'Réservation effectuée' }),
+          ])
+        } catch { /* non bloquant */ }
+      }
+
       if (form.email?.trim()) {
         try {
           await fetch('/api/email', {
