@@ -172,7 +172,7 @@ export default function CuisinePage() {
       // À emporter : date_retrait si renseigné, sinon fallback sur created_at
       const emporterQ = supabase
         .from('commandes')
-        .select('id,numero_commande,type,statut,created_at,table_numero,zone,nom_client,notes,heure_retrait,telephone,email,date_retrait,total,couverts,lignes_commande(*)')
+        .select('*, lignes_commande(*)')
         .eq('type', 'a_emporter')
         .in('statut', statutFilter)
         .or(`date_retrait.eq.${jour},and(date_retrait.is.null,created_at.gte.${jour}T00:00:00,created_at.lte.${jour}T23:59:59)`)
@@ -181,7 +181,7 @@ export default function CuisinePage() {
       // Sur place : filtrer par created_at
       const surPlaceQ = supabase
         .from('commandes')
-        .select('id,numero_commande,type,statut,created_at,table_numero,zone,nom_client,notes,heure_retrait,telephone,email,date_retrait,total,couverts,lignes_commande(*)')
+        .select('*, lignes_commande(*)')
         .eq('type', 'sur_place')
         .gte('created_at', jour + 'T00:00:00')
         .lte('created_at', jour + 'T23:59:59')
