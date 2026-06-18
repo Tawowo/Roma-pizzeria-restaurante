@@ -31,8 +31,10 @@ export default function PromotionsPage() {
   const [loading, setLoading] = useState(true)
   const [erreur, setErreur] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<FormPromo>({ code: '', type: 'pct', valeur: '', usage_max: '', date_expiration: '', visible_site: false })
   const [saving, setSaving] = useState(false)
+  const [formErreur, setFormErreur] = useState('')
 
   const fetchCodes = useCallback(async () => {
     try {
@@ -73,30 +75,54 @@ export default function PromotionsPage() {
     } catch { /* skip */ }
   }
 
-  const creerCode = async () => {
+  const openCreate = () => {
+    setEditingId(null)
+    setForm({ code: '', type: 'pct', valeur: '', usage_max: '', date_expiration: '', visible_site: false })
+    setFormErreur('')
+    setShowModal(true)
+  }
+
+  const openEdit = (c: CodePromo) => {
+    setEditingId(c.id)
+    setForm({ code: c.code, type: c.type, valeur: String(c.valeur), usage_max: c.usage_max ? String(c.usage_max) : '', date_expiration: c.date_expiration ?? '', visible_site: c.visible_site ?? false })
+    setFormErreur('')
+    setShowModal(true)
+  }
+
+  const sauvegarderCode = async () => {
     if (!form.code.trim() || !form.valeur) return
     setSaving(true)
+    setFormErreur('')
     try {
-      await supabase.from('codes_promo').insert([{
+      const payload = {
         code: form.code.trim().toUpperCase(),
         type: form.type,
         valeur: parseFloat(form.valeur),
         usage_max: form.usage_max ? parseInt(form.usage_max) : null,
         date_expiration: form.date_expiration || null,
-        actif: true,
         visible_site: form.visible_site,
-      }])
+      }
+      let error
+      if (editingId) {
+        ({ error } = await supabase.from('codes_promo').update(payload).eq('id', editingId))
+      } else {
+        ({ error } = await supabase.from('codes_promo').insert([{ ...payload, actif: true }]))
+      }
+      if (error) { setFormErreur(`Erreur Supabase : ${error.message}`); return }
       setShowModal(false)
       setForm({ code: '', type: 'pct', valeur: '', usage_max: '', date_expiration: '', visible_site: false })
+      setEditingId(null)
       await fetchCodes()
-    } catch { /* skip */ } finally { setSaving(false) }
+    } catch (e) {
+      setFormErreur(e instanceof Error ? e.message : String(e))
+    } finally { setSaving(false) }
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-[#1A1A1A]">Promotions</h1>
-        <button onClick={() => setShowModal(true)}
+        <button onClick={openCreate}
           className="px-4 py-2 bg-[#B71C1C] text-white rounded-lg text-sm font-medium hover:bg-[#C62828]">
           + Créer un code
         </button>
@@ -136,6 +162,7 @@ export default function PromotionsPage() {
                     <input type="checkbox" checked={c.visible_site ?? false} onChange={e => toggleVisibleSite(c.id, e.target.checked)} className="accent-[#1565C0]" />
                     Vitrine
                   </label>
+                  <button onClick={() => openEdit(c)} className="text-blue-500 hover:text-blue-700 text-xs">✏️ Modifier</button>
                   <button onClick={() => supprimerCode(c.id)} className="text-red-500 hover:text-red-700 text-xs">🗑 Supprimer</button>
                 </div>
               </div>
@@ -148,7 +175,7 @@ export default function PromotionsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-lg font-bold">Créer un code promo</h2>
+              <h2 className="text-lg font-bold">{editingId ? 'Modifier le code' : 'Créer un code promo'}</h2>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-700">✕</button>
             </div>
             <div className="space-y-4">
@@ -190,11 +217,12 @@ export default function PromotionsPage() {
                 <label htmlFor="visible_site" className="text-sm text-[#555]">Visible sur le site (bandeau vitrine)</label>
               </div>
             </div>
+            {formErreur && <div className="mt-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formErreur}</div>}
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowModal(false)} className="flex-1 py-2 border border-[#E0D5C5] text-[#555] rounded-lg text-sm">Annuler</button>
-              <button onClick={creerCode} disabled={saving || !form.code || !form.valeur}
+              <button onClick={sauvegarderCode} disabled={saving || !form.code || !form.valeur}
                 className="flex-1 py-2 bg-[#B71C1C] text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                {saving ? 'Création...' : 'Créer'}
+                {saving ? '...' : (editingId ? 'Enregistrer' : 'Créer')}
               </button>
             </div>
           </div>

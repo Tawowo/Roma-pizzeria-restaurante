@@ -102,6 +102,16 @@ export default function MenuPage() {
                       <span style={{ fontFamily: 'Jost', fontSize: 12, color: 'var(--grigio)', marginLeft: 8 }}>Pala 60×40</span>
                       <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 18, fontWeight: 700, color: 'var(--verde)' }}>{art.prix_pala.toFixed(2)} €</span>
                     </>
+                  ) : art.prix_reduction || (art.promotion && art.promotion > 0) ? (
+                    <>
+                      <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 16, color: 'var(--grigio)', textDecoration: 'line-through' }}>{art.prix.toFixed(2)} €</span>
+                      <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, fontWeight: 700, color: 'var(--rosso)' }}>
+                        {art.prix_reduction ? art.prix_reduction.toFixed(2) : (art.prix * (1 - (art.promotion ?? 0) / 100)).toFixed(2)} €
+                      </span>
+                      {art.promotion && art.promotion > 0 && !art.prix_reduction && (
+                        <span style={{ background: 'var(--rosso)', color: '#fff', fontSize: 11, padding: '2px 6px', borderRadius: 4 }}>-{art.promotion}%</span>
+                      )}
+                    </>
                   ) : (
                     <span style={{ fontFamily: 'Playfair Display, serif', fontSize: 20, fontWeight: 700, color: 'var(--rosso)' }}>
                       {art.prix.toFixed(2)} €

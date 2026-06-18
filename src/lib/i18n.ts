@@ -5,6 +5,7 @@ const fr = {
   /* Nav */
   nav_histoire: 'Histoire',
   nav_menu: 'Menu',
+  nav_commander: 'Commander',
   nav_horaires: 'Horaires',
   nav_reserver: 'Réserver',
   nav_compte: 'Mon compte',
@@ -120,6 +121,7 @@ type Translations = typeof fr
 const it: Translations = {
   nav_histoire: 'Storia',
   nav_menu: 'Menu',
+  nav_commander: 'Ordinare',
   nav_horaires: 'Orari',
   nav_reserver: 'Prenotare',
   nav_compte: 'Il mio account',
@@ -221,6 +223,7 @@ const it: Translations = {
 const en: Translations = {
   nav_histoire: 'Our Story',
   nav_menu: 'Menu',
+  nav_commander: 'Order',
   nav_horaires: 'Hours',
   nav_reserver: 'Book',
   nav_compte: 'My account',

@@ -48,6 +48,7 @@ export default function HomePage() {
   const [cmdClientDetecte, setCmdClientDetecte] = useState<{nom:string;pts:number} | null>(null)
   const [cmdTelSearch, setCmdTelSearch] = useState(false)
   const [resaClientDetecte, setResaClientDetecte] = useState<{nom:string} | null>(null)
+  const [promosBandeau, setPromosBandeau] = useState<{id:string;code:string;type:string;valeur:number}[]>([])
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const loaderBarRef = useRef<HTMLDivElement>(null)
@@ -97,6 +98,8 @@ export default function HomePage() {
       .then(({ data }) => setArticles(data ?? []))
     supabase.from('formules').select('*').eq('actif', true).order('ordre')
       .then(({ data }) => setFormules(data ?? []))
+    supabase.from('codes_promo').select('id,code,type,valeur').eq('actif', true).eq('visible_site', true)
+      .then(({ data }) => setPromosBandeau(data ?? []))
     supabase.from('parametres').select('*')
       .then(({ data }) => {
         if (data) {
@@ -286,8 +289,19 @@ export default function HomePage() {
         </div>
       )}
 
+      {/* BANDEAU PROMOTIONS */}
+      {promosBandeau.length > 0 && (
+        <div style={{ background: '#1B5E20', color: 'white', textAlign: 'center', padding: '8px 20px', fontSize: 13, position: 'fixed', top: bandeauVisible ? 40 : 0, left: 0, right: 0, zIndex: 299, display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap', alignItems: 'center' }}>
+          🎉 {promosBandeau.map(p => (
+            <span key={p.id} style={{ fontWeight: 700 }}>
+              Code <span style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,0.2)', padding: '1px 6px', borderRadius: 3 }}>{p.code}</span> — {p.type === 'pct' ? `-${p.valeur}%` : `-${p.valeur} €`}
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* NAV */}
-      <nav className={navScrolled ? 'scrolled' : ''} style={{ top: bandeauVisible ? 40 : 0 }}>
+      <nav className={navScrolled ? 'scrolled' : ''} style={{ top: (bandeauVisible || promosBandeau.length > 0) ? 40 : 0 }}>
         {/* Logo — toujours visible */}
         <a href="/" style={{ fontFamily: 'Playfair Display, serif', fontSize: 24, fontStyle: 'italic', color: navScrolled ? 'var(--rosso)' : 'white', textDecoration: 'none', fontWeight: 700 }}>
           Roma <span style={{ fontStyle: 'normal', fontWeight: 400, fontSize: 18, color: navScrolled ? 'var(--nero)' : 'rgba(255,255,255,0.7)' }}>Pizzeria</span>
@@ -297,7 +311,7 @@ export default function HomePage() {
           {[
             { label: t.nav_histoire, href: '#histoire' },
             { label: t.nav_menu, href: '/menu', isLink: true },
-            { label: 'Commander', href: '#commander', isRed: true },
+            { label: t.nav_commander, href: '#commander', isRed: true },
             { label: t.nav_horaires, href: '#horaires' },
             { label: t.nav_reserver, href: '#reserver' },
           ].map(item => item.isLink ? (

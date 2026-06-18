@@ -31,6 +31,7 @@ export default function PlatsPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormData>(emptyForm)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const fetchPlats = useCallback(async () => {
@@ -65,12 +66,29 @@ export default function PlatsPage() {
     }
   }
 
-  const handleCreate = async () => {
+  const openCreate = () => {
+    setEditingId(null)
+    setForm(emptyForm)
+    setShowModal(true)
+  }
+
+  const openEdit = (p: PlatDuJour) => {
+    setEditingId(p.id)
+    setForm({ nom: p.nom, description: p.description, prix: p.prix, date_debut: p.date_debut, date_fin: p.date_fin, actif: p.actif })
+    setShowModal(true)
+  }
+
+  const handleSave = async () => {
     setSaving(true)
     try {
-      await supabase.from('plats_du_jour').insert([form])
+      if (editingId) {
+        await supabase.from('plats_du_jour').update(form).eq('id', editingId)
+      } else {
+        await supabase.from('plats_du_jour').insert([form])
+      }
       setShowModal(false)
       setForm(emptyForm)
+      setEditingId(null)
       await fetchPlats()
     } catch (err) {
       console.error(err)
@@ -83,7 +101,7 @@ export default function PlatsPage() {
     <div className="p-8" style={{ color: '#F5F5F5' }}>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Plats du jour</h1>
-        <button onClick={() => setShowModal(true)} className="px-4 py-2 rounded-lg text-sm text-white font-medium" style={{ background: '#B71C1C' }}>
+        <button onClick={openCreate} className="px-4 py-2 rounded-lg text-sm text-white font-medium" style={{ background: '#B71C1C' }}>
           + Nouveau plat
         </button>
       </div>
@@ -107,24 +125,33 @@ export default function PlatsPage() {
                   <span className="font-mono text-yellow-500 font-bold">{p.prix?.toFixed(2)} €</span>
                   {p.date_debut && <div className="text-xs text-gray-500 mt-1">{p.date_debut} → {p.date_fin || '...'}</div>}
                 </div>
-                <button
-                  onClick={() => toggleActif(p.id, p.actif)}
-                  className="px-3 py-1 rounded text-xs"
-                  style={{ background: '#333', color: '#888' }}
-                >
-                  {p.actif ? 'Désactiver' : 'Activer'}
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openEdit(p)}
+                    className="px-3 py-1 rounded text-xs"
+                    style={{ background: '#1B5E20', color: '#fff' }}
+                  >
+                    ✏️ Modifier
+                  </button>
+                  <button
+                    onClick={() => toggleActif(p.id, p.actif)}
+                    className="px-3 py-1 rounded text-xs"
+                    style={{ background: '#333', color: '#888' }}
+                  >
+                    {p.actif ? 'Désactiver' : 'Activer'}
+                  </button>
+                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal créer/modifier */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
           <div className="w-full max-w-md rounded-xl p-6" style={{ background: '#1A1A1A', border: '1px solid #333' }}>
-            <h2 className="text-lg font-bold mb-4">Nouveau plat du jour</h2>
+            <h2 className="text-lg font-bold mb-4">{editingId ? 'Modifier le plat' : 'Nouveau plat du jour'}</h2>
             <div className="space-y-3">
               {[
                 { label: 'Nom', key: 'nom', type: 'text' },
@@ -146,13 +173,13 @@ export default function PlatsPage() {
               ))}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={form.actif} onChange={e => setForm(prev => ({ ...prev, actif: e.target.checked }))} />
-                <span className="text-sm text-gray-300">Actif dès la création</span>
+                <span className="text-sm text-gray-300">Actif</span>
               </label>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={() => setShowModal(false)} className="flex-1 py-2 rounded-lg text-sm text-gray-400" style={{ background: '#242424', border: '1px solid #333' }}>Annuler</button>
-              <button onClick={handleCreate} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-medium text-white" style={{ background: '#B71C1C' }}>
-                {saving ? '...' : 'Créer'}
+              <button onClick={handleSave} disabled={saving} className="flex-1 py-2 rounded-lg text-sm font-medium text-white" style={{ background: '#B71C1C' }}>
+                {saving ? '...' : (editingId ? 'Enregistrer' : 'Créer')}
               </button>
             </div>
           </div>
