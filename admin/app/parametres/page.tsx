@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { getSession } from '@/lib/auth'
 import { supabase } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
+import { ALL_NAV_ITEMS } from '@/components/Sidebar'
 
 type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp' | 'utilisateurs'
 
@@ -16,7 +17,7 @@ interface ProfilComplet {
   role: string
   nom: string
   derniere_connexion?: string
-  permissions?: Record<string, boolean>
+  permissions: Record<string, boolean>
   code_acces?: string
 }
 
@@ -86,7 +87,7 @@ export default function ParametresPage() {
   const fetchProfils = useCallback(async () => {
     try {
       const { data } = await supabase.from('profils_admin').select('*').order('nom')
-      setProfilsComplets(data ?? [])
+      setProfilsComplets((data ?? []).map(p => ({ ...p, permissions: p.permissions ?? {} })))
     } catch { /* skip */ }
   }, [])
 
@@ -223,6 +224,7 @@ export default function ParametresPage() {
       const updateData: Record<string, unknown> = {}
       if (updates.nom) updateData.nom = updates.nom
       if (updates.role) updateData.role = updates.role
+      if (updates.permissions !== undefined) updateData.permissions = updates.permissions
       if (updates.newPassword) {
         const bcryptjs = await import('bcryptjs')
         updateData.code_acces = await bcryptjs.default.hash(updates.newPassword, 10)
@@ -420,7 +422,7 @@ export default function ParametresPage() {
 
               {/* Liste des profils */}
               <div className="space-y-3 mb-6">
-                {profilsComplets.map(p => (
+                {profilsComplets.filter((p, i, arr) => arr.findIndex(q => q.id === p.id) === i).map(p => (
                   <div key={p.id} className="border border-[#E0D5C5] rounded-xl p-4 bg-white">
                     {editingProfil?.id === p.id ? (
                       /* Mode édition */
@@ -449,10 +451,32 @@ export default function ParametresPage() {
                             id={`newpw-${p.id}`}
                             className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg" />
                         </div>
+                        {/* Permissions — non disponible pour Monica (accès total) */}
+                        {editingProfil.role !== 'monica' && (
+                          <div>
+                            <label className="block text-xs text-[#555] mb-2 font-semibold">Accès aux pages</label>
+                            <div className="grid grid-cols-2 gap-1.5 bg-[#F9F6F0] border border-[#E0D5C5] rounded-lg p-3">
+                              {ALL_NAV_ITEMS.map(item => (
+                                <label key={item.key} className="flex items-center gap-2 cursor-pointer text-xs text-[#333]">
+                                  <input
+                                    type="checkbox"
+                                    checked={editingProfil.permissions?.[item.key] === true}
+                                    onChange={e => setEditingProfil(prev => prev ? {
+                                      ...prev,
+                                      permissions: { ...prev.permissions, [item.key]: e.target.checked }
+                                    } : prev)}
+                                    className="accent-[#1B5E20]"
+                                  />
+                                  {item.icon} {item.label}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <div className="flex gap-2">
                           <button onClick={() => {
                             const newPw = (document.getElementById(`newpw-${p.id}`) as HTMLInputElement)?.value
-                            updateProfil(p.id, { nom: editingProfil.nom, role: editingProfil.role, newPassword: newPw || undefined })
+                            updateProfil(p.id, { nom: editingProfil.nom, role: editingProfil.role, permissions: editingProfil.permissions, newPassword: newPw || undefined })
                           }} className="flex-1 py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium">
                             Enregistrer
                           </button>
@@ -475,7 +499,7 @@ export default function ParametresPage() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => setEditingProfil(p)}
+                          <button onClick={() => setEditingProfil({ ...p, permissions: p.permissions ?? {} })}
                             className="px-3 py-1.5 rounded-lg text-xs bg-[#F0EBE0] text-[#555] hover:bg-[#E0D5C5]">
                             ✏️ Modifier
                           </button>

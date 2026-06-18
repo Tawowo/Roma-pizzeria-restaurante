@@ -401,14 +401,14 @@ export default function HomePage() {
           <div id="hero-btns" style={{ opacity: 0, display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
             <a href="#menu" className="btn-primary">{t.hero_cta1}</a>
             <a href="#reserver" style={{ background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.6)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>{t.hero_cta2}</a>
-            <Link href="/compte" style={{ background: 'transparent', color: 'var(--verde-l)', border: '1px solid var(--verde-l)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>Mon compte fidélité</Link>
+            <Link href="/compte" style={{ background: 'transparent', color: 'var(--verde-l)', border: '1px solid var(--verde-l)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>{t.nav_fidelite}</Link>
           </div>
           <div id="hero-counters" style={{ opacity: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginTop: 60, maxWidth: 600, margin: '60px auto 0' }}>
             {[
-              { icon: '🔥', val: `+${heroStats.annees}`, label: "ans d'expérience" },
-              { icon: '🍕', val: `+${heroStats.nb_pizzas}`, label: 'pizzas au menu' },
-              { icon: '⭐', val: `+${heroStats.familles}`, label: 'familles fidèles' },
-              { icon: '🫒', val: `${heroStats.frais}%`, label: 'produits frais' },
+              { icon: '🔥', val: `+${heroStats.annees}`, label: t.hero_annees_label },
+              { icon: '🍕', val: `+${heroStats.nb_pizzas}`, label: t.hero_pizzas_label },
+              { icon: '⭐', val: `+${heroStats.familles}`, label: t.hero_familles_label },
+              { icon: '🫒', val: `${heroStats.frais}%`, label: t.hero_frais_label },
             ].map(c => (
               <div key={c.label} style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 24 }}>{c.icon}</div>
@@ -419,7 +419,7 @@ export default function HomePage() {
           </div>
         </div>
         <div style={{ position: 'absolute', bottom: 30, left: '50%', transform: 'translateX(-50%)', color: 'rgba(255,255,255,0.4)', fontSize: 11, letterSpacing: 2, fontFamily: 'Jost' }}>
-          DÉFILER ↓
+          {t.hero_scroll.toUpperCase()} ↓
         </div>
       </section>
 
@@ -427,7 +427,7 @@ export default function HomePage() {
       {plats.length > 0 && (
         <section style={{ background: 'var(--verde-pale)', padding: '80px 20px', textAlign: 'center' }}>
           <div style={{ maxWidth: 900, margin: '0 auto' }}>
-            <span className="badge badge-rosso" style={{ marginBottom: 20, display: 'inline-block' }}>🍽 Suggestion du jour</span>
+            <span className="badge badge-rosso" style={{ marginBottom: 20, display: 'inline-block' }}>🍽 {t.plat_badge}</span>
             <div style={{ display: 'grid', gridTemplateColumns: plats.length > 1 ? 'repeat(auto-fit, minmax(280px, 1fr))' : '1fr', gap: 24, maxWidth: plats.length === 1 ? 500 : 900, margin: '0 auto' }}>
               {plats.map(p => (
                 <div key={p.id} style={{ background: 'white', borderRadius: 4, padding: 32, boxShadow: '0 4px 20px rgba(27,94,32,0.1)', borderLeft: '3px solid var(--verde)' }}>
@@ -438,7 +438,7 @@ export default function HomePage() {
               ))}
             </div>
             <p style={{ marginTop: 20, fontFamily: 'Cormorant Garamond, serif', fontSize: 16, fontStyle: 'italic', color: 'var(--verde-m)' }}>
-              Préparé ce matin par Monica avec des produits locaux
+              {t.plat_monica}
             </p>
           </div>
         </section>
@@ -448,13 +448,13 @@ export default function HomePage() {
       <section id="histoire" style={{ padding: '100px 20px', background: 'var(--bianco-c)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 60 }}>
-            <span className="badge badge-verde" style={{ marginBottom: 20, display: 'inline-block' }}>Notre histoire</span>
+            <span className="badge badge-verde" style={{ marginBottom: 20, display: 'inline-block' }}>{t.histoire_title}</span>
             <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(32px, 3vw, 42px)', color: 'var(--nero)', marginBottom: 24, lineHeight: 1.2 }}>
-              Une trattoria au cœur <em style={{ color: 'var(--rosso)' }}>du village</em>
+              {t.histoire_subtitle}
             </h2>
             <div className="section-divider"></div>
             <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 22, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 40, borderLeft: '3px solid var(--verde)', paddingLeft: 20, maxWidth: 600, margin: '0 auto 40px', textAlign: 'left' }}>
-              &quot;La pizza, c&apos;est l&apos;amour qu&apos;on met dans la pâte&quot; — Roberto
+              {t.histoire_quote}
             </p>
           </div>
 
@@ -462,21 +462,21 @@ export default function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 32, marginBottom: 60 }}>
             {[
               {
-                icon: '🔥', name: 'Roberto', role: 'Le Chef Pizzaiolo',
+                icon: '🔥', name: 'Roberto', role: t.histoire_roberto_role,
                 img: 'https://images.unsplash.com/photo-1577219491135-ce391730fb2c?w=400',
-                text: "Originaire de Calabre, Roberto a grandi dans la tradition de la pizza napolitaine. Son four à pizza Morello Forni — de fabrication italienne, sole rotative — et ses recettes transmises de génération en génération font de chaque pizza une œuvre unique.",
+                text: t.histoire_roberto_text,
                 color: 'var(--rosso)'
               },
               {
-                icon: '🌿', name: 'Monica', role: 'La Cuisinière',
+                icon: '🌿', name: 'Monica', role: t.histoire_monica_role,
                 img: 'https://images.unsplash.com/photo-1607631568010-a87245c0daf8?w=400',
-                text: "Monica apporte chaque jour sa touche créative avec ses plats cuisinés maison — lasagnes, risottos, pâtes fraîches. Le plat du jour, c'est son territoire, et il change selon les saisons et son inspiration.",
+                text: t.histoire_monica_text,
                 color: 'var(--verde)'
               },
               {
-                icon: '🍽', name: 'Andreï', role: "L'Accueil",
+                icon: '🍽', name: 'Andreï', role: t.histoire_andrei_role,
                 img: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400',
-                text: "Andreï est le visage de Roma. Toujours souriant, il gère les réservations, les commandes et s'assure que chaque client reparte avec le sourire. C'est lui que vous entendez au téléphone !",
+                text: t.histoire_andrei_text,
                 color: 'var(--rosso)'
               },
             ].map(p => (
@@ -491,7 +491,7 @@ export default function HomePage() {
                   <p style={{ fontSize: 14, color: 'var(--grigio)', lineHeight: 1.7, fontFamily: 'Jost' }}>{p.text}</p>
                   {p.name === 'Roberto' && (
                     <div style={{ marginTop: 12, background: 'var(--rosso)', color: 'white', padding: '8px 14px', borderRadius: 3, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontFamily: 'Jost', fontWeight: 600 }}>
-                      🏆 7× lauréat Meilleure Pizza de Tours
+                      {t.histoire_roberto_award}
                     </div>
                   )}
                 </div>
@@ -504,9 +504,9 @@ export default function HomePage() {
             <div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginBottom: 32 }}>
                 {[
-                  { icon: '📍', title: 'Origines en Italie', desc: "Pâtes fraîches pétries chaque matin, recette secrète transmise de génération en génération" },
-                  { icon: '🏡', title: 'Installation en Touraine', desc: 'Ouverture de Roma à Savigné-sur-Lathan' },
-                  { icon: '❤️', title: "Aujourd'hui", desc: 'La même passion, les mêmes recettes, toute la famille' },
+                  { icon: '📍', title: t.histoire_step1_title, desc: t.histoire_step1_desc },
+                  { icon: '🏡', title: t.histoire_step2_title, desc: t.histoire_step2_desc },
+                  { icon: '❤️', title: t.histoire_step3_title, desc: t.histoire_step3_desc },
                 ].map(step => (
                   <div key={step.title} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
                     <span style={{ fontSize: 24, flexShrink: 0 }}>{step.icon}</span>
@@ -518,7 +518,7 @@ export default function HomePage() {
                 ))}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-                {[{ icon: '🔥', label: 'Four Morello Forni' }, { icon: '🍋', label: 'Produits frais' }, { icon: '❤️', label: 'Accueil chaleureux' }].map(i => (
+                {[{ icon: '🔥', label: t.histoire_icon1_label }, { icon: '🍋', label: t.histoire_icon2 }, { icon: '❤️', label: t.histoire_icon3 }].map(i => (
                   <div key={i.label} style={{ textAlign: 'center', padding: '16px 8px', background: 'white', borderRadius: 3, borderBottom: '2px solid var(--verde)' }}>
                     <div style={{ fontSize: 24, marginBottom: 6 }}>{i.icon}</div>
                     <div style={{ fontSize: 11, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', letterSpacing: 0.5 }}>{i.label}</div>
@@ -532,7 +532,7 @@ export default function HomePage() {
                 style={{ width: '100%', height: 400, objectFit: 'cover', borderRadius: 4 }} />
               <div style={{ position: 'absolute', bottom: -16, left: -16, background: 'var(--rosso)', color: 'white', padding: '14px 20px', borderRadius: 3 }}>
                 <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontStyle: 'italic', fontWeight: 700 }}>15+</div>
-                <div style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', fontFamily: 'Jost' }}>ans d&apos;expérience</div>
+                <div style={{ fontSize: 10, letterSpacing: 1, textTransform: 'uppercase', fontFamily: 'Jost' }}>{t.histoire_ans_label}</div>
               </div>
             </div>
           </div>
@@ -689,12 +689,12 @@ export default function HomePage() {
       <section id="horaires" style={{ padding: '100px 20px', background: 'var(--bianco-w)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 60 }}>
-            <span className="badge badge-verde" style={{ marginBottom: 16, display: 'inline-block' }}>Horaires & Localisation</span>
-            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 16 }}>Quand nous rendre visite ?</h2>
+            <span className="badge badge-verde" style={{ marginBottom: 16, display: 'inline-block' }}>{t.horaires_title}</span>
+            <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: 42, color: 'var(--nero)', marginBottom: 16 }}>{t.horaires_visit_title}</h2>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderRadius: 20, background: nowOpen ? 'var(--verde-pale)' : 'var(--rosso-pale)', marginBottom: 16 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: nowOpen ? 'var(--verde)' : 'var(--rosso)', display: 'inline-block' }}></span>
               <span style={{ fontSize: 13, fontFamily: 'Jost', color: nowOpen ? 'var(--verde)' : 'var(--rosso)', fontWeight: 500 }}>
-                {nowOpen ? 'Ouvert maintenant' : 'Actuellement fermé'}
+                {nowOpen ? t.horaires_now_open : t.horaires_now_closed}
               </span>
             </div>
             <div className="section-divider"></div>
@@ -702,13 +702,13 @@ export default function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 48, alignItems: 'start' }}>
             <div style={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
               {[
-                { jsDay: 1, nom: 'Lundi', heures: 'Fermé', closed: true },
-                { jsDay: 2, nom: 'Mardi', heures: 'Soir 19h – 21h30', closed: false },
-                { jsDay: 3, nom: 'Mercredi', heures: 'Midi 12h–14h30 + Soir 19h–21h30', closed: false },
-                { jsDay: 4, nom: 'Jeudi', heures: 'Midi 12h–14h30 + Soir 19h–21h30', closed: false },
-                { jsDay: 5, nom: 'Vendredi', heures: 'Midi 12h–14h30 + Soir 19h–21h30', closed: false },
-                { jsDay: 6, nom: 'Samedi', heures: 'Midi 12h–14h30 + Soir 19h–22h', closed: false },
-                { jsDay: 0, nom: 'Dimanche', heures: 'Soir 19h – 21h30', closed: false },
+                { jsDay: 1, nom: t.day_1, heures: t.h_lundi, closed: true },
+                { jsDay: 2, nom: t.day_2, heures: t.h_mardi, closed: false },
+                { jsDay: 3, nom: t.day_3, heures: t.h_mercredi, closed: false },
+                { jsDay: 4, nom: t.day_4, heures: t.h_jeudi, closed: false },
+                { jsDay: 5, nom: t.day_5, heures: t.h_vendredi, closed: false },
+                { jsDay: 6, nom: t.day_6, heures: t.h_samedi, closed: false },
+                { jsDay: 0, nom: t.day_0, heures: t.h_dimanche, closed: false },
               ].map((row, idx) => {
                 const isToday = row.jsDay === todayDay
                 return (
@@ -735,7 +735,7 @@ export default function HomePage() {
               </div>
               <a href="https://www.google.com/maps/dir/?api=1&destination=Savign%C3%A9-sur-Lathan" target="_blank" rel="noopener noreferrer"
                 className="btn-primary" style={{ display: 'inline-block', textDecoration: 'none', marginBottom: 12 }}>
-                📍 Itinéraire Google Maps
+                {t.horaires_maps}
               </a>
             </div>
           </div>
@@ -853,7 +853,7 @@ export default function HomePage() {
                         <div>
                           <label style={{ display: 'block', fontSize: 11, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero-m)', marginBottom: 4 }}>Pizza</label>
                           <select className="form-input" value={cmdPizzaSelect} onChange={e => setCmdPizzaSelect(e.target.value)} style={{ cursor: 'pointer' }}>
-                            <option value="">Choisir une pizza...</option>
+                            <option value="">{t.cmd_choisir}</option>
                             {articles.filter(a => {
                               const cat = categories.find(c => c.id === a.categorie_id)
                               return cat?.nom === 'Pizzas' && a.disponible
@@ -872,7 +872,7 @@ export default function HomePage() {
                           <label style={{ display: 'block', fontSize: 11, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero-m)', marginBottom: 4 }}>Taille</label>
                           <select className="form-input" value={cmdPizzaTaille} onChange={e => setCmdPizzaTaille(e.target.value as '33cm' | 'pala')} style={{ cursor: 'pointer' }}>
                             <option value="33cm">33 cm</option>
-                            <option value="pala">Pala 60×40</option>
+                            <option value="pala">{t.cmd_pala}</option>
                           </select>
                         </div>
                       </div>
@@ -915,7 +915,7 @@ export default function HomePage() {
                           </div>
                         ))}
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '14px 0', fontFamily: 'Playfair Display, serif', fontSize: 20, fontWeight: 700, color: 'var(--rosso)' }}>
-                          <span>Total estimé</span>
+                          <span>{t.cmd_total}</span>
                           <span>{cmdItems.reduce((sum, i) => sum + i.qty * (i.taille === 'pala' ? i.prixPala : i.prix33), 0).toFixed(2)} €</span>
                         </div>
                       </div>
@@ -1122,10 +1122,10 @@ export default function HomePage() {
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6 }}>Zone</label>
                     <select className="form-input" value={resaForm.zone} onChange={e => setResaForm(p => ({ ...p, zone: e.target.value }))} style={{ cursor: 'pointer' }}>
-                      <option value="">Indifférent</option>
-                      <option value="rdc">Rez-de-chaussée</option>
-                      <option value="etage">Étage</option>
-                      <option value="terrasse">Terrasse</option>
+                      <option value="">{t.resa_zone_indifferent}</option>
+                      <option value="rdc">{t.resa_zone_rdc}</option>
+                      <option value="etage">{t.resa_zone_etage}</option>
+                      <option value="terrasse">{t.resa_zone_terrasse}</option>
                     </select>
                   </div>
                 </div>

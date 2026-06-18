@@ -80,7 +80,7 @@ export default function LoginPage() {
         } catch { /* optionnel */ }
 
         const role = (profil.role || selectedRole) as AdminRole
-        setSession({ role, nom: profil.nom || profil.name || selectedRole, id: profil.id })
+        setSession({ role, nom: profil.nom || profil.name || selectedRole, id: profil.id, permissions: profil.permissions ?? {} })
       }
 
       // Redirection selon le rôle
