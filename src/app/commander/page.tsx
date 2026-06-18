@@ -180,6 +180,8 @@ export default function CommanderPage() {
         setClientFidele(data as ClientFidele)
         setClientTrouve(true)
         setNom(data.nom)
+        setTel(telVal.trim())
+        saveClient({ id: data.id, nom: data.nom, telephone: telVal.trim(), points: data.points ?? 0 })
       } else {
         if (error && error.code !== 'PGRST116') {
           const msg = `Erreur Supabase [${error.code}] : ${error.message}`
@@ -293,48 +295,33 @@ export default function CommanderPage() {
 
       // ── Points fidélité (non bloquant) ─────────────────────────
       try {
-        const { data: param } = await supabase
-          .from('parametres').select('valeur').eq('cle', 'points_par_euro').single()
-        const ptsParEuro = parseFloat(param?.valeur ?? '1') || 1
-        const pts = Math.floor(total * ptsParEuro)
-
-        let clientId: string | null = clientFidele?.id ?? null
-        let newTotal = (clientFidele?.points ?? 0) + pts
-
         if (clientFidele) {
-          await supabase.from('clients').update({
-            points: newTotal,
-            nb_visites: (clientFidele.nb_visites ?? 0) + 1,
-          }).eq('id', clientFidele.id)
-        } else if (clientTrouve === false && prenomNvClient.trim()) {
-          newTotal = pts
-          const nomComplet = (prenomNvClient.trim() + ' ' + nom.trim()).trim()
-          const { data: nvCli } = await supabase.from('clients').insert({
-            nom: nomComplet,
-            telephone: tel.trim(),
-            points: pts,
-            nb_visites: 1,
-          }).select('id, points').single()
-          if (nvCli) {
-            clientId = nvCli.id
-            newTotal = (nvCli as unknown as Record<string, number>).points ?? pts
-          }
-        }
-
-        if (clientId && pts > 0) {
+          const pts = Math.floor(total)
+          const newPts = (clientFidele.points ?? 0) + pts
+          await supabase.from('clients')
+            .update({ points: newPts, nb_visites: (clientFidele.nb_visites ?? 0) + 1 })
+            .eq('id', clientFidele.id)
           await supabase.from('mouvements_fidelite').insert({
-            client_id: clientId,
+            client_id: clientFidele.id,
             points: pts,
-            motif: `Commande à emporter #${cmd.numero_commande}`,
+            motif: 'Commande à emporter',
           })
           await supabase.from('commandes').update({ points_gagnes: pts }).eq('id', cmd.id)
-        }
-
-        if (pts > 0) {
           setPointsGagnes(pts)
-          setTotalPointsApres(newTotal)
-          if (clientFidele) {
-            saveClient({ id: clientFidele.id, nom: clientFidele.nom, telephone: tel.trim(), email: email.trim() || undefined, points: newTotal })
+          setTotalPointsApres(newPts)
+          saveClient({ id: clientFidele.id, nom: clientFidele.nom, telephone: tel.trim(), email: email.trim() || undefined, points: newPts })
+        } else if (clientTrouve === false && prenomNvClient.trim()) {
+          const pts = Math.floor(total)
+          const nomComplet = (prenomNvClient.trim() + ' ' + nom.trim()).trim()
+          const { data: nvCli } = await supabase.from('clients').insert({
+            nom: nomComplet, telephone: tel.trim(), points: pts, nb_visites: 1,
+          }).select('id').single()
+          if (nvCli) {
+            await supabase.from('mouvements_fidelite').insert({ client_id: nvCli.id, points: pts, motif: 'Commande à emporter' })
+            await supabase.from('commandes').update({ points_gagnes: pts }).eq('id', cmd.id)
+            setPointsGagnes(pts)
+            setTotalPointsApres(pts)
+            saveClient({ id: nvCli.id, nom: nomComplet, telephone: tel.trim(), email: email.trim() || undefined, points: pts })
           }
         }
       } catch (fidelErr) {
