@@ -81,7 +81,7 @@ function renderCard(
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 48, fontWeight: 700, color: '#EFC050', lineHeight: 1 }}>{displayNum}</div>
         <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-          <div style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 2, color: '#888' }}>
+          <div style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: 2, color: cmd.type === 'a_emporter' ? '#F5F5F5' : '#888', fontWeight: cmd.type === 'a_emporter' ? 700 : 400 }}>
             {cmd.type === 'sur_place'
               ? formatZone(cmd.zone)
               : (cmd.nom_client ? cmd.nom_client.toUpperCase() : '')}
@@ -103,7 +103,7 @@ function renderCard(
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ color: '#D4A843', fontWeight: 700, fontSize: 16 }}>×{l.quantite}</span>
               <span style={{ fontSize: 16, fontWeight: 700, color: '#F5F5F5', textTransform: 'uppercase', flex: 1 }}>{l.article_nom}</span>
-              {l.taille && <span style={{ fontSize: 11, color: '#888', background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: 4 }}>{l.taille}</span>}
+              {l.taille && <span style={{ fontSize: 13, color: '#F5F5F5', fontWeight: 700, background: 'rgba(255,255,255,0.15)', padding: '1px 6px', borderRadius: 4 }}>{l.taille}</span>}
               {isAjoutApres(l, cmd.created_at) && (
                 <span style={{ fontSize: 10, background: '#D4A843', color: '#000', fontWeight: 700, padding: '1px 5px', borderRadius: 4 }}>AJOUT</span>
               )}

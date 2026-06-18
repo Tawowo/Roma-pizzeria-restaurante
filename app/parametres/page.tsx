@@ -544,7 +544,7 @@ export default function ParametresPage() {
 
           {section === 'mdp' && (
             <div className="space-y-4">
-              {profils.map(p => (
+              {profils.filter((p, i) => profils.findIndex(q => q.role === p.role) === i).map(p => (
                 <div key={p.id} className="border border-[#E0D5C5] rounded-xl p-4">
                   <h3 className="font-semibold mb-3 text-[#1A1A1A]">{p.nom} <span className="text-xs text-[#555] font-normal">({p.role})</span></h3>
                   <div className="space-y-2">
