@@ -216,7 +216,7 @@ export default function HomePage() {
       })
       if (resaForm.email?.trim()) {
         try {
-          await fetch('/api/email', {
+          const emailRes = await fetch('/api/email', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -225,7 +225,9 @@ export default function HomePage() {
               html: `<div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;padding:40px 20px;background:#FBF6EE;"><h1 style="color:#B71C1C;">Roma Pizzeria Restaurant</h1><h2>Votre réservation est enregistrée ✅</h2><p>Bonjour <strong>${resaForm.nom}</strong>,</p><p>Nous avons bien reçu votre demande de réservation pour le <strong>${resaForm.date}</strong> à <strong>${resaForm.heure}</strong> pour <strong>${resaForm.couverts} couverts</strong>.</p><p>Nous vous confirmerons par téléphone dans les plus brefs délais.</p><p>À bientôt,<br><strong>L'équipe Roma Pizzeria Restaurant</strong></p></div>`
             })
           })
-        } catch { /* email non bloquant */ }
+          const emailJson = await emailRes.json()
+          console.log('[email resa]', emailRes.status, emailJson)
+        } catch (e) { console.error('[email resa] exception:', e) }
       }
       setResaSuccess(true)
     } catch {
@@ -1043,7 +1045,7 @@ export default function HomePage() {
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 6, letterSpacing: 0.5 }}>Email <span style={{ color: '#888', fontSize: '13px' }}>(optionnel)</span></label>
                   <input type="email" className="form-input" placeholder="votre@email.com" value={resaForm.email} onChange={e => setResaForm(p => ({ ...p, email: e.target.value }))} />
-                  <p style={{ fontSize: 12, color: '#888', marginTop: 4, fontFamily: 'Jost' }}>📧 En renseignant votre email, vous recevrez une confirmation de réservation et un message après votre repas pour partager votre expérience.</p>
+                  <p style={{ fontSize: 12, color: '#888', marginTop: 4, fontFamily: 'Jost' }}>📧 En renseignant votre email, vous recevrez une confirmation de réservation.</p>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
                   <div>

@@ -628,7 +628,7 @@ export default function CommanderPage() {
               <label className="rf-label">Email <span style={{ color: '#888', fontSize: '13px' }}>(optionnel)</span></label>
               <input className="rf-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="votre@email.com" />
               <p style={{ fontSize: '12px', color: '#888', marginTop: '4px' }}>
-                📧 En renseignant votre email, vous recevrez une confirmation de commande et un email dès que votre commande sera prête à récupérer.
+                📧 En renseignant votre email, vous recevrez une confirmation de commande et un email quand votre commande sera prête.
               </p>
             </div>
 

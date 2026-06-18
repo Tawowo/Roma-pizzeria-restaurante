@@ -245,7 +245,7 @@ export default function ReserverPage() {
                 <label className="rf-label">Email <span style={{ color: '#888', fontSize: '13px' }}>(optionnel)</span></label>
                 <input type="email" className="rf-input" placeholder="votre@email.com" value={form.email} onChange={e => setForm(p=>({...p,email:e.target.value}))} />
                 <p style={{ fontFamily: "'Jost',sans-serif", fontSize: '12px', color: '#888', marginTop: '4px' }}>
-                  📧 En renseignant votre email, vous recevrez une confirmation de réservation et un message après votre repas pour partager votre expérience.
+                  📧 En renseignant votre email, vous recevrez une confirmation de réservation.
                 </p>
               </div>
 
