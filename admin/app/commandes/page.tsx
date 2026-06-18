@@ -461,6 +461,11 @@ export default function CommandesPage() {
           if (insAttErr) throw new Error(`Erreur insertion lignes attente : ${insAttErr.message}`)
         }
 
+        // Recalculer le total de la commande
+        const { data: toutesLignes } = await supabase.from('lignes_commande').select('prix_unitaire, quantite').eq('commande_id', cmdId)
+        const nouveauTotal = toutesLignes?.reduce((sum, l) => sum + (l.prix_unitaire * l.quantite), 0) ?? 0
+        await supabase.from('commandes').update({ total: nouveauTotal }).eq('id', cmdId)
+
         // Remettre la commande en_preparation pour que Roberto voie les nouveaux articles
         const { error: resetErr } = await supabase
           .from('commandes')

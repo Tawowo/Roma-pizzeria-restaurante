@@ -295,11 +295,11 @@ export default function HomePage() {
         {/* Links desktop uniquement */}
         <div className="nav-desktop-links">
           {[
-            { label: 'Histoire', href: '#histoire' },
-            { label: 'Menu', href: '/menu', isLink: true },
+            { label: t.nav_histoire, href: '#histoire' },
+            { label: t.nav_menu, href: '/menu', isLink: true },
             { label: 'Commander', href: '#commander', isRed: true },
-            { label: 'Horaires', href: '#horaires' },
-            { label: 'Réserver', href: '#reserver' },
+            { label: t.nav_horaires, href: '#horaires' },
+            { label: t.nav_reserver, href: '#reserver' },
           ].map(item => item.isLink ? (
             <Link key={item.label} href={item.href}
               style={{ color: navScrolled ? 'var(--nero-m)' : 'white', fontSize: 11, letterSpacing: '2.5px', textTransform: 'uppercase', textDecoration: 'none', fontFamily: 'Jost', fontWeight: 500 }}>
@@ -324,7 +324,7 @@ export default function HomePage() {
             ))}
           </div>
           <Link href="/compte" className="nav-desktop-links" style={{ color: navScrolled ? 'var(--verde)' : 'var(--verde-l)', fontSize: 12, fontFamily: 'Jost', textDecoration: 'none' }}>Mon compte</Link>
-          <a href="#reserver" className="btn-primary nav-desktop-links" style={{ padding: '8px 20px', fontSize: 12, textDecoration: 'none' }}>Réserver</a>
+          <a href="#reserver" className="btn-primary nav-desktop-links" style={{ padding: '8px 20px', fontSize: 12, textDecoration: 'none' }}>{t.nav_reserver}</a>
           {/* Hamburger — mobile uniquement */}
           <button onClick={() => setMenuOpen(v => !v)} className="nav-mobile-only" aria-label="Menu" style={{ background: 'none', border: 'none', color: navScrolled ? 'var(--nero)' : 'white', cursor: 'pointer', fontSize: 26, lineHeight: 1, padding: 4 }}>☰</button>
         </div>
@@ -385,8 +385,8 @@ export default function HomePage() {
             Une famille italienne vous accueille · Four à bois · Produits frais · Recettes transmises de génération en génération
           </div>
           <div id="hero-btns" style={{ opacity: 0, display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <a href="#menu" className="btn-primary">Découvrir le menu</a>
-            <a href="#reserver" style={{ background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.6)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>Réserver une table</a>
+            <a href="#menu" className="btn-primary">{t.hero_cta1}</a>
+            <a href="#reserver" style={{ background: 'transparent', color: 'white', border: '1px solid rgba(255,255,255,0.6)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>{t.hero_cta2}</a>
             <Link href="/compte" style={{ background: 'transparent', color: 'var(--verde-l)', border: '1px solid var(--verde-l)', borderRadius: 3, padding: '12px 28px', fontFamily: 'Jost', fontWeight: 500, textDecoration: 'none', transition: 'all 0.3s ease' }}>Mon compte fidélité</Link>
           </div>
           <div id="hero-counters" style={{ opacity: 0, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24, marginTop: 60, maxWidth: 600, margin: '60px auto 0' }}>
