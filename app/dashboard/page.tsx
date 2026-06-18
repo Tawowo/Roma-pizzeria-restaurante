@@ -363,9 +363,9 @@ export default function DashboardPage() {
       try {
         const mm = String(today.getMonth() + 1).padStart(2, '0')
         const dd = String(today.getDate()).padStart(2, '0')
-        const { data: anniv } = await supabase.from('clients').select('prenom, nom').like('date_naissance', `%-${mm}-${dd}`)
+        const { data: anniv } = await supabase.from('clients').select('nom').like('date_naissance', `%-${mm}-${dd}`)
         if (anniv && anniv.length > 0) {
-          anniv.forEach(c => addToast(`🎂 Aujourd'hui : ${c.prenom as string} fête son anniversaire`, 'anniversaire'))
+          anniv.forEach(c => addToast(`Anniversaire aujourd'hui : ${c.nom as string}`, 'anniversaire'))
         }
       } catch { /* ignore */ }
 
