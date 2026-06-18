@@ -5,59 +5,50 @@ import { usePathname, useRouter } from 'next/navigation'
 import { clearSession } from '@/lib/auth'
 import type { AdminRole } from '@/lib/auth'
 
-const NAV_MONICA = [
-  { label: 'Dashboard', href: '/dashboard', icon: '📊' },
-  { label: 'Réservations', href: '/reservations', icon: '📅' },
-  { label: 'Commandes', href: '/commandes', icon: '🛒' },
-  { label: 'Cuisine', href: '/cuisine', icon: '🔥' },
-  { label: 'Menu', href: '/menu', icon: '📖' },
-  { label: 'Plats du jour', href: '/plats', icon: '🍽️' },
-  { label: 'Clients', href: '/clients', icon: '👥' },
-  { label: 'Avis', href: '/avis', icon: '⭐' },
-  { label: 'Finances', href: '/finances', icon: '💰' },
-  { label: 'Promotions', href: '/promotions', icon: '🎁' },
-  { label: 'Design du site', href: '/design', icon: '🎨' },
-  { label: 'Paramètres', href: '/parametres', icon: '⚙️' },
-]
-
-const NAV_ANDRE = [
-  { label: 'Réservations', href: '/reservations', icon: '📅' },
-  { label: 'Commandes', href: '/commandes', icon: '🛒' },
-  { label: 'Menu', href: '/menu', icon: '📖' },
-]
-
-const NAV_ROBERTO = [
-  { label: 'Cuisine', href: '/cuisine', icon: '🔥' },
+export const ALL_NAV_ITEMS = [
+  { label: 'Dashboard', href: '/dashboard', icon: '📊', key: 'dashboard' },
+  { label: 'Réservations', href: '/reservations', icon: '📅', key: 'reservations' },
+  { label: 'Commandes', href: '/commandes', icon: '🛒', key: 'commandes' },
+  { label: 'Cuisine', href: '/cuisine', icon: '🔥', key: 'cuisine' },
+  { label: 'Menu', href: '/menu', icon: '📖', key: 'menu' },
+  { label: 'Plats du jour', href: '/plats', icon: '🍽️', key: 'plats' },
+  { label: 'Clients', href: '/clients', icon: '👥', key: 'clients' },
+  { label: 'Avis', href: '/avis', icon: '⭐', key: 'avis' },
+  { label: 'Finances', href: '/finances', icon: '💰', key: 'finances' },
+  { label: 'Promotions', href: '/promotions', icon: '🎁', key: 'promotions' },
+  { label: 'Design du site', href: '/design', icon: '🎨', key: 'design' },
+  { label: 'Paramètres', href: '/parametres', icon: '⚙️', key: 'parametres' },
 ]
 
 interface SidebarProps {
   nom: string
   role: AdminRole
+  permissions?: Record<string, boolean>
 }
 
-export default function Sidebar({ nom, role }: SidebarProps) {
+export default function Sidebar({ nom, role, permissions }: SidebarProps) {
   const [open, setOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
 
-  // Fermer drawer sur changement de route
   useEffect(() => { setOpen(false) }, [pathname])
 
-  const nav = role === 'monica' ? NAV_MONICA : role === 'andre' ? NAV_ANDRE : NAV_ROBERTO
+  const nav = role === 'monica'
+    ? ALL_NAV_ITEMS
+    : ALL_NAV_ITEMS.filter(item => permissions?.[item.key] === true)
 
   const handleLogout = () => {
     clearSession()
     router.push('/login')
   }
 
-  // Le contenu de la sidebar (partagé desktop + mobile drawer)
   const sidebarContent = (
     <div className="w-64 bg-[#1B5E20] text-white min-h-screen flex flex-col h-full">
       {/* Logo */}
       <div className="px-6 py-5 border-b border-white/10">
         <div className="font-serif italic text-[#D4A843] text-2xl font-bold">Roma Admin</div>
       </div>
-      {/* User info - UNE SEULE FOIS */}
+      {/* User info */}
       <div className="px-6 py-3 border-b border-white/10">
         <div className="text-sm font-semibold text-white">{nom}</div>
         <div className="text-xs text-white/60 capitalize mt-0.5">{role}</div>
@@ -90,7 +81,7 @@ export default function Sidebar({ nom, role }: SidebarProps) {
 
   return (
     <>
-      {/* Hamburger button - mobile only, top LEFT */}
+      {/* Hamburger button - mobile only */}
       <button
         className="md:hidden fixed top-4 left-4 z-50 w-12 h-12 flex items-center justify-center bg-[#1B5E20] text-white rounded-lg shadow-lg"
         onClick={() => setOpen(true)}
@@ -99,12 +90,12 @@ export default function Sidebar({ nom, role }: SidebarProps) {
         ☰
       </button>
 
-      {/* Desktop sidebar - always visible */}
+      {/* Desktop sidebar */}
       <aside className="hidden md:flex w-64 shrink-0 sticky top-0 h-screen">
         {sidebarContent}
       </aside>
 
-      {/* Mobile drawer overlay */}
+      {/* Mobile drawer */}
       {open && (
         <div className="md:hidden fixed inset-0 z-40 flex">
           <div className="fixed inset-0 bg-black/50" onClick={() => setOpen(false)} />

@@ -1,5 +1,5 @@
 export type AdminRole = 'monica' | 'andre' | 'roberto'
-export interface AdminSession { role: AdminRole; nom: string; id: string }
+export interface AdminSession { role: AdminRole; nom: string; id: string; permissions?: Record<string, boolean> }
 
 export function getSession(): AdminSession | null {
   if (typeof window === 'undefined') return null
