@@ -10,7 +10,7 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Roma Pizzeria Restaurant | Savigné-sur-Lathan',
+  title: 'Roma Pizzeria Restaurant 2026 | Savigné-sur-Lathan',
   description: 'Pizzeria italienne authentique à Savigné-sur-Lathan (37). Four à bois, produits frais, recettes de famille. Réservez votre table en ligne.',
   keywords: 'pizzeria, restaurant italien, Savigné-sur-Lathan, Indre-et-Loire, pizza four à bois',
   manifest: '/manifest.json',
