@@ -299,6 +299,33 @@ export default function CuisinePage() {
           .update({ statut: 'pret_encaisser' })
           .eq('numero', cmd.table_numero)
       }
+      console.log('[marquerPrete] cmd.email:', cmd.email, '| cmd.type:', cmd.type, '| cmd.id:', cmd.id)
+      if (cmd.type === 'a_emporter' && cmd.email) {
+        try {
+          const emailRes = await fetch('/api/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              to: cmd.email,
+              subject: 'Votre commande est prête ! — Roma Pizzeria Restaurant',
+              html: `
+                <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background: #FBF6EE;">
+                  <h1 style="color: #B71C1C;">Roma Pizzeria Restaurant</h1>
+                  <h2>Votre commande est prête ! 🍕</h2>
+                  <p>Bonjour <strong>${cmd.nom_client || ''}</strong>,</p>
+                  <p>Votre commande <strong>#${cmd.numero_commande}</strong> est prête. Vous pouvez venir la récupérer dès maintenant !</p>
+                  <p>Nous vous attendons au <strong>20 place Jacques du Bellay, Savigné-sur-Lathan</strong>.</p>
+                  <p>À bientôt,<br><strong>L'équipe Roma Pizzeria Restaurant</strong></p>
+                </div>
+              `
+            })
+          })
+          const emailJson = await emailRes.json()
+          console.log('[email prete]', emailRes.status, emailJson)
+        } catch (e) { console.error('[email prete] exception:', e) }
+      } else {
+        console.log('[marquerPrete] email non envoyé — email:', cmd.email, 'type:', cmd.type)
+      }
       await fetchCommandes()
       const nomClient = cmd.nom_client || `Table ${cmd.table_numero}`
       const message = cmd.type === 'a_emporter'
@@ -322,28 +349,6 @@ export default function CuisinePage() {
         }
       } catch (ntfyErr) {
         console.error('[ntfy] Exception:', ntfyErr)
-      }
-      if (cmd.type === 'a_emporter' && cmd.email) {
-        try {
-          await fetch('/api/email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              to: cmd.email,
-              subject: 'Votre commande est prête ! — Roma Pizzeria Restaurant',
-              html: `
-                <div style="font-family: Georgia, serif; max-width: 600px; margin: 0 auto; padding: 40px 20px; background: #FBF6EE;">
-                  <h1 style="color: #B71C1C;">Roma Pizzeria Restaurant</h1>
-                  <h2>Votre commande est prête ! 🍕</h2>
-                  <p>Bonjour <strong>${cmd.nom_client || ''}</strong>,</p>
-                  <p>Votre commande <strong>#${cmd.numero_commande}</strong> est prête. Vous pouvez venir la récupérer dès maintenant !</p>
-                  <p>Nous vous attendons au <strong>20 place Jacques du Bellay, Savigné-sur-Lathan</strong>.</p>
-                  <p>À bientôt,<br><strong>L'équipe Roma Pizzeria Restaurant</strong></p>
-                </div>
-              `
-            })
-          })
-        } catch { /* email non bloquant */ }
       }
     } catch (err) {
       console.error('Update error:', err)
