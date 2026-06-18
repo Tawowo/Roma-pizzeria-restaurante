@@ -51,7 +51,7 @@ const JOURS_FR = ['Dimanche', 'Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi',
 
 export default function CommanderPage() {
   const { t } = useLang()
-  const { client: clientConnecte, saveClient } = useClient()
+  const { client: clientConnecte, saveClient, loaded } = useClient()
   const [step, setStep] = useState<'menu' | 'panier' | 'infos' | 'confirmation'>('menu')
   const [categories, setCategories] = useState<Categorie[]>([])
   const [articles, setArticles] = useState<Article[]>([])
@@ -152,9 +152,10 @@ export default function CommanderPage() {
 
   // Pré-remplissage si client connecté
   useEffect(() => {
-    console.log('[useClient] localStorage roma_client:', localStorage.getItem('roma_client'))
-    console.log('[useClient] clientConnecte:', clientConnecte)
-    if (clientConnecte && !nom && !tel) {
+    console.log('[prefill] clientConnecte:', clientConnecte)
+    console.log('[prefill] loaded:', loaded)
+    if (clientConnecte && loaded) {
+      console.log('[prefill] pré-remplissage en cours...')
       setNom(clientConnecte.nom || '')
       setTel(clientConnecte.telephone || '')
       setEmail(clientConnecte.email || '')
@@ -162,12 +163,12 @@ export default function CommanderPage() {
         id: clientConnecte.id,
         nom: clientConnecte.nom,
         points: clientConnecte.points,
-        nb_visites: 0,
+        nb_visites: clientConnecte.nb_visites ?? 0,
         telephone: clientConnecte.telephone,
       })
       setClientTrouve(true)
     }
-  }, [clientConnecte])
+  }, [clientConnecte, loaded])
 
   const rechercherClient = useCallback(async (telVal: string) => {
     console.log('vérifier appelé:', telVal)
