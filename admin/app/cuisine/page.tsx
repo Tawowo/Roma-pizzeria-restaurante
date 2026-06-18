@@ -231,6 +231,7 @@ export default function CuisinePage() {
           notes: cmd.notes,
           heure_retrait: cmd.heure_retrait,
           telephone: cmd.telephone,
+          email: cmd.email,
           lignes_commande: lignes,
         })
       }
