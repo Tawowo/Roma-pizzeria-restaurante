@@ -378,12 +378,12 @@ export default function CuisinePage() {
   return (
     <div style={{ background: '#FBF6EE', minHeight: '100vh', color: '#1A1A1A', overflowX: 'hidden' }}>
       {/* Header */}
-      <div style={{ height: 48, background: '#1B5E20', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 24px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+      <div style={{ background: '#1B5E20', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', padding: '8px 16px', gap: 8, borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontFamily: 'serif', fontSize: 22, fontStyle: 'italic', color: '#D4A843', fontWeight: 700 }}>Roma</span>
           <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', letterSpacing: 2, textTransform: 'uppercase' }}>Cuisine</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <button
             onClick={() => setSoundOn(v => !v)}
             style={{ padding: '4px 10px', background: soundOn ? 'rgba(212,168,67,0.2)' : 'rgba(255,255,255,0.1)', border: `1px solid ${soundOn ? '#D4A843' : 'rgba(255,255,255,0.2)'}`, borderRadius: 6, color: soundOn ? '#D4A843' : 'rgba(255,255,255,0.5)', cursor: 'pointer', fontSize: 11 }}
@@ -450,19 +450,19 @@ export default function CuisinePage() {
             <div>{dateFiltre === todayStr ? 'Aucune commande en préparation' : 'Aucune commande ce jour-là'}</div>
           </div>
         ) : (
-          <div style={{ display: 'flex', gap: 16 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
             {/* Colonne GAUCHE : À emporter */}
-            <div style={{ width: '50%' }}>
+            <div style={{ flex: '1 1 300px', minWidth: 0 }}>
               <h2 style={{ color: '#4caf50', fontSize: 14, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>📦 À emporter ({commandesEmporter.length})</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
                 {commandesEmporter.map(cmd => renderCard(cmd, urgents, toggleUrgent, marquerPrete, isAjoutApres))}
               </div>
               {commandesEmporter.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>Aucune commande à emporter</div>}
             </div>
             {/* Colonne DROITE : Sur place */}
-            <div style={{ width: '50%' }}>
+            <div style={{ flex: '1 1 300px', minWidth: 0 }}>
               <h2 style={{ color: '#ef5350', fontSize: 14, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>🍽 Sur place ({commandesSurPlace.length})</h2>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
                 {commandesSurPlace.map(cmd => renderCard(cmd, urgents, toggleUrgent, marquerPrete, isAjoutApres))}
               </div>
               {commandesSurPlace.length === 0 && <div style={{ color: '#555', fontSize: 14 }}>Aucune commande sur place</div>}
