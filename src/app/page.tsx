@@ -759,9 +759,6 @@ export default function HomePage() {
             <div style={{ background: 'white', borderRadius: 4, padding: 48, textAlign: 'center' }}>
               <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
               <h3 style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, color: 'var(--verde)', marginBottom: 12 }}>Commande envoyée !</h3>
-              <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 20, fontStyle: 'italic', color: 'var(--grigio)', marginBottom: 24 }}>
-                Andreï vous rappelle pour confirmer. 📞 06 68 36 62 98
-              </p>
               <button onClick={() => { setCmdSuccess(false); setCmdStep(1); setCmdItems([]); setCmdForm({ nom: '', telephone: '', date: '', heure: '', notes: '', email: '' }) }} className="btn-primary">Nouvelle commande</button>
             </div>
           ) : (
