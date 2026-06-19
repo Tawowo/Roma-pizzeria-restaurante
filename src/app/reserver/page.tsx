@@ -255,7 +255,7 @@ export default function ReserverPage() {
           ) : (
             <form onSubmit={handleSubmit} style={{ background: '#fff', border: '1px solid rgba(196,98,45,0.15)', borderRadius: '2px', padding: 'clamp(24px,5vw,40px)' }}>
               {/* Nom + Téléphone */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '16px' }}>
                 <div>
                   <label className="rf-label">{t('reserver_nom')}</label>
                   <input type="text" className="rf-input" placeholder={t('reserver_nom')} value={form.nom} onChange={e => setForm(p=>({...p,nom:e.target.value}))} required />
@@ -276,7 +276,7 @@ export default function ReserverPage() {
               </div>
 
               {/* Date + Heure */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '16px', marginTop: '16px' }}>
                 <div>
                   <label className="rf-label">{t('reserver_date')}</label>
                   <input type="date" className="rf-input" value={form.date}
@@ -306,7 +306,7 @@ export default function ReserverPage() {
               </div>
 
               {/* Couverts + Zone */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '16px', marginTop: '16px' }}>
                 <div>
                   <label className="rf-label">{t('reserver_couverts')}</label>
                   <select className="rf-select" value={form.couverts} onChange={e => setForm(p=>({...p,couverts:e.target.value}))}>

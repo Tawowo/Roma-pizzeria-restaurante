@@ -262,7 +262,7 @@ export default function ComptePage() {
                 <p style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 18, fontStyle: 'italic', color: 'var(--grigio)' }}>Rejoignez le Club Roma et gagnez des points !</p>
               </div>
               <form onSubmit={handleCreate} style={{ background: 'white', border: '1px solid var(--grigio-l)', borderRadius: 4, padding: 'clamp(24px,5vw,40px)' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: 16, marginBottom: 16 }}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12, fontFamily: 'Jost', fontWeight: 500, color: 'var(--nero)', marginBottom: 8 }}>Prénom *</label>
                     <input type="text" className="form-input" placeholder="Votre prénom" value={prenom} onChange={e => setPrenom(e.target.value)} required />
