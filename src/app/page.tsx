@@ -396,7 +396,7 @@ export default function HomePage() {
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 'clamp(36px, 5vw, 72px)', color: 'white', lineHeight: 1, marginBottom: 24, fontWeight: 400 }}>Pizzeria</div>
           </div>
           <div id="hero-sub" style={{ opacity: 0, fontFamily: 'Cormorant Garamond, serif', fontSize: 'clamp(16px, 2.5vw, 22px)', fontStyle: 'italic', color: 'rgba(255,255,255,0.7)', marginBottom: 40, maxWidth: 600 }}>
-            Une famille italienne vous accueille · Four à bois · Produits frais · Recettes transmises de génération en génération
+            Une famille italienne vous accueille · Four Morello Forni · Produits frais · Recettes transmises de génération en génération
           </div>
           <div id="hero-btns" style={{ opacity: 0, display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
             <a href="#menu" className="btn-primary">{t.hero_cta1}</a>
@@ -702,13 +702,13 @@ export default function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 48, alignItems: 'start' }}>
             <div style={{ borderRadius: 4, overflow: 'hidden', boxShadow: '0 2px 16px rgba(0,0,0,0.08)' }}>
               {[
-                { jsDay: 1, nom: t.day_1, heures: t.h_lundi, closed: true },
-                { jsDay: 2, nom: t.day_2, heures: t.h_mardi, closed: false },
-                { jsDay: 3, nom: t.day_3, heures: t.h_mercredi, closed: false },
-                { jsDay: 4, nom: t.day_4, heures: t.h_jeudi, closed: false },
-                { jsDay: 5, nom: t.day_5, heures: t.h_vendredi, closed: false },
-                { jsDay: 6, nom: t.day_6, heures: t.h_samedi, closed: false },
-                { jsDay: 0, nom: t.day_0, heures: t.h_dimanche, closed: false },
+                { jsDay: 1, nom: t.day_1, heures: (parametre as Record<string,string>)['h_lundi'] || t.h_lundi, closed: true },
+                { jsDay: 2, nom: t.day_2, heures: (parametre as Record<string,string>)['h_mardi'] || t.h_mardi, closed: false },
+                { jsDay: 3, nom: t.day_3, heures: (parametre as Record<string,string>)['h_mercredi'] || t.h_mercredi, closed: false },
+                { jsDay: 4, nom: t.day_4, heures: (parametre as Record<string,string>)['h_jeudi'] || t.h_jeudi, closed: false },
+                { jsDay: 5, nom: t.day_5, heures: (parametre as Record<string,string>)['h_vendredi'] || t.h_vendredi, closed: false },
+                { jsDay: 6, nom: t.day_6, heures: (parametre as Record<string,string>)['h_samedi'] || t.h_samedi, closed: false },
+                { jsDay: 0, nom: t.day_0, heures: (parametre as Record<string,string>)['h_dimanche'] || t.h_dimanche, closed: false },
               ].map((row, idx) => {
                 const isToday = row.jsDay === todayDay
                 return (
@@ -1264,7 +1264,7 @@ export default function HomePage() {
         <div style={{ maxWidth: 1200, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 48, paddingBottom: 48 }}>
           <div>
             <div style={{ fontFamily: 'Playfair Display, serif', fontSize: 28, fontStyle: 'italic', color: 'white', marginBottom: 12 }}>Roma 🇮🇹</div>
-            <p style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>Pizzeria italienne authentique à Savigné-sur-Lathan. Four à bois, produits frais, recettes de famille.</p>
+            <p style={{ fontSize: 13, lineHeight: 1.7, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>Pizzeria italienne authentique à Savigné-sur-Lathan. Four Morello Forni, produits frais, recettes de famille.</p>
             <div style={{ display: 'flex', gap: 12 }}>
               <a href="https://www.facebook.com/p/Roma-Pizzeria-Restaurant-61576928932483/" target="_blank" rel="noopener noreferrer"
                 style={{ background: 'rgba(255,255,255,0.1)', padding: '6px 14px', borderRadius: 2, fontSize: 11, color: 'rgba(255,255,255,0.6)', textDecoration: 'none', fontFamily: 'Jost' }}>

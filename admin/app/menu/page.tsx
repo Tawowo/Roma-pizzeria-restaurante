@@ -271,35 +271,35 @@ export default function MenuPage() {
               </div>
               <div className="space-y-2">
                 {filteredArticles.map(art => (
-                  <div key={art.id} className="flex items-center justify-between p-4 rounded-xl" style={{ background: '#242424' }}>
-                    <div>
-                      <div className="flex items-center gap-1">
+                  <div key={art.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 rounded-xl gap-2" style={{ background: '#242424' }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <span className="font-medium">{art.nom}</span>
                         {art.promotion && art.promotion > 0 && (
-                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-red-100 text-red-600 rounded font-medium">
+                          <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-600 rounded font-medium">
                             -{art.promotion}%
                           </span>
                         )}
                       </div>
                       <div className="text-xs text-gray-400">{art.description}</div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-yellow-500">{art.prix?.toFixed(2)} €</span>
                       <button
                         onClick={() => toggleArticle(art.id, art.disponible)}
-                        className="px-3 py-1 rounded-full text-xs"
+                        className="px-3 py-1 rounded-full text-xs min-h-[32px]"
                         style={{ background: art.disponible ? 'rgba(46,125,50,0.3)' : 'rgba(100,100,100,0.3)', color: art.disponible ? '#4caf50' : '#888' }}
                       >
                         {art.disponible ? 'Dispo' : 'Indispo'}
                       </button>
                       {role === 'monica' && (
                         <>
-                          <button onClick={() => setEditArticle(art)} className="px-3 py-1 rounded text-xs" style={{ background: '#333', color: '#888' }}>✏️</button>
+                          <button onClick={() => setEditArticle(art)} className="px-3 py-1 rounded text-xs min-h-[32px]" style={{ background: '#333', color: '#888' }}>✏️</button>
                           <button
                             onClick={() => deleteArticle(art.id)}
-                            className="px-3 py-1 rounded text-xs"
+                            className="px-3 py-1 rounded text-xs min-h-[32px]"
                             style={{ background: 'rgba(183,28,28,0.2)', color: '#ef5350' }}
-                          >Supprimer</button>
+                          >🗑</button>
                         </>
                       )}
                     </div>
@@ -320,35 +320,35 @@ export default function MenuPage() {
               )}
               <div className="space-y-2">
                 {formules.map(f => (
-                  <div key={f.id} className="flex items-center justify-between p-4 rounded-xl" style={{ background: '#242424' }}>
-                    <div>
-                      <div className="flex items-center gap-1">
+                  <div key={f.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-4 rounded-xl gap-2" style={{ background: '#242424' }}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1 flex-wrap">
                         <span className="font-medium">{f.nom}</span>
                         {f.promotion && f.promotion > 0 && (
-                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-red-100 text-red-600 rounded font-medium">
+                          <span className="px-1.5 py-0.5 text-xs bg-red-100 text-red-600 rounded font-medium">
                             -{f.promotion}%
                           </span>
                         )}
                       </div>
                       <div className="text-xs text-gray-400">{f.description}</div>
                     </div>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-yellow-500">{f.prix?.toFixed(2)} €</span>
                       <button
                         onClick={() => { if (role !== 'monica') return; setEditFormule({ ...f, disponible: !f.disponible }); saveFormule() }}
-                        className="px-3 py-1 rounded-full text-xs"
+                        className="px-3 py-1 rounded-full text-xs min-h-[32px]"
                         style={{ background: f.disponible ? 'rgba(46,125,50,0.3)' : 'rgba(100,100,100,0.3)', color: f.disponible ? '#4caf50' : '#888' }}
                       >
                         {f.disponible ? 'Dispo' : 'Indispo'}
                       </button>
                       {role === 'monica' && (
                         <>
-                          <button onClick={() => setEditFormule(f)} className="px-3 py-1 rounded text-xs" style={{ background: '#333', color: '#888' }}>✏️</button>
+                          <button onClick={() => setEditFormule(f)} className="px-3 py-1 rounded text-xs min-h-[32px]" style={{ background: '#333', color: '#888' }}>✏️</button>
                           <button
                             onClick={() => deleteFormule(f.id)}
-                            className="px-3 py-1 rounded text-xs"
+                            className="px-3 py-1 rounded text-xs min-h-[32px]"
                             style={{ background: 'rgba(183,28,28,0.2)', color: '#ef5350' }}
-                          >Supprimer</button>
+                          >🗑</button>
                         </>
                       )}
                     </div>

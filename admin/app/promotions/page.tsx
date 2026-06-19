@@ -198,7 +198,7 @@ export default function PromotionsPage() {
                   placeholder={form.type === 'pct' ? 'Ex: 15' : 'Ex: 10.00'}
                   className="w-full border border-[#E0D5C5] rounded-lg px-3 py-2 text-sm focus:outline-none" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm text-[#555] mb-1">Usage max (optionnel)</label>
                   <input type="number" min="1" value={form.usage_max} onChange={e => setForm(f => ({ ...f, usage_max: e.target.value }))}

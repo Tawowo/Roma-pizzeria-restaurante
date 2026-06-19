@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 import { ALL_NAV_ITEMS } from '@/components/Sidebar'
 
-type Section = 'infos' | 'compteurs' | 'fidelite' | 'tables' | 'mdp' | 'utilisateurs'
+type Section = 'infos' | 'compteurs' | 'fidelite' | 'horaires' | 'tables' | 'mdp' | 'utilisateurs'
 
 interface ParamMap { [key: string]: string }
 interface TableResto { id: string; numero: number; nom?: string; zone: string; capacite: number; actif: boolean }
@@ -30,6 +30,7 @@ interface NouveauProfil {
 const INFO_KEYS = ['nom', 'telephone', 'adresse', 'message_fermeture']
 const HERO_KEYS = ['hero_annees', 'hero_nb_pizzas', 'hero_familles']
 const FIDELITE_KEYS = ['points_boisson', 'points_pizza_simple', 'points_pizza_premium']
+const HORAIRES_KEYS = ['h_lundi', 'h_mardi', 'h_mercredi', 'h_jeudi', 'h_vendredi', 'h_samedi', 'h_dimanche']
 
 const FIDELITE_ARTICLES = [
   { cle: 'points_boisson', label: 'Boisson offerte', description: 'Points nécessaires pour une boisson gratuite' },
@@ -43,6 +44,8 @@ const LABELS: Record<string, string> = {
   hero_nb_pizzas: 'Pizzas créées', hero_familles: 'Familles servies',
   points_boisson: 'Points boisson', points_pizza_simple: 'Points pizza simple',
   points_pizza_premium: 'Points pizza premium',
+  h_lundi: 'Lundi', h_mardi: 'Mardi', h_mercredi: 'Mercredi', h_jeudi: 'Jeudi',
+  h_vendredi: 'Vendredi', h_samedi: 'Samedi', h_dimanche: 'Dimanche',
 }
 
 const ZONES = ['rdc', 'etage', 'terrasse']
@@ -67,7 +70,7 @@ export default function ParametresPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true)
     try {
-      const allKeys = [...INFO_KEYS, ...HERO_KEYS, ...FIDELITE_KEYS]
+      const allKeys = [...INFO_KEYS, ...HERO_KEYS, ...FIDELITE_KEYS, ...HORAIRES_KEYS]
       const { data } = await supabase.from('parametres').select('cle, valeur').in('cle', allKeys)
       const map: ParamMap = {}
       ;(data ?? []).forEach((r: { cle: string; valeur: string }) => { map[r.cle] = r.valeur })
@@ -250,6 +253,7 @@ export default function ParametresPage() {
     { key: 'infos', label: 'Infos restaurant' },
     { key: 'compteurs', label: 'Compteurs hero' },
     { key: 'fidelite', label: 'Fidélité' },
+    { key: 'horaires', label: '🕐 Horaires' },
     { key: 'tables', label: 'Tables' },
     { key: 'mdp', label: 'Mots de passe' },
     { key: 'utilisateurs', label: '👥 Utilisateurs' },
@@ -331,6 +335,28 @@ export default function ParametresPage() {
             </div>
           )}
 
+          {section === 'horaires' && (
+            <div className="space-y-3">
+              <p className="text-xs text-[#555] mb-4">Indiquer &quot;Fermé&quot; pour les jours de fermeture, ou les horaires ex : &quot;Midi 12h–14h30 · Soir 19h–21h30&quot;</p>
+              {HORAIRES_KEYS.map(k => (
+                <div key={k}>
+                  <label className="block text-xs text-[#555] mb-1">{LABELS[k]}</label>
+                  <input
+                    value={params[k] ?? ''}
+                    onChange={e => setParams(p => ({ ...p, [k]: e.target.value }))}
+                    placeholder={k === 'h_lundi' ? 'Fermé' : 'Ex: Midi 12h–14h30 · Soir 19h–21h30'}
+                    className="w-full px-3 py-2 text-sm border border-[#E0D5C5] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#1B5E20]"
+                  />
+                </div>
+              ))}
+              <button onClick={() => saveParams(HORAIRES_KEYS)} disabled={saving}
+                className="mt-2 px-6 py-2 bg-[#1B5E20] text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                {saving ? 'Sauvegarde...' : 'Sauvegarder les horaires'}
+              </button>
+              {savedMsg && <p className="text-sm text-green-700 mt-2">{savedMsg}</p>}
+            </div>
+          )}
+
           {section === 'tables' && (
             <div>
               {/* Formulaire d'ajout */}
@@ -370,20 +396,20 @@ export default function ParametresPage() {
                         {zone === 'rdc' ? '🏠 RDC' : zone === 'etage' ? '🏛 Étage' : '🌿 Terrasse'}
                       </h3>
                       {tablesZone.map(t => (
-                        <div key={t.id} className="flex items-center gap-3 py-2 border-b border-[#E0D5C5]">
-                          <span className="w-8 font-mono text-sm text-[#555]">#{t.numero}</span>
+                        <div key={t.id} className="flex flex-wrap items-center gap-2 py-2 border-b border-[#E0D5C5]">
+                          <span className="w-7 font-mono text-sm text-[#555] shrink-0">#{t.numero}</span>
                           <input defaultValue={t.nom || `Table ${t.numero}`}
                             onBlur={async (e) => {
                               await supabase.from('tables_restaurant').update({ nom: e.target.value }).eq('id', t.id)
                             }}
-                            className="flex-1 px-2 py-1 text-sm border border-[#E0D5C5] rounded focus:outline-none focus:ring-1 focus:ring-[#1B5E20]" />
+                            className="flex-1 min-w-[80px] px-2 py-1 text-sm border border-[#E0D5C5] rounded focus:outline-none focus:ring-1 focus:ring-[#1B5E20]" />
                           <input type="number" defaultValue={t.capacite} min={1} max={20}
                             onBlur={async (e) => {
                               await supabase.from('tables_restaurant').update({ capacite: Number(e.target.value) }).eq('id', t.id)
                             }}
-                            className="w-16 px-2 py-1 text-sm border border-[#E0D5C5] rounded text-center focus:outline-none" />
-                          <span className="text-xs text-[#555]">pers.</span>
-                          <label className="flex items-center gap-1 text-xs text-[#555]">
+                            className="w-12 px-1 py-1 text-sm border border-[#E0D5C5] rounded text-center focus:outline-none" />
+                          <span className="text-xs text-[#555]">p.</span>
+                          <label className="flex items-center gap-1 text-xs text-[#555] shrink-0">
                             <input type="checkbox" checked={t.actif} onChange={e => toggleTableActif(t.id, e.target.checked)} />
                             Actif
                           </label>
