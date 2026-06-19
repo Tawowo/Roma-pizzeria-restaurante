@@ -243,7 +243,7 @@ export default function ClientsPage() {
         <input type="text" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Rechercher par nom ou téléphone..."
           className="flex-1 max-w-lg px-4 py-2 rounded-lg text-sm border border-[#E0D5C5] bg-white focus:outline-none focus:ring-2 focus:ring-[#1B5E20]" />
-        <div className="flex gap-1">
+        <div className="flex gap-1 overflow-x-auto flex-nowrap shrink-0">
           {(['', 'Bronze', 'Argent', 'Or'] as NiveauFilter[]).map(n => (
             <button key={n} onClick={() => setNiveauFilter(n)}
               className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${niveauFilter === n ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
