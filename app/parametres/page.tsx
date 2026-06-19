@@ -217,9 +217,11 @@ export default function ParametresPage() {
         const bcryptjs = await import('bcryptjs')
         updateData.code_acces = await bcryptjs.default.hash(updates.newPassword, 10)
       }
+      console.log('updateProfil id:', profilId, 'data:', updateData)
       const { data: updateResult, error: updateError } = await supabase.from('profils_admin').update(updateData).eq('id', profilId).select()
       console.log('update result:', updateResult, updateError)
       if (updateError) { setProfilMsg(`Erreur Supabase : ${updateError.message}`); return }
+      if (!updateResult || updateResult.length === 0) { setProfilMsg('Erreur : aucune ligne modifiée (RLS ou id invalide)'); return }
       setProfilMsg('Profil mis à jour ✓')
       await fetchAll()
       setEditingProfil(null)
@@ -234,7 +236,8 @@ export default function ParametresPage() {
     if (session?.id === profilId) { setProfilMsg('Impossible de supprimer votre propre compte'); return }
     if (!confirm(`Supprimer le profil de ${profilNom} ? Cette action est irréversible.`)) return
     try {
-      await supabase.from('profils_admin').delete().eq('id', profilId)
+      const { error: deleteError } = await supabase.from('profils_admin').delete().eq('id', profilId)
+      if (deleteError) { setProfilMsg(`Erreur suppression : ${deleteError.message}`); return }
       setProfilMsg('Profil supprimé')
       await fetchAll()
     } catch (err) {
