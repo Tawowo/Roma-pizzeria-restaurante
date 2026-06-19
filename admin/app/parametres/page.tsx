@@ -74,7 +74,8 @@ export default function ParametresPage() {
       setParams(map)
 
       const { data: profilsData } = await supabase.from('profils_admin').select('*').order('nom')
-      setProfilsComplets((profilsData ?? []).map(p => ({ ...p, permissions: p.permissions ?? {} })))
+      const unique = (profilsData ?? []).filter((p, i, arr) => arr.findIndex((q: { id: string }) => q.id === p.id) === i)
+      setProfilsComplets(unique.map(p => ({ ...p, permissions: p.permissions ?? {} })))
     } catch (err) {
       console.error(err)
     } finally {
@@ -216,7 +217,9 @@ export default function ParametresPage() {
         const bcryptjs = await import('bcryptjs')
         updateData.code_acces = await bcryptjs.default.hash(updates.newPassword, 10)
       }
-      await supabase.from('profils_admin').update(updateData).eq('id', profilId)
+      const { data: updateResult, error: updateError } = await supabase.from('profils_admin').update(updateData).eq('id', profilId).select()
+      console.log('update result:', updateResult, updateError)
+      if (updateError) { setProfilMsg(`Erreur Supabase : ${updateError.message}`); return }
       setProfilMsg('Profil mis à jour ✓')
       await fetchAll()
       setEditingProfil(null)
