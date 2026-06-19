@@ -136,6 +136,9 @@ export default function MenuPage() {
         }).eq('id', editArticle.id)
         if (error) throw new Error(`UPDATE échoué : ${error.message}`)
       } else {
+        if (!editArticle.categorie_id || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(editArticle.categorie_id)) {
+          throw new Error('Veuillez sélectionner une catégorie valide')
+        }
         const { error } = await supabase.from('articles').insert([editArticle])
         if (error) throw new Error(`INSERT échoué : ${error.message}`)
       }
@@ -244,7 +247,7 @@ export default function MenuPage() {
                         className="px-3 py-1 rounded text-xs"
                         style={{ background: 'rgba(183,28,28,0.2)', color: '#ef5350' }}
                         title="Supprimer"
-                      >Supprimer</button>
+                      >🗑️</button>
                     )}
                   </div>
                 </div>
