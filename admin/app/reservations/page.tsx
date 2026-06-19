@@ -268,7 +268,7 @@ export default function ReservationsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-6">
         <h1 className="text-2xl font-bold text-[#1A1A1A]">Réservations</h1>
         <div className="flex gap-2">
           <div className="flex border border-[#E0D5C5] rounded-lg overflow-hidden">

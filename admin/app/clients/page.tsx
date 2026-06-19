@@ -246,7 +246,7 @@ export default function ClientsPage() {
         <div className="flex gap-1 overflow-x-auto flex-nowrap shrink-0">
           {(['', 'Bronze', 'Argent', 'Or'] as NiveauFilter[]).map(n => (
             <button key={n} onClick={() => setNiveauFilter(n)}
-              className={`px-3 py-2 rounded-lg text-xs font-medium border transition-all ${niveauFilter === n ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-medium border transition-all ${niveauFilter === n ? 'bg-[#1B5E20] text-white border-[#1B5E20]' : 'bg-white text-[#555] border-[#E0D5C5]'}`}>
               {n || 'Tous'}
             </button>
           ))}
